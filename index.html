@@ -229,6 +229,9 @@
                 <div class="p-4 border-b border-slate-100 bg-slate-50 flex flex-col sm:flex-row justify-between items-center gap-4">
                     <h2 class="font-bold text-slate-700 text-base">Transações da Conta Corrente</h2>
                     <div class="flex items-center gap-2 w-full sm:w-auto">
+                        <select id="filterMesBanco" onchange="debouncedRenderTransactionsBanco()" class="w-full sm:w-auto text-sm bg-white border border-slate-200 rounded-md p-1.5 focus:ring-1 focus:ring-indigo-500 outline-none">
+                            <option value="todos">Todos os Meses</option>
+                        </select>
                         <select id="filterSelectBanco" onchange="debouncedRenderTransactionsBanco()" class="w-full sm:w-auto text-sm bg-white border border-slate-200 rounded-md p-1.5 focus:ring-1 focus:ring-indigo-500 outline-none">
                             <option value="todos">Todos</option>
                             <option value="pendentes">⚠️ Sem Categoria</option>
@@ -239,7 +242,6 @@
                 </div>
                 <div id="transactionsContainerBanco" class="divide-y divide-slate-100 max-h-[600px] overflow-y-auto"></div>
             </div>
-
         </section>
 
         <section id="tab-cartao" class="tab-content hidden space-y-6">
@@ -287,10 +289,18 @@
                         </select>
                     </div>
                 </div>
-                <div class="bg-amber-100 px-4 py-3 border-b border-amber-200 flex justify-between items-center hidden" id="totalizadorCartaoContainer">
-                    <span class="text-sm font-semibold text-amber-800">Total da Fatura deste mês:</span>
-                    <span class="text-lg font-bold text-rose-600" id="totalizadorCartaoValor">R$ 0,00</span>
+                
+                <div class="bg-amber-100 px-4 py-3 border-b border-amber-200 flex flex-col sm:flex-row justify-between items-center gap-3 hidden" id="totalizadorCartaoContainer">
+                    <div class="flex items-center gap-2">
+                        <span class="text-sm font-semibold text-amber-800">Total Líquido da Fatura:</span>
+                        <span class="text-lg font-bold text-rose-600" id="totalizadorCartaoValor">R$ 0,00</span>
+                    </div>
+                    <div class="flex items-center gap-2 bg-amber-50 px-3 py-1.5 rounded-md border border-amber-200 shadow-sm">
+                        <span class="text-xs font-semibold text-amber-700">Soma Bruta (Todos os lançamentos):</span>
+                        <span class="text-sm font-bold text-slate-700" id="totalizadorCartaoBruto">R$ 0,00</span>
+                    </div>
                 </div>
+
                 <div id="transactionsContainerCartao" class="divide-y divide-slate-100 max-h-[600px] overflow-y-auto"></div>
             </div>
         </section>
@@ -373,12 +383,16 @@
                         <button onclick="salvarSaldoInicial()" class="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-indigo-700">Salvar</button>
                     </div>
                 </div>
+
                 <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100 flex flex-col justify-center">
                     <h2 class="font-bold text-slate-700 text-lg mb-1">Backup Completo (Formato JSON)</h2>
                     <p class="text-sm text-slate-500 mb-4">Mecanismo mantido compatível com o sistema antigo.</p>
                     <div class="flex gap-3">
                         <button onclick="exportData()" class="flex-1 bg-slate-800 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-slate-900 transition text-center">💾 Salvar backup (.json)</button>
-                        <label class="flex-1 bg-slate-200 text-slate-700 px-4 py-2 rounded-md text-sm font-bold hover:bg-slate-300 cursor-pointer transition text-center">📂 Restaurar backup (.json)<input type="file" accept=".json" onchange="importData(event)" class="hidden"></label>
+                        <label class="flex-1 bg-slate-200 text-slate-700 px-4 py-2 rounded-md text-sm font-bold hover:bg-slate-300 cursor-pointer transition text-center">
+                            📂 Restaurar backup (.json)
+                            <input type="file" accept=".json" onchange="importData(event)" class="hidden">
+                        </label>
                     </div>
                 </div>
             </div>
@@ -431,7 +445,7 @@
             config: 'id'
         });
 
-        // O estado central contínua a existir na memória para as tabelas renderizarem rápido
+        // O estado central
         let appState = {
             saldoInicial: 0,
             transactions: [],
@@ -461,26 +475,22 @@
         function debouncedCalcularSaldoAlvo() { debounce('calcularSaldoAlvo', () => calcularSaldoAlvo(), 100); }
         function debouncedCalcularSomaCategoriaFuturo() { debounce('calcularSomaCategoriaFuturo', () => calcularSomaCategoriaFuturo(), 100); }
 
-        function safeRun(fn) { 
-            try { fn(); } catch(e) { console.error("Erro protegido em", fn.name, e); } 
-        }
+        function safeRun(fn) { try { fn(); } catch(e) { console.error("Erro protegido em", fn.name, e); } }
 
-        // NOVO: Carregar do IndexedDB
+        // Módulo de Banco de Dados: Carregar do IndexedDB
         async function loadDataFromDB() {
             try {
                 const count = await db.config.count();
                 if (count === 0) {
-                    // Módulo de Transição: Se o IndexedDB estiver vazio, tenta carregar o localStorage antigo
+                    // Migração automática se houver dados velhos no localStorage
                     const savedData = localStorage.getItem('controle_financeiro_dados');
                     if (savedData) {
                         const parsed = JSON.parse(savedData);
                         appState = {...appState, ...parsed};
                         await saveToDB();
                         console.log("Migração do localStorage para IndexedDB concluída!");
-                        // Opcional: localStorage.removeItem('controle_financeiro_dados');
                     }
                 } else {
-                    // Carrega diretamente das tabelas do IndexedDB
                     const cfg = await db.config.toArray();
                     const tr = await db.transacoes.toArray();
                     const cr = await db.cartao.toArray();
@@ -496,36 +506,23 @@
                     appState.futureTransactions = pr || [];
                     appState.investimentos = inv || [];
                 }
-            } catch(e) {
-                console.error("Erro ao carregar banco IndexedDB", e);
-            }
+            } catch(e) { console.error("Erro ao carregar banco IndexedDB", e); }
         }
 
-        // NOVO: Salvar no IndexedDB
+        // Módulo de Banco de Dados: Salvar no IndexedDB
         async function saveToDB() {
             try {
                 await db.transaction('rw', db.transacoes, db.cartao, db.previsoes, db.investimentos, db.config, async () => {
                     await db.config.put({ id: 'global', saldoInicial: appState.saldoInicial, categories: appState.categories });
-                    
-                    await db.transacoes.clear();
-                    if(appState.transactions.length > 0) await db.transacoes.bulkPut(appState.transactions);
-
-                    await db.cartao.clear();
-                    if(appState.ccTransactions.length > 0) await db.cartao.bulkPut(appState.ccTransactions);
-
-                    await db.previsoes.clear();
-                    if(appState.futureTransactions.length > 0) await db.previsoes.bulkPut(appState.futureTransactions);
-
-                    await db.investimentos.clear();
-                    if(appState.investimentos.length > 0) await db.investimentos.bulkPut(appState.investimentos);
+                    await db.transacoes.clear(); if(appState.transactions.length > 0) await db.transacoes.bulkPut(appState.transactions);
+                    await db.cartao.clear(); if(appState.ccTransactions.length > 0) await db.cartao.bulkPut(appState.ccTransactions);
+                    await db.previsoes.clear(); if(appState.futureTransactions.length > 0) await db.previsoes.bulkPut(appState.futureTransactions);
+                    await db.investimentos.clear(); if(appState.investimentos.length > 0) await db.investimentos.bulkPut(appState.investimentos);
                 });
-            } catch(e) {
-                console.error("Erro ao salvar no IndexedDB", e);
-            }
+            } catch(e) { console.error("Erro ao salvar no IndexedDB", e); }
         }
 
         async function init() {
-            // Aguarda o banco de dados local carregar antes de montar a tela
             await loadDataFromDB();
             
             document.getElementById('input-saldo-inicial').value = appState.saldoInicial.toFixed(2);
@@ -545,6 +542,7 @@
             safeRun(updateFutureCategoriesDropdown);
             safeRun(updatePrevSumDropdown);
             
+            updateFilterMesBancoLight(); 
             updateFilterMesCartaoLight();
             renderInvestimentos();
             renderCategoriesTab();
@@ -562,7 +560,7 @@
             } catch(e) {}
         }
         
-        // NOVO: Função de salvar genérica (substitui o antigo localStorage por saveToDB)
+        // Função Central de Save atualizada
         function saveData() {
             saveToDB().then(() => {
                 cachedSaldoAtual = null;
@@ -577,8 +575,34 @@
             }).catch(e => alert("Erro ao salvar no banco de dados."));
         }
 
-        // ---- AS FUNÇÕES RESTANTES FORAM MANTIDAS INTACTAS E REAPROVEITAM O appState ----
-        
+        function updateFilterMesBancoLight() {
+            const select = document.getElementById('filterMesBanco');
+            if (!select) return;
+            const meses = new Set();
+            for (let t of appState.transactions) {
+                if(t.data) {
+                    let parts;
+                    if (t.data.includes('/')) parts = t.data.split('/');
+                    else if (t.data.includes('-')) parts = t.data.split('-');
+                    if(parts && parts.length >= 2) {
+                        let mes, ano;
+                        if (t.data.includes('/')) { mes = parts[1]; ano = parts[2]; }
+                        else { mes = parts[1]; ano = parts[0]; }
+                        meses.add(`${mes}/${ano}`);
+                    }
+                }
+            }
+            let html = `<option value="todos">Todos os Meses</option>`;
+            const mesesArray = Array.from(meses);
+            mesesArray.sort((a,b) => {
+                const [ma, aa] = a.split('/');
+                const [mb, ab] = b.split('/');
+                return new Date(ab, ma-1) - new Date(aa, mb-1);
+            });
+            for (let m of mesesArray) { html += `<option value="${m}">${m}</option>`; }
+            select.innerHTML = html;
+        }
+
         function updateFilterMesCartaoLight() {
             const select = document.getElementById('filterMesCartao');
             if (!select) return;
@@ -588,7 +612,6 @@
                     let parts;
                     if (t.data.includes('/')) parts = t.data.split('/');
                     else if (t.data.includes('-')) parts = t.data.split('-');
-                    
                     if(parts && parts.length >= 2) {
                         let mes, ano;
                         if (t.data.includes('/')) { mes = parts[1]; ano = parts[2]; }
@@ -633,24 +656,28 @@
             } catch(err) {}
         }
 
-        function clearFilter() {
-            document.getElementById('dash-month-filter').value = '';
-            document.getElementById('dash-range-filter').value = '1';
-            renderRelatorio();
+        function clearFilter(type) {
+            if (type === 'extrato') {
+                document.getElementById('filterMesBanco').value = 'todos';
+                document.getElementById('filterSelectBanco').value = 'todos';
+                renderTransactionsBanco();
+            } else {
+                document.getElementById('dash-month-filter').value = '';
+                document.getElementById('dash-range-filter').value = '1';
+                renderRelatorio();
+            }
         }
 
         function findBestCategoryMatch(descricao, isDebito) {
             if(!descricao) return '';
             const desc = String(descricao).toLowerCase();
             const cats = isDebito ? appState.categories.despesas : appState.categories.receitas;
-            
             const commonKeywords = {
                 'mercado': 'Supermercado', 'atakadao': 'Supermercado', 'hiperideal': 'Supermercado', 'assai': 'Supermercado',
                 'drogaria': 'Farmácia', 'drogasil': 'Farmácia', 'pague menos': 'Farmácia',
                 'restaurante': 'Restaurante', 'ifood': 'Restaurante', 'uber': 'Diversos', 'posto': 'Combustivel',
                 'amazon': 'Contas Internet', 'netflix': 'Contas Internet', 'google': 'Contas Internet', 'seguro': 'Seguros'
             };
-
             for (let key in commonKeywords) {
                 if (desc.includes(key)) {
                     let mapped = commonKeywords[key];
@@ -658,7 +685,6 @@
                     if (matchedCat) return matchedCat;
                 }
             }
-
             for (let cat of cats) {
                 if (desc.includes(String(cat).toLowerCase()) || String(cat).toLowerCase().includes(desc)) return cat;
             }
@@ -683,127 +709,278 @@
             } else { alert(`Nenhum lançamento encontrado em ${mes}/${ano}.`); }
         }
 
+        // --- NOVA FUNÇÃO DE IMPORTAÇÃO (Excel integrado na Conta Corrente) ---
         function handleFileUpload(e, targetType) {
             const file = e.target.files[0];
             if (!file) return;
 
-            let dataVencimentoFatura = "";
-            let anoFaturaCartao = "";
-
             if (targetType === 'cartao') {
+                // LOGICA ORIGINAL DO CARTÃO DE CRÉDITO MANTIDA INTACTA
+                let dataVencimentoFatura = "";
+                let anoFaturaCartao = "";
+
                 const fatMes = document.getElementById('fatura-mes').value;
                 const fatDia = document.getElementById('fatura-dia').value;
                 if (!fatMes || !fatDia) {
                     alert("Informe o Mês da Fatura e o Dia do Vencimento ANTES de selecionar o arquivo.");
-                    e.target.value = ''; 
-                    return;
+                    e.target.value = ''; return;
                 }
                 const [anoFat, mesFat] = fatMes.split('-');
                 anoFaturaCartao = anoFat; 
                 dataVencimentoFatura = `${String(fatDia).padStart(2, '0')}/${mesFat}/${anoFat}`;
-            }
 
-            const reader = new FileReader();
-            reader.onload = function(evt) {
-                try {
-                    const content = evt.target.result;
-                    const lines = content.split(/\r?\n/);
-                    let headerIndex = -1;
-                    for (let i = 0; i < Math.min(5, lines.length); i++) {
-                        if (lines[i].includes('Tipo') && lines[i].includes('Data') && lines[i].includes('Descricao')) {
-                            headerIndex = i;
-                            break;
+                const reader = new FileReader();
+                reader.onload = function(evt) {
+                    try {
+                        const content = evt.target.result;
+                        const lines = content.split(/\r?\n/);
+                        let headerIndex = -1;
+                        for (let i = 0; i < Math.min(5, lines.length); i++) {
+                            if (lines[i].includes('Tipo') && lines[i].includes('Data') && lines[i].includes('Descricao')) { headerIndex = i; break; }
                         }
-                    }
-                    if (headerIndex === -1) {
-                        alert("Arquivo não reconhecido. Verifique se o formato está correto.");
-                        e.target.value = ''; return;
-                    }
-                    
-                    let addedCount = 0;
-                    for (let i = headerIndex + 1; i < lines.length; i++) {
-                        const line = lines[i].trim();
-                        if (!line) continue;
-                        const parts = line.split(',');
-                        if (parts.length < 5) continue;
+                        if (headerIndex === -1) {
+                            alert("Arquivo não reconhecido. Verifique se o formato está correto."); e.target.value = ''; return;
+                        }
                         
-                        const tipo = parts[0].trim();
-                        const dataRaw = parts[1].trim();
-                        const descricao = parts[2].trim();
-                        const parcelas = parts[3].trim();
-                        const valorRaw = parts[4].trim();
+                        let addedCount = 0;
+                        for (let i = headerIndex + 1; i < lines.length; i++) {
+                            const line = lines[i].trim();
+                            if (!line) continue;
+                            const parts = line.split(',');
+                            if (parts.length < 5) continue;
+                            
+                            const tipo = parts[0].trim();
+                            const dataRaw = parts[1].trim();
+                            const descricao = parts[2].trim();
+                            const parcelas = parts[3].trim();
+                            const valorRaw = parts[4].trim();
+                            
+                            if (!dataRaw.match(/^\d{2}\/\d{2}$/)) continue;
+                            if (valorRaw === '0' || valorRaw === '0.00' || valorRaw === '0,00') continue;
+                            
+                            const anoParaOriginal = anoFaturaCartao;
+                            const dataOriginalCompraCompleta = `${dataRaw}/${anoParaOriginal}`;
+                            const dataVencimentoReal = dataVencimentoFatura;
+                            
+                            let descricaoFinal = descricao;
+                            if (parcelas && parcelas !== '-' && parcelas !== '') { descricaoFinal += ` (Parc. ${parcelas})`; }
+                            
+                            const parseValue = (val) => {
+                                if (!val || val === '-') return 0;
+                                if (typeof val === 'number') return Math.abs(val);
+                                let clean = String(val).replace(/\s/g, '').replace('R$', '').trim();
+                                clean = clean.replace(',', '.');
+                                const num = parseFloat(clean);
+                                return isNaN(num) ? 0 : num;
+                            };
+                            const valor = parseValue(valorRaw);
+                            if (valor === 0) continue;
+                            
+                            let credito = 0, debito = 0;
+                            const tipoLower = tipo.toLowerCase();
+                            if (tipoLower === 'credito') credito = valor;
+                            else if (tipoLower === 'despesa' || tipoLower === 'debito') debito = valor;
+                            else debito = valor;
+                            
+                            let finalCat = findBestCategoryMatch(descricaoFinal, debito > 0);
+                            if (finalCat) {
+                                const tipoCat = debito > 0 ? 'despesas' : 'receitas';
+                                if (!appState.categories[tipoCat]) appState.categories[tipoCat] = [];
+                                if (!appState.categories[tipoCat].includes(finalCat)) appState.categories[tipoCat].push(finalCat);
+                            }
+                            
+                            const realUniqueId = 'cc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9) + '_' + i;
+                            
+                            const exists = appState.ccTransactions.some(t => 
+                                t.descricao === descricaoFinal && t.dataCompra === dataOriginalCompraCompleta && Math.abs((t.debito || t.credito) - valor) < 0.01
+                            );
+                            if (!exists) {
+                                appState.ccTransactions.push({ 
+                                    id: realUniqueId, data: dataVencimentoReal, dataCompra: dataOriginalCompraCompleta, 
+                                    descricao: descricaoFinal, credito: credito, debito: debito, categoria: finalCat || '', isDuplicate: false 
+                                });
+                                addedCount++;
+                            }
+                        }
                         
-                        if (!dataRaw.match(/^\d{2}\/\d{2}$/)) continue;
-                        if (valorRaw === '0' || valorRaw === '0.00' || valorRaw === '0,00') continue;
+                        appState.ccTransactions.sort((a, b) => {
+                            if (!a.data || !b.data) return 0;
+                            const d1 = a.data.split('/'); const d2 = b.data.split('/');
+                            return new Date(d2[2], d2[1] - 1, d2[0]) - new Date(d1[2], d1[1] - 1, d1[0]);
+                        });
+                        updateFilterMesCartaoLight();
                         
-                        const anoParaOriginal = targetType === 'cartao' ? anoFaturaCartao : new Date().getFullYear();
-                        const dataOriginalCompraCompleta = `${dataRaw}/${anoParaOriginal}`;
-                        const dataVencimentoReal = targetType === 'cartao' ? dataVencimentoFatura : dataOriginalCompraCompleta;
+                        updateFutureCategoriesDropdown(); updatePrevSumDropdown();
+                        if (addedCount > 0) alert(`Foram importados ${addedCount} lançamentos do Cartão com sucesso.`);
+                        else alert("Nenhum lançamento foi importado. Eles já existem ou o arquivo está vazio.");
                         
-                        let descricaoFinal = descricao;
-                        if (parcelas && parcelas !== '-' && parcelas !== '') { descricaoFinal += ` (Parc. ${parcelas})`; }
+                        e.target.value = ''; saveData();
+                    } catch (err) { alert("Erro ao processar o arquivo: " + err.message); e.target.value = ''; }
+                };
+                reader.readAsText(file, 'UTF-8');
+
+            } else if (targetType === 'banco') {
+                // NOVA LÓGICA DE IMPORTAÇÃO DE CONTA CORRENTE (Lendo Excel via SheetJS)
+                const reader = new FileReader();
+                reader.onload = function(evt) {
+                    try {
+                        const data = new Uint8Array(evt.target.result);
+                        const workbook = XLSX.read(data, { type: 'array' });
+                        const firstSheetName = workbook.SheetNames[0];
+                        const worksheet = workbook.Sheets[firstSheetName];
                         
-                        const parseValue = (val) => {
-                            if (!val || val === '-') return 0;
-                            if (typeof val === 'number') return Math.abs(val);
-                            let clean = String(val).replace(/\s/g, '').replace('R$', '').trim();
-                            clean = clean.replace(',', '.');
-                            const num = parseFloat(clean);
-                            return isNaN(num) ? 0 : num;
-                        };
-                        const valor = parseValue(valorRaw);
-                        if (valor === 0) continue;
+                        // Converte para um array de arrays para facilitar a busca dinâmica pelas colunas
+                        const json = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false, dateNF: 'dd/mm/yyyy' });
                         
-                        let credito = 0, debito = 0;
-                        const tipoLower = tipo.toLowerCase();
-                        if (tipoLower === 'credito') credito = valor;
-                        else if (tipoLower === 'despesa' || tipoLower === 'debito') debito = valor;
-                        else debito = valor;
-                        
-                        let finalCat = findBestCategoryMatch(descricaoFinal, debito > 0);
-                        if (finalCat) {
+                        let headerRowIndex = -1;
+                        let finalIdxData = -1, finalIdxDesc = -1, finalIdxValor = -1, finalIdxCredito = -1, finalIdxDebito = -1, finalIdxCat = -1;
+
+                        // Tenta encontrar em qual linha está o cabeçalho (olhando as primeiras 15 linhas)
+                        for(let i=0; i < Math.min(15, json.length); i++) {
+                            const row = json[i];
+                            if(!row || !row.length) continue;
+                            
+                            let idxData = -1, idxDesc = -1, idxValor = -1, idxCredito = -1, idxDebito = -1, idxCat = -1;
+                            
+                            for(let j=0; j < row.length; j++) {
+                                const cell = String(row[j] || '').toLowerCase().trim();
+                                
+                                if(cell === 'data' || cell.includes('data') || cell === 'dt.') idxData = j;
+                                else if(cell.includes('descri') || cell.includes('hist') || cell.includes('lanç') || cell.includes('lanc') || cell.includes('detalhe')) idxDesc = j;
+                                else if(cell === 'valor' || cell.includes('valor ') || cell.includes('valor(r$)')) idxValor = j;
+                                else if(cell.includes('créd') || cell.includes('cred') || cell === 'entrada' || cell === 'c') idxCredito = j;
+                                else if(cell.includes('déb') || cell.includes('deb') || cell === 'saida' || cell === 'saída' || cell === 'd') idxDebito = j;
+                                else if(cell.includes('categoria') || cell.includes('cat.')) idxCat = j;
+                            }
+                            
+                            if(idxData !== -1 && idxDesc !== -1 && (idxValor !== -1 || (idxCredito !== -1 && idxDebito !== -1))) {
+                                headerRowIndex = i;
+                                finalIdxData = idxData;
+                                finalIdxDesc = idxDesc;
+                                finalIdxValor = idxValor;
+                                finalIdxCredito = idxCredito;
+                                finalIdxDebito = idxDebito;
+                                finalIdxCat = idxCat;
+                                break;
+                            }
+                        }
+
+                        if (headerRowIndex === -1) {
+                            alert("Colunas não identificadas no arquivo da Conta Corrente.\nCertifique-se de ter colunas com 'Data', 'Descrição' e 'Valor' (ou 'Crédito' e 'Débito').\nLinha 1 detectada: " + JSON.stringify(json[0] || []));
+                            e.target.value = ''; return;
+                        }
+
+                        let addedCount = 0;
+                        for (let i = headerRowIndex + 1; i < json.length; i++) {
+                            const row = json[i];
+                            if (!row || !row.length) continue;
+
+                            let dataRaw = row[finalIdxData];
+                            if (!dataRaw) continue;
+                            
+                            let dataStr = String(dataRaw).trim();
+                            // Tratar formatos de data do Excel (YYYY-MM-DD para DD/MM/YYYY)
+                            if (dataStr.match(/^\d{4}-\d{2}-\d{2}/)) {
+                                const p = dataStr.split('T')[0].split('-');
+                                dataStr = `${p[2]}/${p[1]}/${p[0]}`;
+                            } else if (dataStr.match(/^\d{2}-\d{2}-\d{4}/)) {
+                                dataStr = dataStr.replace(/-/g, '/');
+                            }
+
+                            let descricao = String(row[finalIdxDesc] || '').trim();
+                            
+                            // Função robusta para limpar valores monetários (com vírgula ou ponto)
+                            const parseVal = (v) => {
+                                if(v === undefined || v === null || v === '') return 0;
+                                if(typeof v === 'number') return v;
+                                let str = String(v).replace(/\s/g, '').replace('R$', '').replace('R', '').replace('$', '').trim();
+                                
+                                if(str.indexOf(',') > -1 && str.indexOf('.') > -1) {
+                                    if(str.lastIndexOf(',') > str.lastIndexOf('.')) {
+                                        str = str.replace(/\./g, '').replace(',', '.'); // BR format
+                                    } else {
+                                        str = str.replace(/,/g, ''); // US format
+                                    }
+                                } else if(str.indexOf(',') > -1) {
+                                    str = str.replace(',', '.');
+                                }
+                                const parsed = parseFloat(str);
+                                return isNaN(parsed) ? 0 : parsed;
+                            };
+
+                            let credito = 0, debito = 0;
+                            if(finalIdxValor !== -1) {
+                                const val = parseVal(row[finalIdxValor]);
+                                if (val > 0) credito = val;
+                                else if (val < 0) debito = Math.abs(val);
+                            } else {
+                                credito = parseVal(row[finalIdxCredito]);
+                                debito = Math.abs(parseVal(row[finalIdxDebito]));
+                                if (debito > 0) credito = 0;
+                            }
+
+                            if (credito === 0 && debito === 0) continue;
+
+                            let finalCat = '';
                             const tipoCat = debito > 0 ? 'despesas' : 'receitas';
-                            if (!appState.categories[tipoCat]) appState.categories[tipoCat] = [];
-                            if (!appState.categories[tipoCat].includes(finalCat)) appState.categories[tipoCat].push(finalCat);
+
+                            // Integração Inteligente com a Coluna "Categoria" do Excel
+                            if(finalIdxCat !== -1 && row[finalIdxCat]) {
+                                let catLida = String(row[finalIdxCat]).trim();
+                                const catArr = appState.categories[tipoCat] || [];
+                                
+                                // Busca exata primeiro, depois parcial
+                                let matched = catArr.find(c => c.toLowerCase() === catLida.toLowerCase());
+                                if(!matched) matched = catArr.find(c => c.toLowerCase().includes(catLida.toLowerCase()) || catLida.toLowerCase().includes(c.toLowerCase()));
+                                
+                                if(matched) {
+                                    finalCat = matched;
+                                } else {
+                                    // Se a categoria veio do arquivo mas não existe no app, cria dinamicamente no setup!
+                                    appState.categories[tipoCat].push(catLida);
+                                    finalCat = catLida;
+                                }
+                            } else {
+                                // Fallback: se não tiver coluna categoria, usa as palavras-chave da descrição
+                                finalCat = findBestCategoryMatch(descricao, debito > 0);
+                            }
+
+                            const realUniqueId = 'bco_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9) + '_' + i;
+                            
+                            const exists = appState.transactions.some(t => 
+                                t.descricao === descricao && 
+                                t.data === dataStr && 
+                                Math.abs((t.debito || t.credito) - (debito || credito)) < 0.01
+                            );
+
+                            if (!exists) {
+                                appState.transactions.push({ 
+                                    id: realUniqueId, data: dataStr, descricao: descricao, 
+                                    credito: credito, debito: debito, categoria: finalCat || '', isDuplicate: false 
+                                });
+                                addedCount++;
+                            }
                         }
+
+                        updateFilterMesBancoLight();
+                        updateFutureCategoriesDropdown(); 
+                        updatePrevSumDropdown();
                         
-                        const realUniqueId = 'cc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9) + '_' + i;
-                        const exists = appState.ccTransactions.some(t => 
-                            t.descricao === descricaoFinal && 
-                            t.dataCompra === dataOriginalCompraCompleta &&
-                            Math.abs((t.debito || t.credito) - valor) < 0.01
-                        );
+                        if (addedCount > 0) alert(`Foram importados ${addedCount} lançamentos da Conta Corrente com sucesso.`);
+                        else alert("Nenhum lançamento novo foi importado. Eles já existem ou o arquivo está vazio.");
                         
-                        if (!exists) {
-                            appState.ccTransactions.push({ 
-                                id: realUniqueId, data: dataVencimentoReal, dataCompra: dataOriginalCompraCompleta, 
-                                descricao: descricaoFinal, credito: credito, debito: debito, categoria: finalCat || '', isDuplicate: false 
-                            });
-                            addedCount++;
-                        }
+                        e.target.value = ''; 
+                        saveData();
+
+                    } catch (err) {
+                        alert("Erro ao processar o arquivo Excel/CSV: " + err.message);
+                        e.target.value = '';
                     }
-                    
-                    appState.ccTransactions.sort((a, b) => {
-                        if (!a.data || !b.data) return 0;
-                        const d1 = a.data.split('/');
-                        const d2 = b.data.split('/');
-                        return new Date(d2[2], d2[1] - 1, d2[0]) - new Date(d1[2], d1[1] - 1, d1[0]);
-                    });
-                    
-                    updateFutureCategoriesDropdown();
-                    updatePrevSumDropdown();
-                    
-                    if (addedCount > 0) alert(`Foram importados ${addedCount} lançamentos com sucesso.`);
-                    else alert("Nenhum lançamento foi importado. Verifique o formato do arquivo.");
-                    
-                    e.target.value = '';
-                    saveData();
-                } catch (err) { 
-                    alert("Erro ao processar o arquivo: " + err.message); 
-                    e.target.value = '';
-                }
-            };
-            reader.readAsText(file, 'UTF-8');
+                };
+                
+                // ArrayBuffer é essencial para ler Excel binário corretamente
+                reader.readAsArrayBuffer(file);
+            }
         }
 
         function formatCurrency(v) { return isNaN(Number(v)) ? "R$ 0,00" : Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
@@ -813,8 +990,6 @@
             if(!dataStrISO) return ''; const parts = dataStrISO.split('-');
             return parts.length !== 3 ? dataStrISO : `${parts[2]}/${parts[1]}/${parts[0]}`;
         }
-
-        function updateFilterMesCartao() { updateFilterMesCartaoLight(); }
 
         function updateSaldoDisplay() {
             const saldo = getSaldoAtualReal();
@@ -836,8 +1011,7 @@
             const rangeEl = document.getElementById('dash-range-filter');
             const range = rangeEl ? (parseInt(rangeEl.value) || 1) : 1;
             
-            let transReais = appState.transactions; 
-            let transCartoes = appState.ccTransactions;
+            let transReais = appState.transactions; let transCartoes = appState.ccTransactions;
 
             if (filterVal) {
                 const [anoStr, mesStr] = filterVal.split('-');
@@ -848,8 +1022,7 @@
                     if(parts.length < 3) return false; const tNum = parseInt(parts[2]) * 12 + parseInt(parts[1]);
                     return tNum >= startNum && tNum <= endNum;
                 };
-                transReais = transReais.filter(t => inRange(t.data)); 
-                transCartoes = transCartoes.filter(c => inRange(c.data));
+                transReais = transReais.filter(t => inRange(t.data)); transCartoes = transCartoes.filter(c => inRange(c.data));
             }
 
             let recCaixa = 0, desCaixa = 0;
@@ -865,10 +1038,8 @@
 
             let desMap = {}; let recMap = {};
             const despesasCat = appState.categories.despesas || []; const receitasCat = appState.categories.receitas || [];
-            for (let c of despesasCat) desMap[c] = 0;
-            desMap['Não Categorizado'] = 0;
-            for (let c of receitasCat) recMap[c] = 0;
-            recMap['Não Categorizado'] = 0;
+            for (let c of despesasCat) desMap[c] = 0; desMap['Não Categorizado'] = 0;
+            for (let c of receitasCat) recMap[c] = 0; recMap['Não Categorizado'] = 0;
 
             for (let t of transReais) {
                 if (t.debito > 0) { let c = t.categoria || 'Não Categorizado'; if(desMap[c]===undefined) desMap[c]=0; desMap[c] += Number(t.debito)||0; }
@@ -880,16 +1051,12 @@
                 if (t.credito > 0) { if(recMap[c]===undefined) recMap[c]=0; recMap[c] += Number(t.credito)||0; }
             }
 
-            const arrDespesas = [];
-            for (let k in desMap) { if (desMap[k] > 0 && k !== 'Não Categorizado') arrDespesas.push({cat: k, val: desMap[k]}); }
+            const arrDespesas = []; for (let k in desMap) { if (desMap[k] > 0 && k !== 'Não Categorizado') arrDespesas.push({cat: k, val: desMap[k]}); }
             arrDespesas.sort((a,b) => b.val - a.val);
-            
-            const arrReceitas = [];
-            for (let k in recMap) { if (recMap[k] > 0 && k !== 'Não Categorizado') arrReceitas.push({cat: k, val: recMap[k]}); }
+            const arrReceitas = []; for (let k in recMap) { if (recMap[k] > 0 && k !== 'Não Categorizado') arrReceitas.push({cat: k, val: recMap[k]}); }
             arrReceitas.sort((a,b) => b.val - a.val);
 
-            const listaD = document.getElementById('lista-detalhe-despesas');
-            listaD.innerHTML = '';
+            const listaD = document.getElementById('lista-detalhe-despesas'); listaD.innerHTML = '';
             if(arrDespesas.length === 0) listaD.innerHTML = `<li class="text-slate-400 py-2">Sem despesas categorizadas.</li>`;
             for (let item of arrDespesas) {
                 const media = item.val / range;
@@ -901,8 +1068,7 @@
                     </li>`;
             }
 
-            const listaR = document.getElementById('lista-detalhe-receitas');
-            listaR.innerHTML = '';
+            const listaR = document.getElementById('lista-detalhe-receitas'); listaR.innerHTML = '';
             if(arrReceitas.length === 0) listaR.innerHTML = `<li class="text-slate-400 py-2">Sem receitas categorizadas.</li>`;
             for (let item of arrReceitas) {
                 const media = item.val / range;
@@ -917,8 +1083,7 @@
             try {
                 const ctxD = document.getElementById('chartDespesas');
                 if(ctxD) {
-                    const labelsD = arrDespesas.map(i => i.cat); 
-                    const dadosD = arrDespesas.map(i => i.val);
+                    const labelsD = arrDespesas.map(i => i.cat); const dadosD = arrDespesas.map(i => i.val);
                     if (expenseChartInstance) expenseChartInstance.destroy();
                     expenseChartInstance = new Chart(ctxD.getContext('2d'), {
                         type: 'doughnut', data: { labels: labelsD, datasets: [{ data: dadosD, backgroundColor: generateColors(labelsD.length, 'despesa') }] },
@@ -927,8 +1092,7 @@
                 }
                 const ctxR = document.getElementById('chartReceitas');
                 if(ctxR) {
-                    const labelsR = arrReceitas.map(i => i.cat); 
-                    const dadosR = arrReceitas.map(i => i.val);
+                    const labelsR = arrReceitas.map(i => i.cat); const dadosR = arrReceitas.map(i => i.val);
                     if (incomeChartInstance) incomeChartInstance.destroy();
                     incomeChartInstance = new Chart(ctxR.getContext('2d'), {
                         type: 'doughnut', data: { labels: labelsR, datasets: [{ data: dadosR, backgroundColor: generateColors(labelsR.length, 'receita') }] },
@@ -941,14 +1105,10 @@
         function updatePrevSumDropdown() {
             const dropdown = document.getElementById('prev-sum-categoria');
             if(!dropdown) return;
-            const selected = dropdown.value;
-            dropdown.innerHTML = '<option value="">-- Categoria --</option>';
+            const selected = dropdown.value; dropdown.innerHTML = '<option value="">-- Categoria --</option>';
             const todas = [...(appState.categories.despesas||[]), ...(appState.categories.receitas||[])];
             todas.sort();
-            for (let cat of todas) { 
-                const opt = document.createElement('option'); opt.value = cat; opt.innerText = cat; 
-                dropdown.appendChild(opt); 
-            }
+            for (let cat of todas) { const opt = document.createElement('option'); opt.value = cat; opt.innerText = cat; dropdown.appendChild(opt); }
             if(todas.includes(selected)) dropdown.value = selected;
         }
 
@@ -957,8 +1117,7 @@
             const resultEl = document.getElementById('prev-sum-result');
             if(!resultEl) return;
             if(!catSel) { resultEl.innerText = 'R$ 0,00'; return; }
-            let soma = 0;
-            for (let f of appState.futureTransactions) { if(f.categoria === catSel) soma += Number(f.valor) || 0; }
+            let soma = 0; for (let f of appState.futureTransactions) { if(f.categoria === catSel) soma += Number(f.valor) || 0; }
             resultEl.innerText = formatCurrency(soma);
         }
 
@@ -967,10 +1126,8 @@
             document.getElementById('prev-saldo-atual').innerText = formatCurrency(saldoMutavel);
             document.getElementById('prev-saldo-atual').className = saldoMutavel >= 0 ? "font-bold text-slate-800 text-2xl" : "font-bold text-rose-600 text-2xl";
 
-            const tbody = document.getElementById('lista-previsao-cronologica'); 
-            tbody.innerHTML = '';
-            const today = new Date(); 
-            today.setHours(0,0,0,0);
+            const tbody = document.getElementById('lista-previsao-cronologica'); tbody.innerHTML = '';
+            const today = new Date(); today.setHours(0,0,0,0);
 
             if (appState.futureTransactions.length === 0) {
                 tbody.innerHTML = `<tr><td colspan="6" class="p-8 text-center text-slate-400">Nenhum agendamento.</td></tr>`;
@@ -979,8 +1136,7 @@
                 futs.sort((a,b) => converterDataBRParaDate(a.data) - converterDataBRParaDate(b.data));
                 let html = '';
                 for (let f of futs) {
-                    const isDeb = f.tipo === 'debito'; 
-                    const val = Number(f.valor) || 0;
+                    const isDeb = f.tipo === 'debito'; const val = Number(f.valor) || 0;
                     if(isDeb) saldoMutavel -= val; else saldoMutavel += val;
                     const corVal = isDeb ? 'text-rose-600' : 'text-emerald-600';
                     const corSal = saldoMutavel >= 0 ? 'text-indigo-600' : 'text-rose-600';
@@ -1003,79 +1159,58 @@
                 }
                 tbody.innerHTML = html;
             }
-            calcularSaldoAlvo(); 
-            calcularSomaCategoriaFuturo(); 
+            calcularSaldoAlvo(); calcularSomaCategoriaFuturo(); 
         }
 
         function escapeHtml(str) {
             if (!str) return '';
             return str.replace(/[&<>]/g, function(m) {
-                if (m === '&') return '&amp;'; if (m === '<') return '&lt;'; if (m === '>') return '&gt;';
-                return m;
+                if (m === '&') return '&amp;'; if (m === '<') return '&lt;'; if (m === '>') return '&gt;'; return m;
             });
         }
 
         function calcularSaldoAlvo() {
             const dtInput = document.getElementById('prev-target-date').value;
             if(!dtInput) { document.getElementById('prev-target-result').innerText = 'R$ 0,00'; return; }
-            const tgt = new Date(dtInput + 'T23:59:59'); 
-            let sim = getSaldoAtualReal();
+            const tgt = new Date(dtInput + 'T23:59:59'); let sim = getSaldoAtualReal();
             for (let f of appState.futureTransactions) {
-                if (converterDataBRParaDate(f.data) <= tgt) {
-                    if (f.tipo === 'debito') sim -= Number(f.valor)||0; 
-                    else sim += Number(f.valor)||0;
-                }
+                if (converterDataBRParaDate(f.data) <= tgt) { if (f.tipo === 'debito') sim -= Number(f.valor)||0; else sim += Number(f.valor)||0; }
             }
             const resEl = document.getElementById('prev-target-result');
-            resEl.innerText = formatCurrency(sim);
-            resEl.className = sim >= 0 ? "font-bold text-lg text-white" : "font-bold text-lg text-rose-300";
+            resEl.innerText = formatCurrency(sim); resEl.className = sim >= 0 ? "font-bold text-lg text-white" : "font-bold text-lg text-rose-300";
         }
 
         function updateFutureCategoriesDropdown() {
             const tipo = document.getElementById('fut-tipo').value;
-            const dropdown = document.getElementById('fut-categoria');
-            if(!dropdown) return; 
+            const dropdown = document.getElementById('fut-categoria'); if(!dropdown) return; 
             dropdown.innerHTML = '';
             const lista = tipo === 'debito' ? (appState.categories.despesas||[]) : (appState.categories.receitas||[]);
-            for (let cat of lista) { 
-                const opt = document.createElement('option'); opt.value = cat; opt.innerText = cat; 
-                dropdown.appendChild(opt); 
-            }
+            for (let cat of lista) { const opt = document.createElement('option'); opt.value = cat; opt.innerText = cat; dropdown.appendChild(opt); }
         }
 
         function cancelEditFuture() {
-            editingFutureId = null; 
-            document.getElementById('futureForm').reset();
+            editingFutureId = null; document.getElementById('futureForm').reset();
             document.getElementById('editing-badge').classList.add('hidden');
-            const btn = document.getElementById('btn-submit-futuro');
-            btn.innerText = "Agendar"; 
+            const btn = document.getElementById('btn-submit-futuro'); btn.innerText = "Agendar"; 
             btn.className = "w-full bg-indigo-600 text-white rounded-md p-2 text-sm font-bold hover:bg-indigo-700 transition";
-            document.getElementById('btn-cancelar-edicao').classList.add('hidden');
-            updateFutureCategoriesDropdown();
+            document.getElementById('btn-cancelar-edicao').classList.add('hidden'); updateFutureCategoriesDropdown();
         }
 
         function editFutureTransaction(id) {
-            const item = appState.futureTransactions.find(f => f.id === id); 
-            if(!item) return;
+            const item = appState.futureTransactions.find(f => f.id === id); if(!item) return;
             const [d, m, y] = item.data.split('/');
-            document.getElementById('fut-data').value = `${y}-${m}-${d}`;
-            document.getElementById('fut-descricao').value = item.descricao;
-            document.getElementById('fut-tipo').value = item.tipo;
-            updateFutureCategoriesDropdown(); 
-            document.getElementById('fut-categoria').value = item.categoria;
-            document.getElementById('fut-valor').value = item.valor;
-            editingFutureId = id;
-            document.getElementById('editing-badge').classList.remove('hidden');
-            const btn = document.getElementById('btn-submit-futuro');
-            btn.innerText = "Salvar Editado"; 
+            document.getElementById('fut-data').value = `${y}-${m}-${d}`; document.getElementById('fut-descricao').value = item.descricao;
+            document.getElementById('fut-tipo').value = item.tipo; updateFutureCategoriesDropdown(); 
+            document.getElementById('fut-categoria').value = item.categoria; document.getElementById('fut-valor').value = item.valor;
+            editingFutureId = id; document.getElementById('editing-badge').classList.remove('hidden');
+            const btn = document.getElementById('btn-submit-futuro'); btn.innerText = "Salvar Editado"; 
             btn.className = "w-full bg-emerald-600 text-white rounded-md p-2 text-sm font-bold hover:bg-emerald-700 transition";
             document.getElementById('btn-cancelar-edicao').classList.remove('hidden');
             document.getElementById('form-previsao-container').scrollIntoView({behavior: 'smooth', block: 'center'});
         }
 
         function repeatFutureTransaction(id) {
-            const item = appState.futureTransactions.find(f => f.id === id); 
-            if(!item) return;
+            const item = appState.futureTransactions.find(f => f.id === id); if(!item) return;
             const qtd = parseInt(prompt(`Repetir o lançamento "${item.descricao}" por quantos meses?`, "1"));
             if(isNaN(qtd) || qtd <= 0) return;
             let [dd, mm, yyyy] = item.data.split('/').map(Number);
@@ -1087,14 +1222,12 @@
                     descricao: item.descricao, tipo: item.tipo, valor: item.valor, categoria: item.categoria
                 });
             }
-            saveData(); 
-            alert(`${qtd} repetições geradas.`);
+            saveData(); alert(`${qtd} repetições geradas.`);
         }
 
         function addFutureTransaction(e) {
             e.preventDefault();
-            const dIn = document.getElementById('fut-data').value.split('-'); 
-            const dFmt = `${dIn[2]}/${dIn[1]}/${dIn[0]}`;
+            const dIn = document.getElementById('fut-data').value.split('-'); const dFmt = `${dIn[2]}/${dIn[1]}/${dIn[0]}`;
             const obj = {
                 id: editingFutureId || 'fut_' + Date.now(), data: dFmt,
                 descricao: document.getElementById('fut-descricao').value, tipo: document.getElementById('fut-tipo').value,
@@ -1102,43 +1235,60 @@
             };
             if (editingFutureId) {
                 const idx = appState.futureTransactions.findIndex(f => f.id === editingFutureId);
-                if(idx !== -1) appState.futureTransactions[idx] = obj;
-                cancelEditFuture();
-            } else { 
-                appState.futureTransactions.push(obj); 
-                document.getElementById('futureForm').reset(); 
-                updateFutureCategoriesDropdown(); 
-            }
+                if(idx !== -1) appState.futureTransactions[idx] = obj; cancelEditFuture();
+            } else { appState.futureTransactions.push(obj); document.getElementById('futureForm').reset(); updateFutureCategoriesDropdown(); }
             saveData();
         }
 
-        function deleteFutureTransaction(id) {
-            if(confirm("Apagar este lançamento agendado?")) { 
-                appState.futureTransactions = appState.futureTransactions.filter(f => f.id !== id); saveData(); 
-            }
-        }
+        function deleteFutureTransaction(id) { if(confirm("Apagar este lançamento agendado?")) { appState.futureTransactions = appState.futureTransactions.filter(f => f.id !== id); saveData(); } }
 
         function assignCategory(transactionId, category, type) {
             let transaction = null;
             if (type === 'banco') transaction = appState.transactions.find(t => t.id === transactionId);
             else if (type === 'cartao') transaction = appState.ccTransactions.find(t => t.id === transactionId);
             if (!transaction) return;
-            transaction.categoria = category;
-            
-            saveData(); // Agora guarda no IndexedDB automaticamente e re-renderiza
+            transaction.categoria = category; saveData(); 
         }
 
         function renderTransactionsBanco() {
             const container = document.getElementById('transactionsContainerBanco');
             const filter = document.getElementById('filterSelectBanco').value;
-            let filtered = appState.transactions;
+            const filterMes = document.getElementById('filterMesBanco') ? document.getElementById('filterMesBanco').value : 'todos';
             
+            let filtered = [...appState.transactions];
+            
+            if (filterMes !== 'todos') {
+                filtered = filtered.filter(t => {
+                    if(!t.data) return false;
+                    let mes, ano;
+                    if (t.data.includes('/')) { const p = t.data.split('/'); mes = p[1]; ano = p[2]; }
+                    else if (t.data.includes('-')) { const p = t.data.split('-'); mes = p[1]; ano = p[0]; }
+                    return `${mes}/${ano}` === filterMes;
+                });
+            }
+
             if (filter === 'pendentes') filtered = filtered.filter(t => !t.categoria);
             if (filter === 'debito') filtered = filtered.filter(t => t.debito > 0);
             if (filter === 'credito') filtered = filtered.filter(t => t.credito > 0);
 
+            filtered.sort((a, b) => {
+                const parseDate = (dateStr) => {
+                    if (!dateStr) return 0;
+                    if (dateStr.includes('/')) {
+                        const [dd, mm, yyyy] = dateStr.split('/');
+                        return new Date(yyyy, mm - 1, dd).getTime();
+                    } else if (dateStr.includes('-')) {
+                        const [yyyy, mm, dd] = dateStr.split('-');
+                        return new Date(yyyy, mm - 1, dd).getTime();
+                    }
+                    return 0;
+                };
+                return parseDate(b.data) - parseDate(a.data);
+            });
+
             if (filtered.length === 0) { 
-                container.innerHTML = `<p class="text-center p-8 text-slate-400 text-sm">Nenhum registro.</p>`; return; 
+                container.innerHTML = `<p class="text-center p-8 text-slate-400 text-sm">Nenhum registro.</p>`; 
+                return; 
             }
 
             let html = '';
@@ -1152,7 +1302,7 @@
                 html += `
                     <div class="flex flex-col md:flex-row justify-between p-4 border-b ${t.isDuplicate ? 'bg-yellow-100 hover:bg-yellow-200 border-yellow-300' : 'hover:bg-slate-50'}">
                         <div class="flex-1 grid grid-cols-3 md:grid-cols-4 gap-2 items-center">
-                            <span class="text-sm text-slate-400">${t.data || ''}</span>
+                            <span class="text-sm text-slate-400 font-medium">${t.data || ''}</span>
                             <span class="text-sm text-slate-700 truncate col-span-2" title="${escapeHtml(t.descricao)}">${escapeHtml(t.descricao)}</span>
                             <div class="flex items-center justify-end gap-2">
                                 <span class="${cor} font-semibold">${isDeb?'-':'+'} ${formatCurrency(val)}</span> 
@@ -1171,35 +1321,41 @@
             const container = document.getElementById('transactionsContainerCartao');
             const filter = document.getElementById('filterSelectCartao') ? document.getElementById('filterSelectCartao').value : 'todos';
             const filterMes = document.getElementById('filterMesCartao') ? document.getElementById('filterMesCartao').value : 'todos';
-            const totalContainer = document.getElementById('totalizadorCartaoContainer');
+            
+            const totalContainer = document.getElementById('totalizadorCartaoContainer'); 
             const totalValor = document.getElementById('totalizadorCartaoValor');
+            const totalBruto = document.getElementById('totalizadorCartaoBruto');
 
             let filtered = appState.ccTransactions;
-            
             if (filter === 'pendentes') filtered = filtered.filter(t => !t.categoria);
-            
             if (filterMes !== 'todos') {
                 filtered = filtered.filter(t => {
-                    if(!t.data) return false;
-                    let mes, ano;
+                    if(!t.data) return false; let mes, ano;
                     if (t.data.includes('/')) { const p = t.data.split('/'); mes = p[1]; ano = p[2]; }
                     else if (t.data.includes('-')) { const p = t.data.split('-'); mes = p[1]; ano = p[0]; }
                     return `${mes}/${ano}` === filterMes;
                 });
             }
 
-            if (totalContainer && totalValor) {
+            if (totalContainer && totalValor && totalBruto) {
                 if (filterMes !== 'todos') {
-                    let total = 0;
-                    for (let t of filtered) { total += ((Number(t.debito)||0) - (Number(t.credito)||0)); }
-                    totalValor.innerText = formatCurrency(total);
+                    let calcLiquido = 0; 
+                    let calcBruto = 0;
+                    for (let t of filtered) { 
+                        let d = Number(t.debito) || 0;
+                        let c = Number(t.credito) || 0;
+                        calcLiquido += (d - c);
+                        calcBruto += (d + c); 
+                    }
+                    totalValor.innerText = formatCurrency(calcLiquido); 
+                    totalBruto.innerText = formatCurrency(calcBruto);
                     totalContainer.classList.remove('hidden');
-                } else { totalContainer.classList.add('hidden'); }
+                } else { 
+                    totalContainer.classList.add('hidden'); 
+                }
             }
 
-            if (filtered.length === 0) { 
-                container.innerHTML = `<p class="text-center p-8 text-slate-400">Nenhum registro.</p>`; return; 
-            }
+            if (filtered.length === 0) { container.innerHTML = `<p class="text-center p-8 text-slate-400">Nenhum registro.</p>`; return; }
 
             let html = '';
             for (let t of filtered) {
@@ -1230,20 +1386,11 @@
             container.innerHTML = html;
         }
 
-        function apagarLinhaCartao(id) {
-            if(confirm("Tem certeza que deseja apagar esta transação do cartão?")) {
-                appState.ccTransactions = appState.ccTransactions.filter(t => t.id !== id); saveData();
-            }
-        }
+        function apagarLinhaCartao(id) { if(confirm("Tem certeza que deseja apagar esta transação do cartão?")) { appState.ccTransactions = appState.ccTransactions.filter(t => t.id !== id); saveData(); } }
 
         function renderInvestimentos() {
-            const container = document.getElementById('investimentosListContainer');
-            const select = document.getElementById('inv-select');
-            
-            const currentSelection = select.value;
-            select.innerHTML = '<option value="novo">-- + CADASTRAR NOVA CONTA --</option>';
-            container.innerHTML = '';
-            
+            const container = document.getElementById('investimentosListContainer'); const select = document.getElementById('inv-select');
+            const currentSelection = select.value; select.innerHTML = '<option value="novo">-- + CADASTRAR NOVA CONTA --</option>'; container.innerHTML = '';
             let totals = { BRL: 0, USD: 0, EUR: 0 };
 
             if (!appState.investimentos || appState.investimentos.length === 0) {
@@ -1251,12 +1398,10 @@
             } else {
                 let html = '';
                 for (let inv of appState.investimentos) {
-                    const opt = document.createElement('option'); opt.value = inv.id; opt.innerText = `${inv.nome} (${inv.banco})`;
-                    select.appendChild(opt);
-
+                    const opt = document.createElement('option'); opt.value = inv.id; opt.innerText = `${inv.nome} (${inv.banco})`; select.appendChild(opt);
                     if(totals[inv.moeda] !== undefined) totals[inv.moeda] += Number(inv.valor) || 0;
-
                     const siglaMoeda = inv.moeda === 'USD' ? 'US$' : (inv.moeda === 'EUR' ? '€' : 'R$');
+                    
                     html += `
                         <div class="flex flex-col md:flex-row justify-between items-center p-4 bg-white border border-slate-200 rounded-lg shadow-sm gap-4 hover:bg-slate-50 transition">
                             <div class="flex-1">
@@ -1277,9 +1422,7 @@
                 }
                 container.innerHTML = html;
             }
-            
             if([...select.options].some(o => o.value === currentSelection)) select.value = currentSelection;
-
             document.getElementById('total-brl').innerHTML = 'R$ ' + formatCurrencyNumber(totals.BRL);
             document.getElementById('total-usd').innerHTML = 'US$ ' + formatCurrencyNumber(totals.USD);
             document.getElementById('total-eur').innerHTML = '€ ' + formatCurrencyNumber(totals.EUR);
@@ -1290,16 +1433,13 @@
             const fNome = document.getElementById('inv-nome'); const fBanco = document.getElementById('inv-banco');
             const fMoeda = document.getElementById('inv-moeda'); const fValor = document.getElementById('inv-valor');
             const fData = document.getElementById('inv-data');
-            
             if (val === 'novo') {
-                fNome.value = ''; fBanco.value = ''; fMoeda.value = 'BRL'; fValor.value = '';
-                fData.value = new Date().toISOString().split('T')[0];
+                fNome.value = ''; fBanco.value = ''; fMoeda.value = 'BRL'; fValor.value = ''; fData.value = new Date().toISOString().split('T')[0];
                 fNome.disabled = false; fBanco.disabled = false; fMoeda.disabled = false;
             } else {
                 const inv = appState.investimentos.find(i => i.id === val);
                 if(inv) {
-                    fNome.value = inv.nome; fBanco.value = inv.banco; fMoeda.value = inv.moeda;
-                    fValor.value = inv.valor; fData.value = inv.data;
+                    fNome.value = inv.nome; fBanco.value = inv.banco; fMoeda.value = inv.moeda; fValor.value = inv.valor; fData.value = inv.data;
                     fNome.disabled = true; fBanco.disabled = true; fMoeda.disabled = true;
                 }
             }
@@ -1307,38 +1447,20 @@
 
         function salvarInvestimento() {
             const idSel = document.getElementById('inv-select').value;
-            const n = document.getElementById('inv-nome').value.trim(); const b = document.getElementById('inv-banco').value.trim();
-            const d = document.getElementById('inv-data').value;
-            
+            const n = document.getElementById('inv-nome').value.trim(); const b = document.getElementById('inv-banco').value.trim(); const d = document.getElementById('inv-data').value;
             if (!n || !b || !d) { alert('Preencha Nome, Banco e Data!'); return; }
             if(!appState.investimentos) appState.investimentos = [];
-
-            const novoObj = {
-                id: idSel === 'novo' ? 'inv_' + Date.now() : idSel, nome: n, banco: b, 
-                moeda: document.getElementById('inv-moeda').value, valor: parseFloat(document.getElementById('inv-valor').value) || 0, data: d
-            };
-
+            const novoObj = { id: idSel === 'novo' ? 'inv_' + Date.now() : idSel, nome: n, banco: b, moeda: document.getElementById('inv-moeda').value, valor: parseFloat(document.getElementById('inv-valor').value) || 0, data: d };
             if (idSel === 'novo') appState.investimentos.push(novoObj);
             else { const idx = appState.investimentos.findIndex(i => i.id === idSel); if(idx !== -1) appState.investimentos[idx] = novoObj; }
-            saveData();
-            document.getElementById('inv-select').value = 'novo'; handleInvSelectChange();
+            saveData(); document.getElementById('inv-select').value = 'novo'; handleInvSelectChange();
         }
 
         function editInvestimento(id) { document.getElementById('inv-select').value = id; handleInvSelectChange(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+        function apagarInvestimento(id) { if(confirm('Apagar todo o registro desta Conta/Investimento?')) { appState.investimentos = appState.investimentos.filter(i => i.id !== id); saveData(); document.getElementById('inv-select').value = 'novo'; handleInvSelectChange(); } }
 
-        function apagarInvestimento(id) {
-            if(confirm('Apagar todo o registro desta Conta/Investimento?')) {
-                appState.investimentos = appState.investimentos.filter(i => i.id !== id);
-                saveData(); document.getElementById('inv-select').value = 'novo'; handleInvSelectChange();
-            }
-        }
+        function salvarSaldoInicial() { appState.saldoInicial = parseFloat(document.getElementById('input-saldo-inicial').value) || 0; saveData(); alert("Saldo inicial salvo!"); }
 
-        function salvarSaldoInicial() {
-            appState.saldoInicial = parseFloat(document.getElementById('input-saldo-inicial').value) || 0;
-            saveData(); alert("Saldo inicial salvo!");
-        }
-
-        // Exportação mantida 100% no formato JSON antigo
         function exportData() {
             const dataStr = JSON.stringify(appState, null, 2);
             const blob = new Blob([dataStr], { type: "application/json" });
@@ -1347,7 +1469,6 @@
             document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
         }
 
-        // Importação reescreve o appState e força gravação no IndexedDB
         function importData(e) {
             const file = e.target.files[0]; if (!file) return;
             const reader = new FileReader();
@@ -1361,7 +1482,7 @@
                         if(!appState.investimentos) appState.investimentos = [];
                         if(!appState.categories) appState.categories = { despesas: [], receitas: [] };
                         document.getElementById('input-saldo-inicial').value = Number(appState.saldoInicial).toFixed(2);
-                        saveData(); alert("Backup restaurado com sucesso para o banco de dados interno!");
+                        saveData(); alert("Backup restaurado com sucesso para o banco de dados interno (IndexedDB)!");
                     }
                 } catch (err) { alert("Erro ao ler o arquivo .json"); }
                 e.target.value = ''; 
@@ -1383,19 +1504,16 @@
         }
 
         function addCategory(type) {
-            const input = document.getElementById(type === 'despesas' ? 'new-cat-despesa' : 'new-cat-receita');
-            const val = input.value.trim();
+            const input = document.getElementById(type === 'despesas' ? 'new-cat-despesa' : 'new-cat-receita'); const val = input.value.trim();
             if(!appState.categories[type]) appState.categories[type] = [];
             if (val && !appState.categories[type].includes(val)) {
-                appState.categories[type].push(val); input.value = '';
-                updateFutureCategoriesDropdown(); updatePrevSumDropdown(); saveData();
+                appState.categories[type].push(val); input.value = ''; updateFutureCategoriesDropdown(); updatePrevSumDropdown(); saveData();
             }
         }
         
         function deleteCategory(type, cat) {
             if(!appState.categories[type]) return;
-            appState.categories[type] = appState.categories[type].filter(c => c !== cat);
-            updateFutureCategoriesDropdown(); updatePrevSumDropdown(); saveData();
+            appState.categories[type] = appState.categories[type].filter(c => c !== cat); updateFutureCategoriesDropdown(); updatePrevSumDropdown(); saveData();
         }
 
         function generateColors(count, type) {
@@ -1407,15 +1525,12 @@
             return colors;
         }
 
-        window.onload = init; // Agora a função init lidará com a carga async do banco
+        window.onload = init;
     
         function resetarBancoDeDados() {
             if (confirm("ATENÇÃO: Tem certeza que deseja apagar TODOS os dados do IndexedDB? Esta ação não pode ser desfeita!")) {
                 if (confirm("Você tem certeza ABSOLUTA? Todo o seu histórico financeiro será perdido.")) {
-                    appState = {
-                        saldoInicial: 0, transactions: [], ccTransactions: [], futureTransactions: [], investimentos: [],
-                        categories: { despesas: ["Outros"], receitas: ["Outros"] }
-                    };
+                    appState = { saldoInicial: 0, transactions: [], ccTransactions: [], futureTransactions: [], investimentos: [], categories: { despesas: ["Outros"], receitas: ["Outros"] } };
                     saveData(); alert("O banco de dados foi completamente zerado.");
                 }
             }
@@ -1425,11 +1540,9 @@
             const mesStr = prompt("Digite o mês e ano que deseja apagar (Exemplo: 06/2026):");
             if (!mesStr) return;
             if (!/^\d{2}\/\d{4}$/.test(mesStr)) { alert("Formato inválido. Use MM/AAAA."); return; }
-
             if (confirm(`Tem certeza que deseja apagar TODAS as transações do mês ${mesStr}?`)) {
                 appState.transactions = appState.transactions.filter(t => {
-                    if(!t.data) return true;
-                    let mes, ano;
+                    if(!t.data) return true; let mes, ano;
                     if (t.data.includes('/')) { const p = t.data.split('/'); mes = p[1]; ano = p[2]; }
                     else if (t.data.includes('-')) { const p = t.data.split('-'); mes = p[1]; ano = p[0]; }
                     return `${mes}/${ano}` !== mesStr;
@@ -1438,11 +1551,7 @@
             }
         }
 
-        function apagarLinhaBanco(id) {
-            if(confirm("Tem certeza que deseja apagar esta transação?")) {
-                appState.transactions = appState.transactions.filter(t => t.id !== id); saveData();
-            }
-        }
+        function apagarLinhaBanco(id) { if(confirm("Tem certeza que deseja apagar esta transação?")) { appState.transactions = appState.transactions.filter(t => t.id !== id); saveData(); } }
     </script>
 </body>
 </html>
