@@ -306,68 +306,140 @@
         </section>
 
         <section id="tab-investimentos" class="tab-content hidden space-y-6">
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div class="bg-indigo-600 p-5 rounded-xl shadow-sm text-white">
-                    <p class="text-xs font-semibold text-indigo-200 uppercase">Total em Reais (BRL)</p>
+            
+            <div class="flex flex-col md:flex-row justify-between items-center mb-2 gap-4">
+                <h2 class="font-bold text-slate-700 text-xl">Resumo de Patrimônio</h2>
+                <div class="flex items-center gap-2 bg-white p-2 rounded-lg border border-slate-200 shadow-sm w-full md:w-auto">
+                    <label class="text-sm font-bold text-slate-600 whitespace-nowrap">Fotografia do Patrimônio Mês/Ano:</label>
+                    <input type="month" id="inv-month-filter" onchange="renderInvestimentos()" class="w-full md:w-auto text-sm border border-slate-300 rounded-md p-1.5 outline-none text-indigo-700 font-semibold focus:ring-1 focus:ring-indigo-500">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div class="bg-indigo-600 p-5 rounded-xl text-white shadow-sm transition">
+                    <p class="text-xs font-semibold text-indigo-200 uppercase">Patrimônio Total BRL</p>
                     <p id="total-brl" class="text-2xl font-bold mt-1">R$ 0,00</p>
                 </div>
-                <div class="bg-emerald-600 p-5 rounded-xl shadow-sm text-white">
-                    <p class="text-xs font-semibold text-emerald-200 uppercase">Total em Dólar (USD)</p>
+                <div class="bg-emerald-600 p-5 rounded-xl text-white shadow-sm transition">
+                    <p class="text-xs font-semibold text-emerald-200 uppercase">Total USD</p>
                     <p id="total-usd" class="text-2xl font-bold mt-1">US$ 0,00</p>
                 </div>
-                <div class="bg-sky-600 p-5 rounded-xl shadow-sm text-white">
-                    <p class="text-xs font-semibold text-sky-200 uppercase">Total em Euro (EUR)</p>
+                <div class="bg-sky-600 p-5 rounded-xl text-white shadow-sm transition">
+                    <p class="text-xs font-semibold text-sky-200 uppercase">Total EUR</p>
                     <p id="total-eur" class="text-2xl font-bold mt-1">€ 0,00</p>
+                </div>
+                <div class="bg-sky-500 p-5 rounded-xl text-white shadow-sm transition">
+                    <p class="text-xs font-semibold text-sky-100 uppercase" title="Soma de aportes/depósitos efetuados neste mês">Aportes no Mês Filtrado</p>
+                    <p id="total-aportes" class="text-2xl font-bold mt-1">R$ 0,00</p>
                 </div>
             </div>
 
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100 h-fit space-y-4">
-                    <h2 class="font-bold text-slate-700 text-base border-b pb-2">Cadastrar / Editar Conta</h2>
+                    <h2 class="font-bold text-slate-700 text-base border-b pb-2">Investimento Específico</h2>
                     <div>
-                        <select id="inv-select" onchange="handleInvSelectChange()" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500 font-semibold text-indigo-700">
-                            <option value="novo">-- + CADASTRAR NOVA CONTA --</option>
+                        <select id="inv-select" onchange="carregarInvestimento()" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500 font-semibold text-indigo-700">
+                            <option value="novo">-- NOVO INVESTIMENTO --</option>
                         </select>
                     </div>
 
-                    <div id="inv-cadastro-fields" class="space-y-3">
+                    <div class="space-y-3">
                         <div>
-                            <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Nome do Investimento/Conta</label>
-                            <input type="text" id="inv-nome" placeholder="Ex: Nomad, NuInvest, CDB..." class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500 disabled:bg-slate-100 disabled:text-slate-500">
+                            <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Nome</label>
+                            <input type="text" id="inv-nome" placeholder="Ex: CDB Nubank" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
                         </div>
                         <div>
-                            <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Banco / Corretora</label>
-                            <input type="text" id="inv-banco" placeholder="Ex: XP, Wise..." class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500 disabled:bg-slate-100 disabled:text-slate-500">
+                            <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Instituição</label>
+                            <input type="text" id="inv-banco" placeholder="Ex: Nubank" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
                         </div>
                         <div>
-                            <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Moeda da Conta</label>
-                            <select id="inv-moeda" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500 disabled:bg-slate-100 disabled:text-slate-500">
+                            <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Moeda</label>
+                            <select id="inv-moeda" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
                                 <option value="BRL">Real (BRL)</option>
                                 <option value="USD">Dólar (USD)</option>
                                 <option value="EUR">Euro (EUR)</option>
                             </select>
                         </div>
                     </div>
-
-                    <div class="space-y-3 pt-3 border-t border-slate-100">
-                        <div>
-                            <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Saldo Atual</label>
-                            <input type="number" step="0.01" id="inv-valor" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500 font-bold">
-                        </div>
-                        <div>
-                            <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Data da Atualização</label>
-                            <input type="date" id="inv-data" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
-                        </div>
-                    </div>
                     
-                    <button type="button" onclick="salvarInvestimento()" class="w-full bg-emerald-600 text-white rounded-md p-2 text-sm font-bold hover:bg-emerald-700 transition mt-2">Salvar / Atualizar Saldo</button>
+                    <div class="flex gap-2 mt-4 pt-4 border-t border-slate-100">
+                        <button onclick="salvarInvestimento()" class="flex-1 bg-emerald-600 text-white rounded-md p-2 text-sm font-bold hover:bg-emerald-700 transition">Salvar Info</button>
+                        <button onclick="apagarInvestimentoAtual()" class="bg-rose-600 text-white rounded-md p-2 text-sm font-bold hover:bg-rose-700 transition" title="Apagar este investimento inteiro">Excluir Conta</button>
+                    </div>
                 </div>
 
                 <div class="bg-white rounded-xl shadow-sm border border-slate-100 lg:col-span-2 overflow-hidden flex flex-col">
                     <div class="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-                        <h2 class="font-bold text-slate-700 text-base">Meus Investimentos & Contas Internacionais</h2>
+                        <h2 class="font-bold text-slate-700 text-base">📈 Histórico / Evolução Mensal</h2>
+                        <button onclick="abrirModalNovoMes()" class="bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded-md text-sm font-bold hover:bg-indigo-200 transition">➕ Lançar Mês</button>
                     </div>
-                    <div id="investimentosListContainer" class="overflow-y-auto max-h-[500px] flex-1 p-4 space-y-3 bg-slate-50"></div>
+                    <div id="investimentoHeader" class="p-4 bg-indigo-50 border-b border-indigo-100 hidden">
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <p id="invHeaderNome" class="font-bold text-indigo-800 text-lg"></p>
+                                <p id="invHeaderBanco" class="text-xs text-indigo-600"></p>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-[10px] text-indigo-400 font-bold uppercase tracking-wider mb-1">Saldo no ultimo mes projetado</p>
+                                <p id="invUltimoSaldo" class="font-bold text-2xl text-indigo-700"></p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div id="investimentosListContainer" class="flex-1 p-0 bg-white max-h-[500px] overflow-y-auto"></div>
+                </div>
+            </div>
+
+            <div id="modalMensal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 hidden">
+                <div class="bg-white rounded-xl w-full max-w-md p-6 shadow-2xl">
+                    <h3 id="modalTitle" class="text-lg font-bold text-slate-700 border-b pb-3 mb-4">Adicionar Mês</h3>
+                    <input type="hidden" id="modalLinhaId">
+                    <input type="hidden" id="modalInvId">
+                    
+                    <div class="space-y-3">
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Mês/Ano</label>
+                                <input type="month" id="modalData" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-amber-600 uppercase mb-1">Saldo Anterior</label>
+                                <input type="number" step="0.01" id="modalSaldoAnterior" class="w-full text-sm border border-amber-200 bg-amber-50 rounded-md p-2 outline-none focus:ring-1 focus:ring-amber-500 font-medium">
+                            </div>
+                        </div>
+                        
+                        <div class="grid grid-cols-2 gap-3 mt-2">
+                            <div>
+                                <label class="block text-xs font-semibold text-sky-600 uppercase mb-1">Aporte Depósito (+)</label>
+                                <input type="number" step="0.01" id="modalAporte" class="w-full text-sm border border-sky-200 bg-sky-50 rounded-md p-2 outline-none focus:ring-1 focus:ring-sky-500 font-medium text-sky-700" value="0">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-rose-500 uppercase mb-1">Resgate Retirada (-)</label>
+                                <input type="number" step="0.01" id="modalResgate" class="w-full text-sm border border-rose-200 bg-rose-50 rounded-md p-2 outline-none focus:ring-1 focus:ring-rose-500 text-rose-600 font-medium" value="0">
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-3 mt-2">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Taxa Anual (% a.a.)</label>
+                                <input type="number" step="0.001" id="modalTaxaAnual" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Rendimento Bruto (+)</label>
+                                <input type="number" step="0.01" id="modalRendimento" class="w-full text-sm border border-slate-200 bg-slate-100 rounded-md p-2 font-medium text-emerald-600" readonly>
+                            </div>
+                        </div>
+                        
+                        <div class="pt-2">
+                            <label class="block text-xs font-bold text-indigo-600 uppercase mb-1">Saldo Final Calculado</label>
+                            <input type="number" step="0.01" id="modalSaldoFinal" class="w-full text-lg border border-indigo-200 bg-indigo-50 rounded-md p-2 font-bold text-indigo-700" readonly>
+                        </div>
+                    </div>
+                    
+                    <div class="flex gap-3 mt-6 pt-4 border-t border-slate-100">
+                        <button onclick="salvarLinhaMensal()" class="flex-1 bg-indigo-600 text-white rounded-md py-2 font-bold hover:bg-indigo-700 transition">Salvar</button>
+                        <button onclick="fecharModal()" class="flex-1 bg-slate-200 text-slate-700 rounded-md py-2 font-bold hover:bg-slate-300 transition">Cancelar</button>
+                    </div>
                 </div>
             </div>
         </section>
@@ -426,7 +498,7 @@
     </main>
 
     <script>
-        // Registo do Service Worker para PWA (GitHub Pages e Mobile Offline)
+        // Registo do Service Worker para PWA
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('./sw.js').then(reg => {
@@ -445,7 +517,6 @@
             config: 'id'
         });
 
-        // O estado central
         let appState = {
             saldoInicial: 0,
             transactions: [],
@@ -460,6 +531,9 @@
         let editingFutureId = null;
         let cachedSaldoAtual = null;
         let debounceTimers = {};
+        
+        let investimentoSelecionadoId = null;
+        let editingLinhaMensalId = null;
 
         function debounce(key, fn, delay = 300) {
             if (debounceTimers[key]) clearTimeout(debounceTimers[key]);
@@ -477,18 +551,15 @@
 
         function safeRun(fn) { try { fn(); } catch(e) { console.error("Erro protegido em", fn.name, e); } }
 
-        // Módulo de Banco de Dados: Carregar do IndexedDB
         async function loadDataFromDB() {
             try {
                 const count = await db.config.count();
                 if (count === 0) {
-                    // Migração automática se houver dados velhos no localStorage
                     const savedData = localStorage.getItem('controle_financeiro_dados');
                     if (savedData) {
                         const parsed = JSON.parse(savedData);
                         appState = {...appState, ...parsed};
                         await saveToDB();
-                        console.log("Migração do localStorage para IndexedDB concluída!");
                     }
                 } else {
                     const cfg = await db.config.toArray();
@@ -509,7 +580,6 @@
             } catch(e) { console.error("Erro ao carregar banco IndexedDB", e); }
         }
 
-        // Módulo de Banco de Dados: Salvar no IndexedDB
         async function saveToDB() {
             try {
                 await db.transaction('rw', db.transacoes, db.cartao, db.previsoes, db.investimentos, db.config, async () => {
@@ -536,7 +606,7 @@
                 document.getElementById('dash-month-filter').value = `${yyyy}-${mm}`;
                 document.getElementById('fatura-mes').value = `${yyyy}-${mm}`;
                 document.getElementById('prev-target-date').value = `${yyyy}-${mm}-${dd}`;
-                document.getElementById('inv-data').value = `${yyyy}-${mm}-${dd}`;
+                document.getElementById('inv-month-filter').value = `${yyyy}-${mm}`;
             } catch(e) {}
 
             safeRun(updateFutureCategoriesDropdown);
@@ -560,7 +630,6 @@
             } catch(e) {}
         }
         
-        // Função Central de Save atualizada
         function saveData() {
             saveToDB().then(() => {
                 cachedSaldoAtual = null;
@@ -709,13 +778,11 @@
             } else { alert(`Nenhum lançamento encontrado em ${mes}/${ano}.`); }
         }
 
-        // --- NOVA FUNÇÃO DE IMPORTAÇÃO (Excel integrado na Conta Corrente) ---
         function handleFileUpload(e, targetType) {
             const file = e.target.files[0];
             if (!file) return;
 
             if (targetType === 'cartao') {
-                // LOGICA ORIGINAL DO CARTÃO DE CRÉDITO MANTIDA INTACTA
                 let dataVencimentoFatura = "";
                 let anoFaturaCartao = "";
 
@@ -820,7 +887,6 @@
                 reader.readAsText(file, 'UTF-8');
 
             } else if (targetType === 'banco') {
-                // NOVA LÓGICA DE IMPORTAÇÃO DE CONTA CORRENTE (Lendo Excel via SheetJS)
                 const reader = new FileReader();
                 reader.onload = function(evt) {
                     try {
@@ -829,13 +895,11 @@
                         const firstSheetName = workbook.SheetNames[0];
                         const worksheet = workbook.Sheets[firstSheetName];
                         
-                        // Converte para um array de arrays para facilitar a busca dinâmica pelas colunas
                         const json = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false, dateNF: 'dd/mm/yyyy' });
                         
                         let headerRowIndex = -1;
                         let finalIdxData = -1, finalIdxDesc = -1, finalIdxValor = -1, finalIdxCredito = -1, finalIdxDebito = -1, finalIdxCat = -1;
 
-                        // Tenta encontrar em qual linha está o cabeçalho (olhando as primeiras 15 linhas)
                         for(let i=0; i < Math.min(15, json.length); i++) {
                             const row = json[i];
                             if(!row || !row.length) continue;
@@ -879,7 +943,6 @@
                             if (!dataRaw) continue;
                             
                             let dataStr = String(dataRaw).trim();
-                            // Tratar formatos de data do Excel (YYYY-MM-DD para DD/MM/YYYY)
                             if (dataStr.match(/^\d{4}-\d{2}-\d{2}/)) {
                                 const p = dataStr.split('T')[0].split('-');
                                 dataStr = `${p[2]}/${p[1]}/${p[0]}`;
@@ -889,7 +952,6 @@
 
                             let descricao = String(row[finalIdxDesc] || '').trim();
                             
-                            // Função robusta para limpar valores monetários (com vírgula ou ponto)
                             const parseVal = (v) => {
                                 if(v === undefined || v === null || v === '') return 0;
                                 if(typeof v === 'number') return v;
@@ -897,9 +959,9 @@
                                 
                                 if(str.indexOf(',') > -1 && str.indexOf('.') > -1) {
                                     if(str.lastIndexOf(',') > str.lastIndexOf('.')) {
-                                        str = str.replace(/\./g, '').replace(',', '.'); // BR format
+                                        str = str.replace(/\./g, '').replace(',', '.');
                                     } else {
-                                        str = str.replace(/,/g, ''); // US format
+                                        str = str.replace(/,/g, '');
                                     }
                                 } else if(str.indexOf(',') > -1) {
                                     str = str.replace(',', '.');
@@ -924,24 +986,20 @@
                             let finalCat = '';
                             const tipoCat = debito > 0 ? 'despesas' : 'receitas';
 
-                            // Integração Inteligente com a Coluna "Categoria" do Excel
                             if(finalIdxCat !== -1 && row[finalIdxCat]) {
                                 let catLida = String(row[finalIdxCat]).trim();
                                 const catArr = appState.categories[tipoCat] || [];
                                 
-                                // Busca exata primeiro, depois parcial
                                 let matched = catArr.find(c => c.toLowerCase() === catLida.toLowerCase());
                                 if(!matched) matched = catArr.find(c => c.toLowerCase().includes(catLida.toLowerCase()) || catLida.toLowerCase().includes(c.toLowerCase()));
                                 
                                 if(matched) {
                                     finalCat = matched;
                                 } else {
-                                    // Se a categoria veio do arquivo mas não existe no app, cria dinamicamente no setup!
                                     appState.categories[tipoCat].push(catLida);
                                     finalCat = catLida;
                                 }
                             } else {
-                                // Fallback: se não tiver coluna categoria, usa as palavras-chave da descrição
                                 finalCat = findBestCategoryMatch(descricao, debito > 0);
                             }
 
@@ -978,7 +1036,6 @@
                     }
                 };
                 
-                // ArrayBuffer é essencial para ler Excel binário corretamente
                 reader.readAsArrayBuffer(file);
             }
         }
@@ -1005,25 +1062,48 @@
             return cachedSaldoAtual;
         }
 
+        // MOTOR DE FILTRAGEM DO DASHBOARD ATUALIZADO (Robusto para todos os formatos de data)
         function renderRelatorio() {
             const filterEl = document.getElementById('dash-month-filter');
-            const filterVal = filterEl ? filterEl.value : '';
+            let filterVal = filterEl ? filterEl.value : '';
+            
+            if (!filterVal) {
+                const today = new Date();
+                filterVal = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+                if (filterEl) filterEl.value = filterVal;
+            }
+
             const rangeEl = document.getElementById('dash-range-filter');
             const range = rangeEl ? (parseInt(rangeEl.value) || 1) : 1;
             
-            let transReais = appState.transactions; let transCartoes = appState.ccTransactions;
+            let transReais = appState.transactions; 
+            let transCartoes = appState.ccTransactions;
 
-            if (filterVal) {
-                const [anoStr, mesStr] = filterVal.split('-');
-                const endNum = parseInt(anoStr) * 12 + parseInt(mesStr);
-                const startNum = endNum - range + 1;
-                const inRange = (dataBR) => {
-                    if(!dataBR) return false; const parts = dataBR.split('/');
-                    if(parts.length < 3) return false; const tNum = parseInt(parts[2]) * 12 + parseInt(parts[1]);
-                    return tNum >= startNum && tNum <= endNum;
-                };
-                transReais = transReais.filter(t => inRange(t.data)); transCartoes = transCartoes.filter(c => inRange(c.data));
-            }
+            const [anoStr, mesStr] = filterVal.split('-');
+            const endNum = parseInt(anoStr, 10) * 12 + parseInt(mesStr, 10);
+            const startNum = endNum - range + 1;
+
+            const inRange = (dataStr) => {
+                if(!dataStr) return false;
+                let m, y;
+                if (dataStr.includes('/')) {
+                    const p = dataStr.split('/');
+                    if (p.length === 3) { m = parseInt(p[1], 10); y = parseInt(p[2], 10); }
+                    else if (p.length === 2) { m = parseInt(p[0], 10); y = parseInt(p[1], 10); }
+                } else if (dataStr.includes('-')) {
+                    const p = dataStr.split('-');
+                    if (p.length >= 2) {
+                        if (p[0].length === 4) { y = parseInt(p[0], 10); m = parseInt(p[1], 10); }
+                        else { y = parseInt(p[2], 10); m = parseInt(p[1], 10); }
+                    }
+                }
+                if (!m || !y) return false;
+                const tNum = y * 12 + m;
+                return tNum >= startNum && tNum <= endNum;
+            };
+
+            transReais = transReais.filter(t => inRange(t.data)); 
+            transCartoes = transCartoes.filter(c => inRange(c.data));
 
             let recCaixa = 0, desCaixa = 0;
             for (let t of transReais) { recCaixa += Number(t.credito)||0; desCaixa += Number(t.debito)||0; }
@@ -1388,76 +1468,354 @@
 
         function apagarLinhaCartao(id) { if(confirm("Tem certeza que deseja apagar esta transação do cartão?")) { appState.ccTransactions = appState.ccTransactions.filter(t => t.id !== id); saveData(); } }
 
-        function renderInvestimentos() {
-            const container = document.getElementById('investimentosListContainer'); const select = document.getElementById('inv-select');
-            const currentSelection = select.value; select.innerHTML = '<option value="novo">-- + CADASTRAR NOVA CONTA --</option>'; container.innerHTML = '';
-            let totals = { BRL: 0, USD: 0, EUR: 0 };
+        // ========== INVESTIMENTOS COM CAMPO DE APORTE ==========
+        function recalcularCascata(investimento, inicio) {
+            for (let i = inicio; i < investimento.historico.length; i++) {
+                const linha = investimento.historico[i];
+                let saldoAnterior = (i === 0) ? (investimento.valorInicial || 0) : investimento.historico[i-1].saldoFinal;
+                if (i === inicio && linha.saldoAnterior !== undefined && linha.saldoAnterior !== null && linha.saldoAnterior !== 0) {
+                    saldoAnterior = linha.saldoAnterior;
+                }
+                const taxaMensal = (linha.taxaAnual || 0) / 100 / 12;
+                // Os rendimentos do mês são baseados no saldo que começou o mês (antes do novo aporte e resgate)
+                const rendimento = saldoAnterior * taxaMensal;
+                const aporte = linha.aporte || 0;
+                const resgate = linha.resgate || 0;
+                
+                const saldoFinal = saldoAnterior + aporte + rendimento - resgate;
+                
+                linha.saldoAnterior = saldoAnterior;
+                linha.rendimento = rendimento;
+                linha.saldoFinal = saldoFinal;
+            }
+            if (investimento.historico.length) investimento.valor = investimento.historico[investimento.historico.length-1].saldoFinal;
+        }
 
-            if (!appState.investimentos || appState.investimentos.length === 0) {
-                container.innerHTML = '<p class="text-sm text-slate-400 text-center py-8">Nenhum investimento cadastrado.</p>';
-            } else {
-                let html = '';
+        function renderInvestimentos() {
+            const select = document.getElementById('inv-select');
+            if(!select) return;
+            
+            const currentSelection = select.value; 
+            select.innerHTML = '<option value="novo">-- NOVO INVESTIMENTO --</option>'; 
+            
+            let totals = { BRL: 0, USD: 0, EUR: 0 }, totalAportesMes = 0;
+            const filterMonth = document.getElementById('inv-month-filter')?.value || '';
+
+            if (appState.investimentos && appState.investimentos.length > 0) {
                 for (let inv of appState.investimentos) {
                     const opt = document.createElement('option'); opt.value = inv.id; opt.innerText = `${inv.nome} (${inv.banco})`; select.appendChild(opt);
-                    if(totals[inv.moeda] !== undefined) totals[inv.moeda] += Number(inv.valor) || 0;
-                    const siglaMoeda = inv.moeda === 'USD' ? 'US$' : (inv.moeda === 'EUR' ? '€' : 'R$');
                     
-                    html += `
-                        <div class="flex flex-col md:flex-row justify-between items-center p-4 bg-white border border-slate-200 rounded-lg shadow-sm gap-4 hover:bg-slate-50 transition">
-                            <div class="flex-1">
-                                <div class="flex items-center gap-2">
-                                    <h4 class="font-bold text-slate-700">${escapeHtml(inv.nome)}</h4>
-                                    <span class="px-2 py-0.5 bg-slate-100 text-slate-500 rounded text-[10px] font-bold border">${inv.moeda}</span>
-                                </div>
-                                <p class="text-xs text-slate-500 mt-1">${escapeHtml(inv.banco)} • Atualizado em: ${converterDataBR(inv.data)}</p>
-                            </div>
-                            <div class="flex items-center gap-4">
-                                <span class="font-bold text-lg text-emerald-600 whitespace-nowrap">${siglaMoeda} ${formatCurrencyNumber(inv.valor)}</span>
-                                <div class="border-l border-slate-200 pl-4 flex gap-2">
-                                    <button onclick="editInvestimento('${inv.id}')" class="text-indigo-400 hover:text-indigo-600 bg-white border p-1.5 rounded">✏️</button>
-                                    <button onclick="apagarInvestimento('${inv.id}')" class="text-rose-400 hover:text-rose-600 bg-rose-50 p-1.5 rounded">🗑️</button>
-                                </div>
-                            </div>
-                        </div>`;
+                    let saldoNoMes = 0;
+                    let aporteNoMes = 0;
+
+                    if (inv.historico && inv.historico.length > 0) {
+                        if (filterMonth) {
+                            const historicoFiltrado = inv.historico.filter(h => h.data <= filterMonth);
+                            if (historicoFiltrado.length > 0) {
+                                saldoNoMes = historicoFiltrado[historicoFiltrado.length - 1].saldoFinal || 0;
+                            } else {
+                                if (inv.data && inv.data.substring(0, 7) <= filterMonth) saldoNoMes = inv.valorInicial || inv.valor || 0;
+                            }
+                            const exatoMes = inv.historico.find(h => h.data === filterMonth);
+                            if (exatoMes && exatoMes.aporte) aporteNoMes = exatoMes.aporte;
+                        } else {
+                            const ultimo = inv.historico[inv.historico.length-1];
+                            saldoNoMes = ultimo.saldoFinal || 0;
+                            if (ultimo.aporte) aporteNoMes = ultimo.aporte;
+                        }
+                    } else {
+                        if (!filterMonth || (inv.data && inv.data.substring(0, 7) <= filterMonth)) {
+                            saldoNoMes = inv.valor || 0;
+                        }
+                    }
+
+                    if(totals[inv.moeda] !== undefined) totals[inv.moeda] += saldoNoMes;
+                    totalAportesMes += aporteNoMes;
                 }
-                container.innerHTML = html;
             }
+            
             if([...select.options].some(o => o.value === currentSelection)) select.value = currentSelection;
+            
             document.getElementById('total-brl').innerHTML = 'R$ ' + formatCurrencyNumber(totals.BRL);
             document.getElementById('total-usd').innerHTML = 'US$ ' + formatCurrencyNumber(totals.USD);
             document.getElementById('total-eur').innerHTML = '€ ' + formatCurrencyNumber(totals.EUR);
+            document.getElementById('total-aportes').innerHTML = 'R$ ' + formatCurrencyNumber(totalAportesMes);
+
+            if (currentSelection !== 'novo' && appState.investimentos.some(i => i.id === currentSelection)) {
+                exibirDetalheInvestimento(currentSelection);
+            } else {
+                document.getElementById('investimentoHeader').classList.add('hidden');
+                document.getElementById('investimentosListContainer').innerHTML = '<div class="text-center p-8 text-slate-400">Selecione um investimento na lista à esquerda</div>';
+            }
         }
 
-        function handleInvSelectChange() {
-            const val = document.getElementById('inv-select').value;
-            const fNome = document.getElementById('inv-nome'); const fBanco = document.getElementById('inv-banco');
-            const fMoeda = document.getElementById('inv-moeda'); const fValor = document.getElementById('inv-valor');
-            const fData = document.getElementById('inv-data');
-            if (val === 'novo') {
-                fNome.value = ''; fBanco.value = ''; fMoeda.value = 'BRL'; fValor.value = ''; fData.value = new Date().toISOString().split('T')[0];
-                fNome.disabled = false; fBanco.disabled = false; fMoeda.disabled = false;
+        function exibirDetalheInvestimento(id) {
+            const inv = appState.investimentos.find(i => i.id === id);
+            if (!inv) return;
+            document.getElementById('investimentoHeader').classList.remove('hidden');
+            document.getElementById('invHeaderNome').innerText = inv.nome;
+            document.getElementById('invHeaderBanco').innerText = inv.banco;
+            let ultimoSaldo = inv.historico?.length ? inv.historico[inv.historico.length-1].saldoFinal : (inv.valor || 0);
+            document.getElementById('invUltimoSaldo').innerHTML = `${inv.moeda === 'USD' ? 'US$' : (inv.moeda === 'EUR' ? '€' : 'R$')} ${formatCurrencyNumber(ultimoSaldo)}`;
+            
+            const container = document.getElementById('investimentosListContainer');
+            
+            if (!inv.historico || inv.historico.length === 0) {
+                container.innerHTML = '<div class="text-center p-8 text-slate-500">Nenhum lançamento mensal registrado. Clique em "➕ Lançar Mês"</div>';
+                return;
+            }
+            
+            let html = `
+            <table class="w-full text-sm text-left">
+                <thead class="bg-slate-100 text-slate-600 font-bold sticky top-0">
+                    <tr>
+                        <th class="p-3">Mês/Ano</th>
+                        <th class="p-3 text-right">Saldo Ant.</th>
+                        <th class="p-3 text-right text-sky-700">Aporte (+)</th>
+                        <th class="p-3 text-right">Taxa a.a.</th>
+                        <th class="p-3 text-right">Rend. (+)</th>
+                        <th class="p-3 text-right">Resgate (-)</th>
+                        <th class="p-3 text-right text-indigo-700">Saldo Final</th>
+                        <th class="p-3 text-center">Ações</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">`;
+                
+            for (let linha of [...inv.historico].sort((a,b) => a.data.localeCompare(b.data))) {
+                const [ano, mes] = linha.data.split('-');
+                html += `
+                    <tr class="hover:bg-slate-50 transition">
+                        <td class="p-3 font-semibold text-slate-700">${mes}/${ano}</td>
+                        <td class="p-3 text-right text-slate-600">R$ ${(linha.saldoAnterior || 0).toFixed(2)}</td>
+                        <td class="p-3 text-right text-sky-600 font-bold">+ R$ ${(linha.aporte || 0).toFixed(2)}</td>
+                        <td class="p-3 text-right text-slate-600">${(linha.taxaAnual || 0).toFixed(2)}%</td>
+                        <td class="p-3 text-right text-emerald-600 font-medium">+ R$ ${(linha.rendimento || 0).toFixed(2)}</td>
+                        <td class="p-3 text-right text-rose-600 font-medium">- R$ ${(linha.resgate || 0).toFixed(2)}</td>
+                        <td class="p-3 text-right font-bold text-indigo-700">R$ ${(linha.saldoFinal || 0).toFixed(2)}</td>
+                        <td class="p-3 text-center whitespace-nowrap">
+                            <button onclick="editarLinha('${inv.id}','${linha.id}')" class="text-indigo-500 hover:bg-indigo-100 p-1.5 rounded transition" title="Editar este mês">✏️</button>
+                            <button onclick="repetirLinha('${inv.id}','${linha.id}')" class="text-sky-500 hover:bg-sky-100 p-1.5 rounded ml-1 transition" title="Repetir (Gera meses seguintes)">🔁</button>
+                            <button onclick="apagarLinha('${inv.id}','${linha.id}')" class="text-rose-500 hover:bg-rose-100 p-1.5 rounded ml-1 transition" title="Apagar este mês">🗑️</button>
+                        </td>
+                    </tr>`;
+            }
+            html += `</tbody></table>`;
+            container.innerHTML = html;
+        }
+
+        function abrirModalNovoMes() {
+            const selId = document.getElementById('inv-select').value;
+            if (selId === 'novo') { alert("Selecione ou salve o investimento primeiro!"); return; }
+            const inv = appState.investimentos.find(i => i.id === selId);
+            if (!inv) return;
+            
+            editingLinhaMensalId = null;
+            document.getElementById('modalTitle').innerText = "Adicionar Mês";
+            
+            let nextData = "";
+            if(inv.historico && inv.historico.length > 0) {
+                const last = inv.historico[inv.historico.length-1];
+                let [y, m] = last.data.split('-');
+                let nM = parseInt(m) + 1;
+                let nY = parseInt(y);
+                if(nM > 12) { nM = 1; nY++; }
+                nextData = `${nY}-${String(nM).padStart(2,'0')}`;
             } else {
-                const inv = appState.investimentos.find(i => i.id === val);
-                if(inv) {
-                    fNome.value = inv.nome; fBanco.value = inv.banco; fMoeda.value = inv.moeda; fValor.value = inv.valor; fData.value = inv.data;
-                    fNome.disabled = true; fBanco.disabled = true; fMoeda.disabled = true;
+                const today = new Date();
+                nextData = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}`;
+            }
+
+            document.getElementById('modalData').value = nextData;
+            document.getElementById('modalAporte').value = "0";
+            document.getElementById('modalTaxaAnual').value = "";
+            document.getElementById('modalResgate').value = "0";
+            
+            let saldoAnterior = inv.historico?.length ? inv.historico[inv.historico.length-1].saldoFinal : (inv.valorInicial || inv.valor || 0);
+            document.getElementById('modalSaldoAnterior').value = saldoAnterior.toFixed(2);
+            document.getElementById('modalInvId').value = inv.id;
+            document.getElementById('modalMensal').classList.remove('hidden');
+            configurarCalculoModal();
+        }
+
+        function configurarCalculoModal() {
+            const taxa = document.getElementById('modalTaxaAnual');
+            const aporte = document.getElementById('modalAporte');
+            const resgate = document.getElementById('modalResgate');
+            const saldoAnt = document.getElementById('modalSaldoAnterior');
+            
+            const calc = () => {
+                const s = parseFloat(saldoAnt.value) || 0;
+                const a = parseFloat(aporte.value) || 0;
+                const t = parseFloat(taxa.value) || 0;
+                const r = parseFloat(resgate.value) || 0;
+                
+                const rend = s * (t / 100 / 12);
+                document.getElementById('modalRendimento').value = rend.toFixed(2);
+                document.getElementById('modalSaldoFinal').value = (s + a + rend - r).toFixed(2);
+            };
+            taxa.oninput = calc;
+            aporte.oninput = calc;
+            resgate.oninput = calc;
+            saldoAnt.oninput = calc;
+            calc();
+        }
+
+        function fecharModal() { document.getElementById('modalMensal').classList.add('hidden'); }
+
+        function salvarLinhaMensal() {
+            const invId = document.getElementById('modalInvId').value;
+            const inv = appState.investimentos.find(i => i.id === invId);
+            if (!inv) return;
+            if (!inv.historico) inv.historico = [];
+            
+            const data = document.getElementById('modalData').value;
+            if (!data) { alert("Informe a data!"); return; }
+            
+            const saldoAnterior = parseFloat(document.getElementById('modalSaldoAnterior').value) || 0;
+            const aporte = parseFloat(document.getElementById('modalAporte').value) || 0;
+            const taxaAnual = parseFloat(document.getElementById('modalTaxaAnual').value) || 0;
+            const resgate = parseFloat(document.getElementById('modalResgate').value) || 0;
+            const rendimento = parseFloat(document.getElementById('modalRendimento').value) || 0;
+            const saldoFinal = parseFloat(document.getElementById('modalSaldoFinal').value) || 0;
+            
+            let indiceModificado = -1;
+            
+            if (editingLinhaMensalId) {
+                indiceModificado = inv.historico.findIndex(h => h.id === editingLinhaMensalId);
+                if (indiceModificado !== -1) {
+                    inv.historico[indiceModificado] = {
+                        id: editingLinhaMensalId, data, saldoAnterior, aporte, taxaAnual, resgate, rendimento, saldoFinal
+                    };
                 }
+            } else {
+                if (inv.historico.some(h => h.data === data)) { alert("Mês já existe!"); return; }
+                const newId = 'linha_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+                inv.historico.push({ id: newId, data, saldoAnterior, aporte, taxaAnual, resgate, rendimento, saldoFinal });
+                inv.historico.sort((a,b) => a.data.localeCompare(b.data));
+                indiceModificado = inv.historico.findIndex(h => h.id === newId);
+            }
+            
+            if (indiceModificado !== -1) recalcularCascata(inv, indiceModificado);
+            saveData();
+            fecharModal();
+            renderInvestimentos();
+        }
+
+        function editarLinha(invId, linhaId) {
+            const inv = appState.investimentos.find(i => i.id === invId);
+            if (!inv) return;
+            const linha = inv.historico.find(h => h.id === linhaId);
+            if (!linha) return;
+            editingLinhaMensalId = linhaId;
+            document.getElementById('modalTitle').innerText = "Editar Mês";
+            document.getElementById('modalData').value = linha.data;
+            document.getElementById('modalSaldoAnterior').value = (linha.saldoAnterior || 0).toFixed(2);
+            document.getElementById('modalAporte').value = linha.aporte || 0;
+            document.getElementById('modalTaxaAnual').value = linha.taxaAnual;
+            document.getElementById('modalResgate').value = linha.resgate || 0;
+            document.getElementById('modalRendimento').value = (linha.rendimento || 0).toFixed(2);
+            document.getElementById('modalSaldoFinal').value = linha.saldoFinal.toFixed(2);
+            document.getElementById('modalInvId').value = invId;
+            document.getElementById('modalMensal').classList.remove('hidden');
+            configurarCalculoModal();
+        }
+
+        function repetirLinha(invId, linhaId) {
+            const inv = appState.investimentos.find(i => i.id === invId);
+            if (!inv) return;
+            const original = inv.historico.find(h => h.id === linhaId);
+            if (!original) return;
+            const qtd = parseInt(prompt("Gerar lançamentos repetindo Aporte, Taxa e Resgate por quantos meses?", "1"));
+            if (isNaN(qtd)) return;
+            let [ano, mes] = original.data.split('-');
+            let a = parseInt(ano), m = parseInt(mes);
+            let ultimoSaldo = original.saldoFinal;
+            for (let i = 1; i <= qtd; i++) {
+                m++; if (m > 12) { m = 1; a++; }
+                const novaData = `${a}-${String(m).padStart(2,'0')}`;
+                if (inv.historico.some(h => h.data === novaData)) break;
+                const rend = ultimoSaldo * (original.taxaAnual / 100 / 12);
+                const novoSaldo = ultimoSaldo + (original.aporte || 0) + rend - (original.resgate || 0);
+                inv.historico.push({
+                    id: 'linha_' + Date.now() + '_' + i,
+                    data: novaData,
+                    saldoAnterior: ultimoSaldo,
+                    aporte: original.aporte || 0,
+                    taxaAnual: original.taxaAnual,
+                    resgate: original.resgate || 0,
+                    rendimento: rend,
+                    saldoFinal: novoSaldo
+                });
+                ultimoSaldo = novoSaldo;
+            }
+            inv.historico.sort((a,b) => a.data.localeCompare(b.data));
+            const pos = inv.historico.findIndex(h => h.id === linhaId);
+            recalcularCascata(inv, pos);
+            saveData();
+            renderInvestimentos();
+        }
+
+        function apagarLinha(invId, linhaId) {
+            if (!confirm("Apagar este mês e recalcular os seguintes?")) return;
+            const inv = appState.investimentos.find(i => i.id === invId);
+            if (inv) {
+                const idx = inv.historico.findIndex(h => h.id === linhaId);
+                inv.historico = inv.historico.filter(h => h.id !== linhaId);
+                if (inv.historico.length) recalcularCascata(inv, Math.max(0, idx-1));
+                else inv.valor = inv.valorInicial || 0;
+                saveData();
+                renderInvestimentos();
             }
         }
 
         function salvarInvestimento() {
-            const idSel = document.getElementById('inv-select').value;
-            const n = document.getElementById('inv-nome').value.trim(); const b = document.getElementById('inv-banco').value.trim(); const d = document.getElementById('inv-data').value;
-            if (!n || !b || !d) { alert('Preencha Nome, Banco e Data!'); return; }
-            if(!appState.investimentos) appState.investimentos = [];
-            const novoObj = { id: idSel === 'novo' ? 'inv_' + Date.now() : idSel, nome: n, banco: b, moeda: document.getElementById('inv-moeda').value, valor: parseFloat(document.getElementById('inv-valor').value) || 0, data: d };
-            if (idSel === 'novo') appState.investimentos.push(novoObj);
-            else { const idx = appState.investimentos.findIndex(i => i.id === idSel); if(idx !== -1) appState.investimentos[idx] = novoObj; }
-            saveData(); document.getElementById('inv-select').value = 'novo'; handleInvSelectChange();
+            const id = document.getElementById('inv-select').value;
+            const nome = document.getElementById('inv-nome').value.trim();
+            const banco = document.getElementById('inv-banco').value.trim();
+            const moeda = document.getElementById('inv-moeda').value;
+            if (!nome || !banco) { alert("Preencha nome e instituição!"); return; }
+            if (id === 'novo') {
+                const novoId = 'inv_' + Date.now();
+                const filterMonth = document.getElementById('inv-month-filter')?.value || new Date().toISOString().split('T')[0].substring(0,7);
+                appState.investimentos.push({ id: novoId, nome, banco, moeda, valor: 0, valorInicial: 0, historico: [], data: filterMonth + "-01" });
+                document.getElementById('inv-select').value = novoId;
+            } else {
+                const inv = appState.investimentos.find(i => i.id === id);
+                if (inv) { inv.nome = nome; inv.banco = banco; inv.moeda = moeda; }
+            }
+            saveData();
         }
 
-        function editInvestimento(id) { document.getElementById('inv-select').value = id; handleInvSelectChange(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
-        function apagarInvestimento(id) { if(confirm('Apagar todo o registro desta Conta/Investimento?')) { appState.investimentos = appState.investimentos.filter(i => i.id !== id); saveData(); document.getElementById('inv-select').value = 'novo'; handleInvSelectChange(); } }
+        function carregarInvestimento() {
+            const id = document.getElementById('inv-select').value;
+            if (id === 'novo') {
+                document.getElementById('inv-nome').value = '';
+                document.getElementById('inv-banco').value = '';
+                document.getElementById('inv-nome').disabled = false;
+                document.getElementById('inv-banco').disabled = false;
+                document.getElementById('investimentoHeader').classList.add('hidden');
+                document.getElementById('investimentosListContainer').innerHTML = '<div class="text-center p-8 text-slate-400">Selecione um investimento na lista à esquerda</div>';
+            } else {
+                const inv = appState.investimentos.find(i => i.id === id);
+                if (inv) {
+                    document.getElementById('inv-nome').value = inv.nome;
+                    document.getElementById('inv-banco').value = inv.banco;
+                    document.getElementById('inv-moeda').value = inv.moeda;
+                    exibirDetalheInvestimento(id);
+                }
+            }
+        }
+
+        function apagarInvestimentoAtual() {
+            const id = document.getElementById('inv-select').value;
+            if (id === 'novo') return;
+            if(confirm('Apagar todo o registro desta Conta/Investimento e seu histórico mensal?')) { 
+                appState.investimentos = appState.investimentos.filter(i => i.id !== id); 
+                document.getElementById('inv-select').value = 'novo';
+                carregarInvestimento();
+                saveData(); 
+            }
+        }
 
         function salvarSaldoInicial() { appState.saldoInicial = parseFloat(document.getElementById('input-saldo-inicial').value) || 0; saveData(); alert("Saldo inicial salvo!"); }
 
