@@ -141,34 +141,45 @@
                 <div id="editing-badge" class="hidden absolute -top-3 left-4 bg-emerald-500 text-white text-[10px] font-bold px-2 py-1 rounded shadow-sm">MODO EDIÇÃO</div>
                 <h2 class="font-bold text-slate-700 text-sm mb-3">Agendar ou Editar Previsão</h2>
                 
-                <form id="futureForm" onsubmit="addFutureTransaction(event)" class="flex flex-col md:flex-row gap-3 items-end">
-                    <div class="w-full md:w-36">
-                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Data</label>
-                        <input type="date" id="fut-data" required class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
+                <form id="futureForm" onsubmit="addFutureTransaction(event)" class="flex flex-col gap-3">
+                    <div class="flex flex-col md:flex-row gap-3 items-end">
+                        <div class="w-full md:w-36">
+                            <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Data</label>
+                            <input type="date" id="fut-data" required class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
+                        </div>
+                        <div class="w-full flex-1">
+                            <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Descrição</label>
+                            <input type="text" id="fut-descricao" required class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
+                        </div>
+                        <div class="w-full md:w-36">
+                            <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Tipo</label>
+                            <select id="fut-tipo" onchange="updateFutureCategoriesDropdown()" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
+                                <option value="debito">Saída (-)</option>
+                                <option value="credito">Entrada (+)</option>
+                            </select>
+                        </div>
+                        <div class="w-full md:w-48">
+                            <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Categoria</label>
+                            <select id="fut-categoria" required class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500"></select>
+                        </div>
+                        <div class="w-full md:w-32">
+                            <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Valor (R$)</label>
+                            <input type="number" step="0.01" id="fut-valor" required class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
+                        </div>
                     </div>
-                    <div class="w-full flex-1">
-                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Descrição</label>
-                        <input type="text" id="fut-descricao" required class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
-                    </div>
-                    <div class="w-full md:w-36">
-                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Tipo</label>
-                        <select id="fut-tipo" onchange="updateFutureCategoriesDropdown()" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
-                            <option value="debito">Saída (-)</option>
-                            <option value="credito">Entrada (+)</option>
-                        </select>
-                    </div>
-                    <div class="w-full md:w-48">
-                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Categoria</label>
-                        <select id="fut-categoria" required class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500"></select>
-                    </div>
-                    <div class="w-full md:w-32">
-                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Valor (R$)</label>
-                        <input type="number" step="0.01" id="fut-valor" required class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
-                    </div>
-                    
-                    <div class="w-full md:w-auto flex flex-col gap-2 min-w-[140px]">
-                        <button type="submit" id="btn-submit-futuro" class="w-full bg-indigo-600 text-white rounded-md p-2 text-sm font-bold hover:bg-indigo-700 transition">Agendar</button>
-                        <button type="button" id="btn-cancelar-edicao" onclick="cancelEditFuture()" class="hidden w-full bg-slate-200 text-slate-700 rounded-md p-2 text-sm font-bold hover:bg-slate-300 transition">Cancelar</button>
+
+                    <div class="flex flex-col md:flex-row gap-3 items-end border-t border-dashed border-slate-200 pt-3">
+                        <div class="w-full md:flex-1">
+                            <label class="block text-xs font-semibold text-indigo-600 uppercase mb-1">📈 Refletir em Investimento (opcional)</label>
+                            <select id="fut-investimento" class="w-full text-sm border border-indigo-200 bg-indigo-50/50 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
+                                <option value="">-- Não refletir --</option>
+                            </select>
+                            <p class="text-[11px] text-slate-400 mt-1">Saída (-) gera um <b>Aporte</b> no investimento. Entrada (+) gera um <b>Resgate</b>. O valor é lançado no mês da data e recalculado em cascata.</p>
+                        </div>
+                        <div class="w-full md:w-auto flex flex-col gap-2 min-w-[140px]">
+                            <button type="submit" id="btn-submit-futuro" class="w-full bg-indigo-600 text-white rounded-md p-2 text-sm font-bold hover:bg-indigo-700 transition">Agendar</button>
+                            <button type="button" id="btn-cancelar-edicao" onclick="cancelEditFuture()" class="hidden w-full bg-slate-200 text-slate-700 rounded-md p-2 text-sm font-bold hover:bg-slate-300 transition">Cancelar</button>
+                        </div>
                     </div>
                 </form>
             </div>
@@ -404,8 +415,8 @@
                     <div class="space-y-3">
                         <div class="grid grid-cols-2 gap-3">
                             <div>
-                                <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Mês/Ano</label>
-                                <input type="month" id="modalData" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
+                                <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Data <span class="normal-case text-[10px] text-slate-400">(dia/mês/ano)</span></label>
+                                <input type="date" id="modalData" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
                             </div>
                             <div>
                                 <label class="block text-xs font-semibold text-amber-600 uppercase mb-1">Saldo Anterior</label>
@@ -616,6 +627,7 @@
 
             safeRun(updateFutureCategoriesDropdown);
             safeRun(updatePrevSumDropdown);
+            safeRun(updateFutureInvestimentoDropdown);
             
             updateFilterMesBancoLight(); 
             updateFilterMesCartaoLight();
@@ -1046,8 +1058,35 @@
         }
 
         function formatCurrency(v) { return isNaN(Number(v)) ? "R$ 0,00" : Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
-        function formatCurrencyNumber(v) { return isNaN(Number(v)) ? "0,00" : Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 }); }
+        function formatCurrencyNumber(v) { return isNaN(Number(v)) ? "0,00" : Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
         function converterDataBRParaDate(dataBR) { if(!dataBR) return new Date(); const p = dataBR.split('/'); return new Date(p[2], p[1]-1, p[0]); }
+
+        // Converte "YYYY-MM" para "YYYY-MM-DD" usando o último dia daquele mês
+        function ultimoDiaMes(mesAno) {
+            if(!mesAno) return mesAno;
+            const [y, m] = mesAno.split('-').map(Number);
+            const last = new Date(y, m, 0).getDate();
+            return `${y}-${String(m).padStart(2,'0')}-${String(last).padStart(2,'0')}`;
+        }
+
+        // Extrai "YYYY-MM" de uma string "YYYY-MM-DD" (ou já "YYYY-MM")
+        function paraMesAno(dataStr) { return dataStr ? dataStr.substring(0,7) : dataStr; }
+
+        // Converte "DD/MM/YYYY" para "YYYY-MM"
+        function dataBRParaMesAno(dataBR) { const p = dataBR.split('/'); return `${p[2]}-${p[1]}`; }
+
+        // Converte "DD/MM/YYYY" para "YYYY-MM-DD"
+        function dataBRParaISO(dataBR) { const p = dataBR.split('/'); return `${p[2]}-${p[1]}-${p[0]}`; }
+
+        // Garante uma data completa "YYYY-MM-DD" (compatibilidade com registros antigos "YYYY-MM")
+        function dataCompleta(d) { return (d && d.length === 7) ? ultimoDiaMes(d) : d; }
+
+        // Diferença em dias entre duas datas "YYYY-MM-DD" (d2 - d1)
+        function diffDias(d1, d2) {
+            const a = new Date(dataCompleta(d1) + 'T00:00:00');
+            const b = new Date(dataCompleta(d2) + 'T00:00:00');
+            return Math.round((b - a) / 86400000);
+        }
         function converterDataBR(dataStrISO) {
             if(!dataStrISO) return ''; const parts = dataStrISO.split('-');
             return parts.length !== 3 ? dataStrISO : `${parts[2]}/${parts[1]}/${parts[0]}`;
@@ -1207,6 +1246,7 @@
         }
 
         function renderPrevisao() {
+            updateFutureInvestimentoDropdown();
             let saldoMutavel = getSaldoAtualReal();
             document.getElementById('prev-saldo-atual').innerText = formatCurrency(saldoMutavel);
             document.getElementById('prev-saldo-atual').className = saldoMutavel >= 0 ? "font-bold text-slate-800 text-2xl" : "font-bold text-rose-600 text-2xl";
@@ -1228,10 +1268,13 @@
                     const isVencido = converterDataBRParaDate(f.data) <= today;
                     const rowClass = isVencido ? 'bg-amber-100 hover:bg-amber-200 border-amber-200' : 'bg-white hover:bg-slate-50 border-slate-100';
 
+                    const invNome = f.investimentoId ? (appState.investimentos.find(i => i.id === f.investimentoId)?.nome) : null;
+                    const badgeInv = invNome ? `<span class="ml-2 text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded font-bold" title="Reflete em ${escapeHtml(invNome)} (${isDeb?'Aporte':'Resgate'})">📈 ${isDeb?'Aporte':'Resgate'}</span>` : '';
+
                     html += `
                         <tr class="${rowClass} border-b transition">
                             <td class="p-4 font-semibold text-slate-600 whitespace-nowrap">${f.data} ${isVencido?'⚠️':''}</td>
-                            <td class="p-4 text-slate-800 font-medium">${escapeHtml(f.descricao)}</td>
+                            <td class="p-4 text-slate-800 font-medium">${escapeHtml(f.descricao)}${badgeInv}</td>
                             <td class="p-4"><span class="text-[11px] bg-white border border-slate-200 px-2 py-1 rounded text-slate-600">${escapeHtml(f.categoria)}</span></td>
                             <td class="p-4 font-bold ${corVal} whitespace-nowrap">${isDeb?'-':'+'} ${formatCurrency(val)}</td>
                             <td class="p-4 text-right font-bold ${corSal} whitespace-nowrap">${formatCurrency(saldoMutavel)}</td>
@@ -1273,6 +1316,19 @@
             for (let cat of lista) { const opt = document.createElement('option'); opt.value = cat; opt.innerText = cat; dropdown.appendChild(opt); }
         }
 
+        function updateFutureInvestimentoDropdown() {
+            const dropdown = document.getElementById('fut-investimento'); if(!dropdown) return;
+            const atual = dropdown.value;
+            dropdown.innerHTML = '<option value="">-- Não refletir --</option>';
+            for (let inv of (appState.investimentos || [])) {
+                const opt = document.createElement('option');
+                opt.value = inv.id;
+                opt.innerText = `${inv.nome} (${inv.banco})`;
+                dropdown.appendChild(opt);
+            }
+            if ([...dropdown.options].some(o => o.value === atual)) dropdown.value = atual;
+        }
+
         function cancelEditFuture() {
             editingFutureId = null; document.getElementById('futureForm').reset();
             document.getElementById('editing-badge').classList.add('hidden');
@@ -1287,6 +1343,8 @@
             document.getElementById('fut-data').value = `${y}-${m}-${d}`; document.getElementById('fut-descricao').value = item.descricao;
             document.getElementById('fut-tipo').value = item.tipo; updateFutureCategoriesDropdown(); 
             document.getElementById('fut-categoria').value = item.categoria; document.getElementById('fut-valor').value = item.valor;
+            updateFutureInvestimentoDropdown();
+            const invSel = document.getElementById('fut-investimento'); if(invSel) invSel.value = item.investimentoId || '';
             editingFutureId = id; document.getElementById('editing-badge').classList.remove('hidden');
             const btn = document.getElementById('btn-submit-futuro'); btn.innerText = "Salvar Editado"; 
             btn.className = "w-full bg-emerald-600 text-white rounded-md p-2 text-sm font-bold hover:bg-emerald-700 transition";
@@ -1301,11 +1359,14 @@
             let [dd, mm, yyyy] = item.data.split('/').map(Number);
             for(let i = 1; i <= qtd; i++) {
                 let nData = new Date(yyyy, mm - 1 + i, dd);
-                appState.futureTransactions.push({
+                const novo = {
                     id: 'fut_' + Date.now() + '_' + i,
                     data: `${String(nData.getDate()).padStart(2,'0')}/${String(nData.getMonth()+1).padStart(2,'0')}/${nData.getFullYear()}`,
-                    descricao: item.descricao, tipo: item.tipo, valor: item.valor, categoria: item.categoria
-                });
+                    descricao: item.descricao, tipo: item.tipo, valor: item.valor, categoria: item.categoria,
+                    investimentoId: item.investimentoId || ''
+                };
+                if (novo.investimentoId) aplicarReflexoInvestimento(novo);
+                appState.futureTransactions.push(novo);
             }
             saveData(); alert(`${qtd} repetições geradas.`);
         }
@@ -1313,19 +1374,37 @@
         function addFutureTransaction(e) {
             e.preventDefault();
             const dIn = document.getElementById('fut-data').value.split('-'); const dFmt = `${dIn[2]}/${dIn[1]}/${dIn[0]}`;
+            const invSel = document.getElementById('fut-investimento');
             const obj = {
                 id: editingFutureId || 'fut_' + Date.now(), data: dFmt,
                 descricao: document.getElementById('fut-descricao').value, tipo: document.getElementById('fut-tipo').value,
-                valor: parseFloat(document.getElementById('fut-valor').value), categoria: document.getElementById('fut-categoria').value
+                valor: parseFloat(document.getElementById('fut-valor').value), categoria: document.getElementById('fut-categoria').value,
+                investimentoId: invSel ? (invSel.value || '') : ''
             };
             if (editingFutureId) {
                 const idx = appState.futureTransactions.findIndex(f => f.id === editingFutureId);
-                if(idx !== -1) appState.futureTransactions[idx] = obj; cancelEditFuture();
-            } else { appState.futureTransactions.push(obj); document.getElementById('futureForm').reset(); updateFutureCategoriesDropdown(); }
+                if(idx !== -1) {
+                    reverterReflexoInvestimento(appState.futureTransactions[idx]);
+                    appState.futureTransactions[idx] = obj;
+                    if (obj.investimentoId) aplicarReflexoInvestimento(obj);
+                }
+                cancelEditFuture();
+            } else {
+                if (obj.investimentoId) aplicarReflexoInvestimento(obj);
+                appState.futureTransactions.push(obj);
+                document.getElementById('futureForm').reset(); updateFutureCategoriesDropdown();
+            }
             saveData();
         }
 
-        function deleteFutureTransaction(id) { if(confirm("Apagar este lançamento agendado?")) { appState.futureTransactions = appState.futureTransactions.filter(f => f.id !== id); saveData(); } }
+        function deleteFutureTransaction(id) {
+            if(confirm("Apagar este lançamento agendado?")) {
+                const item = appState.futureTransactions.find(f => f.id === id);
+                if (item) reverterReflexoInvestimento(item);
+                appState.futureTransactions = appState.futureTransactions.filter(f => f.id !== id);
+                saveData();
+            }
+        }
 
         function assignCategory(transactionId, category, type) {
             let transaction = null;
@@ -1475,15 +1554,42 @@
 
         // ========== INVESTIMENTOS COM CAMPO DE APORTE ==========
         function recalcularCascata(investimento, inicio) {
+            const DIAS_ANO = 365; // base para o juro diário (ACT/365)
             for (let i = inicio; i < investimento.historico.length; i++) {
                 const linha = investimento.historico[i];
                 let saldoAnterior = (i === 0) ? (investimento.valorInicial || 0) : investimento.historico[i-1].saldoFinal;
-                if (i === inicio && linha.saldoAnterior !== undefined && linha.saldoAnterior !== null && linha.saldoAnterior !== 0) {
+                // Apenas a PRIMEIRA linha pode manter um saldo anterior próprio (o saldo inicial).
+                // Todas as demais herdam sempre o saldo final da linha anterior (mês anterior).
+                if (i === 0 && linha.saldoAnterior !== undefined && linha.saldoAnterior !== null && linha.saldoAnterior !== 0) {
                     saldoAnterior = linha.saldoAnterior;
                 }
-                const taxaMensal = (linha.taxaAnual || 0) / 100 / 12;
-                // Os rendimentos do mês são baseados no saldo que começou o mês (antes do novo aporte e resgate)
-                const rendimento = saldoAnterior * taxaMensal;
+                let rendimento;
+                if (linha.rendimentoDiario) {
+                    // Juro diário: rende desde a data da linha anterior até a data desta linha
+                    const dias = (i === 0) ? 0 : diffDias(investimento.historico[i-1].data, linha.data);
+                    const taxaDiaria = (linha.taxaAnual || 0) / 100 / DIAS_ANO;
+                    rendimento = saldoAnterior * taxaDiaria * Math.max(0, dias);
+                } else {
+                    const taxaMensal = (linha.taxaAnual || 0) / 100 / 12;
+                    // Os rendimentos do mês são baseados no saldo que começou o mês (antes do novo aporte e resgate)
+                    rendimento = saldoAnterior * taxaMensal;
+                    // Se a linha anterior cair DENTRO do mesmo período mensal (ex.: aporte/resgate
+                    // intra-mês vindo da previsão), credita só a fração de dias restante do mês,
+                    // em vez de um mês cheio sobre poucos dias.
+                    if (i > 0) {
+                        const prevData = investimento.historico[i-1].data;
+                        const [yy, mm] = linha.data.split('-').map(Number);
+                        const dPrevEnd = new Date(yy, mm - 1, 0); // último dia do mês anterior
+                        const inicioPeriodo = `${dPrevEnd.getFullYear()}-${String(dPrevEnd.getMonth()+1).padStart(2,'0')}-${String(dPrevEnd.getDate()).padStart(2,'0')}`;
+                        if (prevData > inicioPeriodo) {
+                            const diasPeriodo = diffDias(inicioPeriodo, linha.data);
+                            const diasDecorridos = diffDias(prevData, linha.data);
+                            if (diasPeriodo > 0) {
+                                rendimento = saldoAnterior * taxaMensal * (Math.max(0, diasDecorridos) / diasPeriodo);
+                            }
+                        }
+                    }
+                }
                 const aporte = linha.aporte || 0;
                 const resgate = linha.resgate || 0;
                 
@@ -1494,6 +1600,76 @@
                 linha.saldoFinal = saldoFinal;
             }
             if (investimento.historico.length) investimento.valor = investimento.historico[investimento.historico.length-1].saldoFinal;
+        }
+
+        // ====== REFLEXO: Previsão -> Investimento ======
+        // Saída (debito) na previsão  = Aporte no investimento
+        // Entrada (credito) na previsão = Resgate no investimento
+        function aplicarReflexoInvestimento(fut) {
+            if (!fut || !fut.investimentoId) return;
+            const inv = appState.investimentos.find(i => i.id === fut.investimentoId);
+            if (!inv) return;
+            if (!inv.historico) inv.historico = [];
+
+            const dataAlvo = dataBRParaISO(fut.data);       // "YYYY-MM-DD" (mesmo dia da previsão)
+            const tipo = fut.tipo === 'debito' ? 'aporte' : 'resgate';
+            const valor = Number(fut.valor) || 0;
+
+            let linha = inv.historico.find(h => h.data === dataAlvo);
+            let linhaCriada = false;
+
+            if (!linha) {
+                // Última linha existente ANTES da data alvo: define saldo anterior e taxa anual herdada
+                const anteriores = inv.historico
+                    .filter(h => h.data < dataAlvo)
+                    .sort((a,b) => a.data.localeCompare(b.data));
+                const prev = anteriores[anteriores.length - 1];
+                const saldoAnterior = prev ? prev.saldoFinal : (inv.valorInicial || inv.valor || 0);
+                const taxaAnual = prev ? (prev.taxaAnual || 0) : 0;
+                linha = {
+                    id: 'linha_' + Date.now() + '_' + Math.random().toString(36).substr(2,6),
+                    data: dataAlvo, saldoAnterior, aporte: 0, taxaAnual,
+                    resgate: 0, rendimento: 0, saldoFinal: saldoAnterior,
+                    _autoReflexo: true, rendimentoDiario: true
+                };
+                inv.historico.push(linha);
+                inv.historico.sort((a,b) => a.data.localeCompare(b.data));
+                linhaCriada = true;
+            }
+
+            if (tipo === 'aporte') linha.aporte = (linha.aporte || 0) + valor;
+            else linha.resgate = (linha.resgate || 0) + valor;
+
+            fut.reflexo = { invId: inv.id, dataAlvo, tipo, valor, linhaId: linha.id, linhaCriada };
+
+            const pos = inv.historico.findIndex(h => h.id === linha.id);
+            recalcularCascata(inv, linhaCriada ? Math.max(0, pos - 1) : pos);
+        }
+
+        function reverterReflexoInvestimento(fut) {
+            if (!fut || !fut.reflexo) return;
+            const r = fut.reflexo;
+            const inv = appState.investimentos.find(i => i.id === r.invId);
+            if (inv && inv.historico) {
+                let linha = inv.historico.find(h => h.id === r.linhaId)
+                         || inv.historico.find(h => h.data === (r.dataAlvo || r.mesAno));
+                if (linha) {
+                    if (r.tipo === 'aporte') linha.aporte = (linha.aporte || 0) - r.valor;
+                    else linha.resgate = (linha.resgate || 0) - r.valor;
+                    if (Math.abs(linha.aporte || 0) < 0.005) linha.aporte = 0;
+                    if (Math.abs(linha.resgate || 0) < 0.005) linha.resgate = 0;
+
+                    const idx = inv.historico.findIndex(h => h.id === linha.id);
+                    if (linha._autoReflexo && (linha.aporte || 0) === 0 && (linha.resgate || 0) === 0) {
+                        inv.historico = inv.historico.filter(h => h.id !== linha.id);
+                        if (inv.historico.length) recalcularCascata(inv, Math.max(0, idx - 1));
+                        else inv.valor = inv.valorInicial || 0;
+                    } else {
+                        recalcularCascata(inv, Math.max(0, idx));
+                    }
+                }
+            }
+            delete fut.reflexo;
         }
 
         function renderInvestimentos() {
@@ -1515,13 +1691,13 @@
 
                     if (inv.historico && inv.historico.length > 0) {
                         if (filterMonth) {
-                            const historicoFiltrado = inv.historico.filter(h => h.data <= filterMonth);
+                            const historicoFiltrado = inv.historico.filter(h => paraMesAno(h.data) <= filterMonth);
                             if (historicoFiltrado.length > 0) {
                                 saldoNoMes = historicoFiltrado[historicoFiltrado.length - 1].saldoFinal || 0;
                             } else {
                                 if (inv.data && inv.data.substring(0, 7) <= filterMonth) saldoNoMes = inv.valorInicial || inv.valor || 0;
                             }
-                            const exatoMes = inv.historico.find(h => h.data === filterMonth);
+                            const exatoMes = inv.historico.find(h => paraMesAno(h.data) === filterMonth);
                             if (exatoMes && exatoMes.aporte) aporteNoMes = exatoMes.aporte;
                         } else {
                             const ultimo = inv.historico[inv.historico.length-1];
@@ -1568,7 +1744,7 @@
             let ultimoSaldo = 0;
             
             if (inv.historico && inv.historico.length > 0) {
-                const histPassado = inv.historico.filter(h => h.data <= mesCorrente);
+                const histPassado = inv.historico.filter(h => paraMesAno(h.data) <= mesCorrente);
                 if (histPassado.length > 0) {
                     ultimoSaldo = histPassado[histPassado.length - 1].saldoFinal;
                 } else {
@@ -1593,7 +1769,7 @@
             <table class="w-full text-sm text-left">
                 <thead class="bg-slate-100 text-slate-600 font-bold sticky top-0">
                     <tr>
-                        <th class="p-3">Mês/Ano</th>
+                        <th class="p-3">Data</th>
                         <th class="p-3 text-right">Saldo Ant.</th>
                         <th class="p-3 text-right text-sky-700">Aporte (+)</th>
                         <th class="p-3 text-right">Taxa a.a.</th>
@@ -1606,10 +1782,12 @@
                 <tbody class="divide-y divide-slate-100">`;
                 
             for (let linha of [...inv.historico].sort((a,b) => a.data.localeCompare(b.data))) {
-                const [ano, mes] = linha.data.split('-');
+                const partes = linha.data.split('-');
+                const ano = partes[0], mes = partes[1];
+                const dia = partes[2] || String(new Date(Number(ano), Number(mes), 0).getDate()).padStart(2,'0');
                 html += `
                     <tr class="hover:bg-slate-50 transition">
-                        <td class="p-3 font-semibold text-slate-700">${mes}/${ano}</td>
+                        <td class="p-3 font-semibold text-slate-700">${dia}/${mes}/${ano}</td>
                         <td class="p-3 text-right text-slate-600">R$ ${(linha.saldoAnterior || 0).toFixed(2)}</td>
                         <td class="p-3 text-right text-sky-600 font-bold">+ R$ ${(linha.aporte || 0).toFixed(2)}</td>
                         <td class="p-3 text-right text-slate-600">${(linha.taxaAnual || 0).toFixed(2)}%</td>
@@ -1639,14 +1817,14 @@
             let nextData = "";
             if(inv.historico && inv.historico.length > 0) {
                 const last = inv.historico[inv.historico.length-1];
-                let [y, m] = last.data.split('-');
+                let [y, m] = paraMesAno(last.data).split('-');
                 let nM = parseInt(m) + 1;
                 let nY = parseInt(y);
                 if(nM > 12) { nM = 1; nY++; }
-                nextData = `${nY}-${String(nM).padStart(2,'0')}`;
+                nextData = ultimoDiaMes(`${nY}-${String(nM).padStart(2,'0')}`);
             } else {
                 const today = new Date();
-                nextData = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}`;
+                nextData = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
             }
 
             document.getElementById('modalData').value = nextData;
@@ -1692,8 +1870,9 @@
             if (!inv) return;
             if (!inv.historico) inv.historico = [];
             
-            const data = document.getElementById('modalData').value;
-            if (!data) { alert("Informe a data!"); return; }
+            const dataInformada = document.getElementById('modalData').value;
+            if (!dataInformada) { alert("Informe a data!"); return; }
+            const data = dataCompleta(dataInformada); // já vem "YYYY-MM-DD"; converte registros antigos "YYYY-MM"
             
             const saldoAnterior = parseFloat(document.getElementById('modalSaldoAnterior').value) || 0;
             const aporte = parseFloat(document.getElementById('modalAporte').value) || 0;
@@ -1702,24 +1881,20 @@
             const rendimento = parseFloat(document.getElementById('modalRendimento').value) || 0;
             const saldoFinal = parseFloat(document.getElementById('modalSaldoFinal').value) || 0;
             
-            let indiceModificado = -1;
-            
             if (editingLinhaMensalId) {
-                indiceModificado = inv.historico.findIndex(h => h.id === editingLinhaMensalId);
-                if (indiceModificado !== -1) {
-                    inv.historico[indiceModificado] = {
-                        id: editingLinhaMensalId, data, saldoAnterior, aporte, taxaAnual, resgate, rendimento, saldoFinal
-                    };
-                }
+                const idx = inv.historico.findIndex(h => h.id === editingLinhaMensalId);
+                if (idx === -1) return;
+                if (inv.historico.some(h => h.data === data && h.id !== editingLinhaMensalId)) { alert("Já existe um lançamento nesta data!"); return; }
+                inv.historico[idx] = { id: editingLinhaMensalId, data, saldoAnterior, aporte, taxaAnual, resgate, rendimento, saldoFinal };
             } else {
-                if (inv.historico.some(h => h.data === data)) { alert("Mês já existe!"); return; }
+                if (inv.historico.some(h => h.data === data)) { alert("Já existe um lançamento nesta data!"); return; }
                 const newId = 'linha_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
                 inv.historico.push({ id: newId, data, saldoAnterior, aporte, taxaAnual, resgate, rendimento, saldoFinal });
-                inv.historico.sort((a,b) => a.data.localeCompare(b.data));
-                indiceModificado = inv.historico.findIndex(h => h.id === newId);
             }
-            
-            if (indiceModificado !== -1) recalcularCascata(inv, indiceModificado);
+            // Reordena por data (a data pode ter mudado na edição) e recalcula toda a cascata:
+            // saldo anterior herdado do mês anterior e saldo final propagado para os posteriores.
+            inv.historico.sort((a,b) => a.data.localeCompare(b.data));
+            recalcularCascata(inv, 0);
             saveData();
             fecharModal();
             renderInvestimentos();
@@ -1732,7 +1907,7 @@
             if (!linha) return;
             editingLinhaMensalId = linhaId;
             document.getElementById('modalTitle').innerText = "Editar Mês";
-            document.getElementById('modalData').value = linha.data;
+            document.getElementById('modalData').value = dataCompleta(linha.data);
             document.getElementById('modalSaldoAnterior').value = (linha.saldoAnterior || 0).toFixed(2);
             document.getElementById('modalAporte').value = linha.aporte || 0;
             document.getElementById('modalTaxaAnual').value = linha.taxaAnual;
@@ -1750,31 +1925,33 @@
             const original = inv.historico.find(h => h.id === linhaId);
             if (!original) return;
             const qtd = parseInt(prompt("Gerar lançamentos repetindo Aporte, Taxa e Resgate por quantos meses?", "1"));
-            if (isNaN(qtd)) return;
-            let [ano, mes] = original.data.split('-');
+            if (isNaN(qtd) || qtd <= 0) return;
+            // Continua a série a partir do ÚLTIMO mês já existente, replicando o lançamento
+            // clicado (aporte/taxa/resgate). Meses que já existirem são pulados, sem abortar.
+            const ultimaLinha = [...inv.historico].sort((a,b) => a.data.localeCompare(b.data)).slice(-1)[0];
+            let [ano, mes] = paraMesAno(ultimaLinha.data).split('-');
             let a = parseInt(ano), m = parseInt(mes);
-            let ultimoSaldo = original.saldoFinal;
-            for (let i = 1; i <= qtd; i++) {
+            let geradas = 0;
+            for (let i = 0; geradas < qtd; i++) {
+                if (i > 600) break; // trava de segurança
                 m++; if (m > 12) { m = 1; a++; }
-                const novaData = `${a}-${String(m).padStart(2,'0')}`;
-                if (inv.historico.some(h => h.data === novaData)) break;
-                const rend = ultimoSaldo * (original.taxaAnual / 100 / 12);
-                const novoSaldo = ultimoSaldo + (original.aporte || 0) + rend - (original.resgate || 0);
+                const novoMesAno = `${a}-${String(m).padStart(2,'0')}`;
+                if (inv.historico.some(h => paraMesAno(h.data) === novoMesAno)) continue; // já existe, pula
                 inv.historico.push({
                     id: 'linha_' + Date.now() + '_' + i,
-                    data: novaData,
-                    saldoAnterior: ultimoSaldo,
+                    data: ultimoDiaMes(novoMesAno),
+                    saldoAnterior: 0,
                     aporte: original.aporte || 0,
                     taxaAnual: original.taxaAnual,
                     resgate: original.resgate || 0,
-                    rendimento: rend,
-                    saldoFinal: novoSaldo
+                    rendimento: 0,
+                    saldoFinal: 0
                 });
-                ultimoSaldo = novoSaldo;
+                geradas++;
             }
             inv.historico.sort((a,b) => a.data.localeCompare(b.data));
-            const pos = inv.historico.findIndex(h => h.id === linhaId);
-            recalcularCascata(inv, pos);
+            const pos = inv.historico.findIndex(h => h.id === ultimaLinha.id);
+            recalcularCascata(inv, Math.max(0, pos));
             saveData();
             renderInvestimentos();
         }
