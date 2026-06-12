@@ -360,6 +360,11 @@
                                 <option value="EUR">Euro (EUR)</option>
                             </select>
                         </div>
+                        
+                        <div class="flex items-center gap-2 pt-2">
+                            <input type="checkbox" id="inv-ignorar-patrimonio" onchange="toggleIgnorarPatrimonio()" class="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer">
+                            <label for="inv-ignorar-patrimonio" class="text-xs font-semibold text-slate-500 uppercase cursor-pointer">Não reflete no patrimônio</label>
+                        </div>
                     </div>
                     
                     <div class="flex gap-2 mt-4 pt-4 border-t border-slate-100">
@@ -380,7 +385,7 @@
                                 <p id="invHeaderBanco" class="text-xs text-indigo-600"></p>
                             </div>
                             <div class="text-right">
-                                <p class="text-[10px] text-indigo-400 font-bold uppercase tracking-wider mb-1">Saldo no ultimo mes projetado</p>
+                                <p class="text-[10px] text-indigo-400 font-bold uppercase tracking-wider mb-1">Saldo no Corrente Mês</p>
                                 <p id="invUltimoSaldo" class="font-bold text-2xl text-indigo-700"></p>
                             </div>
                         </div>
@@ -1529,8 +1534,10 @@
                         }
                     }
 
-                    if(totals[inv.moeda] !== undefined) totals[inv.moeda] += saldoNoMes;
-                    totalAportesMes += aporteNoMes;
+                    if (!inv.ignorarPatrimonio) {
+                        if(totals[inv.moeda] !== undefined) totals[inv.moeda] += saldoNoMes;
+                        totalAportesMes += aporteNoMes;
+                    }
                 }
             }
             
@@ -1555,7 +1562,24 @@
             document.getElementById('investimentoHeader').classList.remove('hidden');
             document.getElementById('invHeaderNome').innerText = inv.nome;
             document.getElementById('invHeaderBanco').innerText = inv.banco;
-            let ultimoSaldo = inv.historico?.length ? inv.historico[inv.historico.length-1].saldoFinal : (inv.valor || 0);
+            
+            const hoje = new Date();
+            const mesCorrente = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
+            let ultimoSaldo = 0;
+            
+            if (inv.historico && inv.historico.length > 0) {
+                const histPassado = inv.historico.filter(h => h.data <= mesCorrente);
+                if (histPassado.length > 0) {
+                    ultimoSaldo = histPassado[histPassado.length - 1].saldoFinal;
+                } else {
+                    ultimoSaldo = inv.valorInicial || inv.valor || 0;
+                }
+            } else {
+                if (!inv.data || inv.data.substring(0, 7) <= mesCorrente) {
+                    ultimoSaldo = inv.valor || 0;
+                }
+            }
+            
             document.getElementById('invUltimoSaldo').innerHTML = `${inv.moeda === 'USD' ? 'US$' : (inv.moeda === 'EUR' ? '€' : 'R$')} ${formatCurrencyNumber(ultimoSaldo)}`;
             
             const container = document.getElementById('investimentosListContainer');
@@ -1773,15 +1797,17 @@
             const nome = document.getElementById('inv-nome').value.trim();
             const banco = document.getElementById('inv-banco').value.trim();
             const moeda = document.getElementById('inv-moeda').value;
+            const ignorarPatrimonio = document.getElementById('inv-ignorar-patrimonio').checked;
+
             if (!nome || !banco) { alert("Preencha nome e instituição!"); return; }
             if (id === 'novo') {
                 const novoId = 'inv_' + Date.now();
                 const filterMonth = document.getElementById('inv-month-filter')?.value || new Date().toISOString().split('T')[0].substring(0,7);
-                appState.investimentos.push({ id: novoId, nome, banco, moeda, valor: 0, valorInicial: 0, historico: [], data: filterMonth + "-01" });
+                appState.investimentos.push({ id: novoId, nome, banco, moeda, ignorarPatrimonio, valor: 0, valorInicial: 0, historico: [], data: filterMonth + "-01" });
                 document.getElementById('inv-select').value = novoId;
             } else {
                 const inv = appState.investimentos.find(i => i.id === id);
-                if (inv) { inv.nome = nome; inv.banco = banco; inv.moeda = moeda; }
+                if (inv) { inv.nome = nome; inv.banco = banco; inv.moeda = moeda; inv.ignorarPatrimonio = ignorarPatrimonio; }
             }
             saveData();
         }
@@ -1791,6 +1817,7 @@
             if (id === 'novo') {
                 document.getElementById('inv-nome').value = '';
                 document.getElementById('inv-banco').value = '';
+                document.getElementById('inv-ignorar-patrimonio').checked = false;
                 document.getElementById('inv-nome').disabled = false;
                 document.getElementById('inv-banco').disabled = false;
                 document.getElementById('investimentoHeader').classList.add('hidden');
@@ -1801,6 +1828,7 @@
                     document.getElementById('inv-nome').value = inv.nome;
                     document.getElementById('inv-banco').value = inv.banco;
                     document.getElementById('inv-moeda').value = inv.moeda;
+                    document.getElementById('inv-ignorar-patrimonio').checked = inv.ignorarPatrimonio || false;
                     exibirDetalheInvestimento(id);
                 }
             }
@@ -1814,6 +1842,17 @@
                 document.getElementById('inv-select').value = 'novo';
                 carregarInvestimento();
                 saveData(); 
+            }
+        }
+        
+        function toggleIgnorarPatrimonio() {
+            const id = document.getElementById('inv-select').value;
+            if (id !== 'novo') {
+                const inv = appState.investimentos.find(i => i.id === id);
+                if (inv) {
+                    inv.ignorarPatrimonio = document.getElementById('inv-ignorar-patrimonio').checked;
+                    saveData();
+                }
             }
         }
 
