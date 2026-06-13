@@ -61,7 +61,7 @@
                 <div class="bg-indigo-600 p-4 rounded-xl shadow-sm border border-indigo-700 text-white">
                     <p class="text-xs font-semibold text-indigo-200 uppercase">Saldo Real da Conta</p>
                     <p id="card-saldo-real" class="text-2xl font-bold mt-1">R$ 0,00</p>
-                    <p class="text-[10px] text-indigo-300 mt-1">Apenas Conta Corrente (Geral)</p>
+                    <p class="text-[10px] text-indigo-300 mt-1">Soma das contas marcadas</p>
                 </div>
                 <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
                     <p class="text-xs font-semibold text-emerald-500 uppercase">Entradas (Soma Período)</p>
@@ -220,9 +220,44 @@
         </section>
 
         <section id="tab-extrato" class="tab-content hidden space-y-6">
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 space-y-4">
+                <div class="flex items-center justify-between flex-wrap gap-2">
+                    <h2 class="font-bold text-slate-700 text-base">🏦 Contas Correntes</h2>
+                    <span class="text-xs text-slate-400">A <b>conta ativa</b> recebe as importações e os lançamentos abaixo. Marque o checkbox <b>dashboard</b> para a conta refletir no Dashboard e na Previsão.</span>
+                </div>
+                <div class="flex flex-col md:flex-row md:items-end gap-3">
+                    <div class="w-full md:w-56">
+                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Conta Ativa</label>
+                        <select id="conta-select" onchange="carregarConta()" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500 font-semibold text-indigo-700">
+                            <option value="nova">-- NOVA CONTA --</option>
+                        </select>
+                    </div>
+                    <div class="flex-1">
+                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Nome</label>
+                        <input type="text" id="conta-nome" placeholder="Ex: Nubank, Itaú, Carteira..." class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
+                    </div>
+                    <div class="w-full md:w-40">
+                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Saldo Inicial (R$)</label>
+                        <input type="number" step="0.01" id="conta-saldo-inicial" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
+                    </div>
+                    <label class="flex items-center gap-2 text-sm text-slate-600 whitespace-nowrap pb-2" title="Soma esta conta nas totalizações do Dashboard e no saldo inicial da Previsão">
+                        <input type="checkbox" id="conta-dashboard" class="w-4 h-4 accent-indigo-600"> Refletir no dashboard/previsão
+                    </label>
+                    <div class="flex gap-2">
+                        <button onclick="salvarConta()" class="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-indigo-700 transition whitespace-nowrap">Salvar</button>
+                        <button onclick="excluirConta()" class="bg-rose-100 text-rose-700 px-3 py-2 rounded-md text-sm font-bold hover:bg-rose-200 transition" title="Excluir conta selecionada">🗑️</button>
+                    </div>
+                </div>
+                <div id="contas-chips" class="flex flex-wrap gap-2"></div>
+                <div class="flex items-center justify-between bg-indigo-50 border border-indigo-100 rounded-lg px-4 py-3">
+                    <span class="text-xs font-bold text-indigo-500 uppercase tracking-wider">Saldo Atual — <span id="conta-saldo-atual-nome">Conta</span></span>
+                    <span id="conta-saldo-atual" class="font-bold text-2xl text-indigo-700">R$ 0,00</span>
+                </div>
+            </div>
+
             <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100 text-center space-y-4">
                 <div class="max-w-md mx-auto">
-                    <label class="block text-sm font-medium text-slate-600 mb-2">Importar Extrato Bancário (<b>.xls</b>, <b>.xlsx</b>, <b>.csv</b>)</label>
+                    <label class="block text-sm font-medium text-slate-600 mb-2">Importar Extrato Bancário (<b>.xls</b>, <b>.xlsx</b>, <b>.csv</b>) <span class="text-xs text-indigo-500">→ para a conta ativa</span></label>
                     <input type="file" id="fileInputBanco" accept=".csv, .xls, .xlsx" class="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 border border-slate-200 rounded-lg p-2 bg-slate-50 cursor-pointer" />
                 </div>
             </div>
@@ -234,6 +269,21 @@
                 <button onclick="apagarMesContaCorrente()" class="bg-rose-600 text-white px-3 py-1.5 rounded text-sm font-medium hover:bg-rose-700">
                     🗑️ Apagar Mês Específico
                 </button>
+            </div>
+
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-col md:flex-row md:items-end gap-3">
+                <div class="flex items-end gap-2 flex-1 flex-wrap">
+                    <span class="text-sm font-bold text-slate-600 pb-2">Exportar período (conta ativa):</span>
+                    <div>
+                        <label class="block text-[10px] font-semibold text-slate-400 uppercase mb-1">Início</label>
+                        <input type="date" id="export-data-ini" class="text-sm border border-slate-200 rounded-md p-1.5 outline-none focus:ring-1 focus:ring-emerald-500">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-semibold text-slate-400 uppercase mb-1">Fim</label>
+                        <input type="date" id="export-data-fim" class="text-sm border border-slate-200 rounded-md p-1.5 outline-none focus:ring-1 focus:ring-emerald-500">
+                    </div>
+                </div>
+                <button onclick="exportarExtratoExcel()" class="bg-emerald-600 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-emerald-700 transition whitespace-nowrap">⬇️ Exportar para Excel (.xlsx)</button>
             </div>
 
             <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
@@ -463,13 +513,9 @@
         <section id="tab-config" class="tab-content hidden space-y-6">
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100 space-y-2">
-                    <h2 class="font-bold text-slate-700 text-lg">Saldo Inicial da Conta Corrente</h2>
-                    <p class="text-sm text-slate-500 pb-2">Informe o saldo no banco antes do seu primeiro registro.</p>
-                    <div class="flex gap-2">
-                        <span class="bg-slate-100 border border-slate-200 px-3 py-2 rounded-l-md text-slate-600 font-bold">R$</span>
-                        <input type="number" step="0.01" id="input-saldo-inicial" class="flex-1 text-sm border border-slate-200 rounded-r-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
-                        <button onclick="salvarSaldoInicial()" class="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-indigo-700">Salvar</button>
-                    </div>
+                    <h2 class="font-bold text-slate-700 text-lg">Saldo Inicial das Contas</h2>
+                    <p class="text-sm text-slate-500 pb-2">O saldo inicial agora é definido <b>por conta corrente</b>. Crie, renomeie, ajuste o saldo inicial e escolha quais contas refletem no Dashboard/Previsão na aba <b>🏦 Conta Corrente</b>.</p>
+                    <button onclick="switchTab('extrato')" class="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-indigo-700">Gerenciar Contas Correntes</button>
                 </div>
 
                 <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100 flex flex-col justify-center">
@@ -535,6 +581,7 @@
 
         let appState = {
             saldoInicial: 0,
+            contas: [],
             transactions: [],
             ccTransactions: [],
             futureTransactions: [],
@@ -550,6 +597,7 @@
         
         let investimentoSelecionadoId = null;
         let editingLinhaMensalId = null;
+        let contaSelecionadaId = null;
 
         function debounce(key, fn, delay = 300) {
             if (debounceTimers[key]) clearTimeout(debounceTimers[key]);
@@ -588,18 +636,20 @@
 
                     appState.saldoInicial = Number(confObj.saldoInicial) || 0;
                     appState.categories = confObj.categories || { despesas: [], receitas: [] };
+                    appState.contas = confObj.contas || [];
                     appState.transactions = tr || [];
                     appState.ccTransactions = cr || [];
                     appState.futureTransactions = pr || [];
                     appState.investimentos = inv || [];
                 }
+                garantirContas();
             } catch(e) { console.error("Erro ao carregar banco IndexedDB", e); }
         }
 
         async function saveToDB() {
             try {
                 await db.transaction('rw', db.transacoes, db.cartao, db.previsoes, db.investimentos, db.config, async () => {
-                    await db.config.put({ id: 'global', saldoInicial: appState.saldoInicial, categories: appState.categories });
+                    await db.config.put({ id: 'global', saldoInicial: appState.saldoInicial, categories: appState.categories, contas: appState.contas });
                     await db.transacoes.clear(); if(appState.transactions.length > 0) await db.transacoes.bulkPut(appState.transactions);
                     await db.cartao.clear(); if(appState.ccTransactions.length > 0) await db.cartao.bulkPut(appState.ccTransactions);
                     await db.previsoes.clear(); if(appState.futureTransactions.length > 0) await db.previsoes.bulkPut(appState.futureTransactions);
@@ -611,8 +661,9 @@
         async function init() {
             await loadDataFromDB();
             
-            document.getElementById('input-saldo-inicial').value = appState.saldoInicial.toFixed(2);
-            
+            const inputSaldoIni = document.getElementById('input-saldo-inicial');
+            if (inputSaldoIni) inputSaldoIni.value = (appState.saldoInicial || 0).toFixed(2);
+
             const today = new Date();
             const mm = String(today.getMonth() + 1).padStart(2, '0');
             const yyyy = today.getFullYear();
@@ -629,7 +680,9 @@
             safeRun(updatePrevSumDropdown);
             safeRun(updateFutureInvestimentoDropdown);
             
-            updateFilterMesBancoLight(); 
+            safeRun(renderContasUI);
+            safeRun(preencherFormConta);
+            updateFilterMesBancoLight();
             updateFilterMesCartaoLight();
             renderInvestimentos();
             renderCategoriesTab();
@@ -665,7 +718,7 @@
             const select = document.getElementById('filterMesBanco');
             if (!select) return;
             const meses = new Set();
-            for (let t of appState.transactions) {
+            for (let t of appState.transactions.filter(x => x.contaId === contaSelecionadaId)) {
                 if(t.data) {
                     let parts;
                     if (t.data.includes('/')) parts = t.data.split('/');
@@ -735,7 +788,7 @@
                 
                 if (tabId === 'dashboard') renderRelatorio();
                 if (tabId === 'previsao') renderPrevisao();
-                if (tabId === 'extrato') renderTransactionsBanco();
+                if (tabId === 'extrato') { renderContasUI(); preencherFormConta(); renderTransactionsBanco(); }
                 if (tabId === 'cartao') renderTransactionsCartao();
                 if (tabId === 'investimentos') renderInvestimentos();
                 if (tabId === 'config') renderCategoriesTab();
@@ -904,6 +957,11 @@
                 reader.readAsText(file, 'UTF-8');
 
             } else if (targetType === 'banco') {
+                if (!contaSelecionadaId || !getContaById(contaSelecionadaId)) {
+                    alert("Selecione (ou crie) uma Conta Corrente antes de importar o extrato.");
+                    e.target.value = '';
+                    return;
+                }
                 const reader = new FileReader();
                 reader.onload = function(evt) {
                     try {
@@ -1022,16 +1080,17 @@
 
                             const realUniqueId = 'bco_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9) + '_' + i;
                             
-                            const exists = appState.transactions.some(t => 
-                                t.descricao === descricao && 
-                                t.data === dataStr && 
+                            const exists = appState.transactions.some(t =>
+                                t.contaId === contaSelecionadaId &&
+                                t.descricao === descricao &&
+                                t.data === dataStr &&
                                 Math.abs((t.debito || t.credito) - (debito || credito)) < 0.01
                             );
 
                             if (!exists) {
-                                appState.transactions.push({ 
-                                    id: realUniqueId, data: dataStr, descricao: descricao, 
-                                    credito: credito, debito: debito, categoria: finalCat || '', isDuplicate: false 
+                                appState.transactions.push({
+                                    id: realUniqueId, data: dataStr, descricao: descricao, contaId: contaSelecionadaId,
+                                    credito: credito, debito: debito, categoria: finalCat || '', isDuplicate: false
                                 });
                                 addedCount++;
                             }
@@ -1100,9 +1159,17 @@
 
         function getSaldoAtualReal() {
             if (cachedSaldoAtual !== null) return cachedSaldoAtual;
-            let creditos = 0, debitos = 0;
-            for (let t of appState.transactions) { creditos += Number(t.credito)||0; debitos += Number(t.debito)||0; }
-            cachedSaldoAtual = Number(appState.saldoInicial) + creditos - debitos;
+            let total = 0;
+            // Soma o saldo inicial de cada conta marcada para refletir + suas transações
+            for (let c of (appState.contas || [])) {
+                if (c.incluirDashboard === false) continue;
+                total += Number(c.saldoInicial) || 0;
+            }
+            for (let t of appState.transactions) {
+                if (!contaIncluida(t.contaId)) continue;
+                total += (Number(t.credito)||0) - (Number(t.debito)||0);
+            }
+            cachedSaldoAtual = total;
             return cachedSaldoAtual;
         }
 
@@ -1120,7 +1187,7 @@
             const rangeEl = document.getElementById('dash-range-filter');
             const range = rangeEl ? (parseInt(rangeEl.value) || 1) : 1;
             
-            let transReais = appState.transactions; 
+            let transReais = appState.transactions.filter(t => contaIncluida(t.contaId));
             let transCartoes = appState.ccTransactions;
 
             const [anoStr, mesStr] = filterVal.split('-');
@@ -1414,12 +1481,223 @@
             transaction.categoria = category; saveData(); 
         }
 
+        // ====== CONTAS CORRENTES (múltiplas) ======
+        function getContaById(id) { return (appState.contas || []).find(c => c.id === id) || null; }
+
+        function contaIncluida(contaId) {
+            const c = getContaById(contaId);
+            if (!c) return false; // transação órfã não soma (evita inconsistências)
+            return c.incluirDashboard !== false;
+        }
+
+        function garantirContas() {
+            if (!Array.isArray(appState.contas)) appState.contas = [];
+            // Cria a conta principal na 1ª execução, herdando o saldo inicial antigo
+            if (appState.contas.length === 0) {
+                appState.contas.push({
+                    id: 'conta_principal',
+                    nome: 'Conta Principal',
+                    saldoInicial: Number(appState.saldoInicial) || 0,
+                    incluirDashboard: true
+                });
+            }
+            // Migra transações antigas sem conta para a primeira conta
+            const idsValidos = new Set(appState.contas.map(c => c.id));
+            const principalId = appState.contas[0].id;
+            for (let t of (appState.transactions || [])) {
+                if (!t.contaId || !idsValidos.has(t.contaId)) t.contaId = principalId;
+            }
+            if (!contaSelecionadaId || !idsValidos.has(contaSelecionadaId)) contaSelecionadaId = principalId;
+        }
+
+        function getSaldoConta(contaId) {
+            const c = getContaById(contaId);
+            if (!c) return 0;
+            let total = Number(c.saldoInicial) || 0;
+            for (let t of appState.transactions) {
+                if (t.contaId === contaId) total += (Number(t.credito)||0) - (Number(t.debito)||0);
+            }
+            return total;
+        }
+
+        function renderContasUI() {
+            const select = document.getElementById('conta-select');
+            if (!select) return;
+            const prev = select.value; // preserva o modo "NOVA CONTA" durante a criação
+            select.innerHTML = '<option value="nova">-- NOVA CONTA --</option>';
+            for (let c of (appState.contas || [])) {
+                const opt = document.createElement('option');
+                opt.value = c.id;
+                opt.innerText = c.nome + (c.incluirDashboard === false ? '  (fora do dashboard)' : '');
+                select.appendChild(opt);
+            }
+            if (prev === 'nova') select.value = 'nova';
+            else if (contaSelecionadaId && getContaById(contaSelecionadaId)) select.value = contaSelecionadaId;
+
+            const chips = document.getElementById('contas-chips');
+            if (chips) {
+                chips.innerHTML = '';
+                for (let c of (appState.contas || [])) {
+                    const marcado = c.incluirDashboard !== false ? 'checked' : '';
+                    const ativa = c.id === contaSelecionadaId ? 'ring-2 ring-indigo-400' : '';
+                    chips.innerHTML += `
+                        <div class="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 ${ativa}">
+                            <button onclick="selecionarConta('${c.id}')" class="text-sm font-semibold text-slate-700 hover:text-indigo-600" title="Tornar esta a conta ativa">${escapeHtml(c.nome)}</button>
+                            <span class="text-xs text-slate-400 whitespace-nowrap">${formatCurrency(getSaldoConta(c.id))}</span>
+                            <label class="flex items-center gap-1 text-[11px] text-slate-500 cursor-pointer" title="Refletir no dashboard e na previsão">
+                                <input type="checkbox" ${marcado} onchange="toggleContaDashboard('${c.id}')"> dashboard
+                            </label>
+                        </div>`;
+                }
+            }
+
+            const saldoEl = document.getElementById('conta-saldo-atual');
+            const nomeEl = document.getElementById('conta-saldo-atual-nome');
+            const ativa = getContaById(contaSelecionadaId);
+            if (saldoEl) saldoEl.innerText = formatCurrency(ativa ? getSaldoConta(contaSelecionadaId) : 0);
+            if (nomeEl) nomeEl.innerText = ativa ? ativa.nome : 'Conta';
+        }
+
+        function preencherFormConta() {
+            const sel = document.getElementById('conta-select');
+            const nome = document.getElementById('conta-nome');
+            const saldo = document.getElementById('conta-saldo-inicial');
+            const chk = document.getElementById('conta-dashboard');
+            if (!sel || !nome || !saldo || !chk) return;
+            if (sel.value === 'nova') {
+                nome.value = ''; saldo.value = '0.00'; chk.checked = true;
+            } else {
+                const c = getContaById(sel.value);
+                if (c) { nome.value = c.nome; saldo.value = (Number(c.saldoInicial)||0).toFixed(2); chk.checked = c.incluirDashboard !== false; }
+            }
+        }
+
+        function carregarConta() {
+            const sel = document.getElementById('conta-select');
+            if (!sel) return;
+            if (sel.value !== 'nova') contaSelecionadaId = sel.value;
+            preencherFormConta();
+            renderContasUI();
+            updateFilterMesBancoLight();
+            renderTransactionsBanco();
+        }
+
+        function selecionarConta(id) {
+            if (!getContaById(id)) return;
+            contaSelecionadaId = id;
+            const sel = document.getElementById('conta-select');
+            if (sel) sel.value = id;
+            preencherFormConta();
+            renderContasUI();
+            updateFilterMesBancoLight();
+            renderTransactionsBanco();
+        }
+
+        function salvarConta() {
+            const sel = document.getElementById('conta-select');
+            if (!sel) return;
+            const nome = (document.getElementById('conta-nome').value || '').trim();
+            const saldoInicial = parseFloat(document.getElementById('conta-saldo-inicial').value) || 0;
+            const incluir = document.getElementById('conta-dashboard').checked;
+            if (!nome) { alert("Informe o nome da conta."); return; }
+            if (sel.value === 'nova') {
+                const id = 'conta_' + Date.now() + '_' + Math.random().toString(36).substr(2,5);
+                appState.contas.push({ id, nome, saldoInicial, incluirDashboard: incluir });
+                contaSelecionadaId = id;
+                sel.value = id;
+            } else {
+                const c = getContaById(sel.value);
+                if (c) { c.nome = nome; c.saldoInicial = saldoInicial; c.incluirDashboard = incluir; }
+            }
+            renderContasUI();
+            preencherFormConta();
+            updateFilterMesBancoLight();
+            saveData();
+        }
+
+        function excluirConta() {
+            const sel = document.getElementById('conta-select');
+            if (!sel || sel.value === 'nova') { alert("Selecione uma conta existente para excluir."); return; }
+            if ((appState.contas || []).length <= 1) { alert("É necessário manter ao menos uma conta corrente."); return; }
+            const c = getContaById(sel.value);
+            if (!c) return;
+            const qtd = appState.transactions.filter(t => t.contaId === c.id).length;
+            if (!confirm(`Excluir a conta "${c.nome}"${qtd ? ` e suas ${qtd} transação(ões)` : ''}? Esta ação não pode ser desfeita.`)) return;
+            appState.transactions = appState.transactions.filter(t => t.contaId !== c.id);
+            appState.contas = appState.contas.filter(x => x.id !== c.id);
+            contaSelecionadaId = appState.contas[0].id;
+            sel.value = contaSelecionadaId;
+            renderContasUI();
+            preencherFormConta();
+            updateFilterMesBancoLight();
+            saveData();
+        }
+
+        function toggleContaDashboard(id) {
+            const c = getContaById(id);
+            if (!c) return;
+            c.incluirDashboard = !(c.incluirDashboard !== false); // alterna inclusão
+            renderContasUI();
+            saveData();
+        }
+
+        function dataTransacaoISO(d) {
+            if (!d) return '';
+            let dd, mm, yyyy;
+            if (d.includes('/')) {
+                const p = d.split('/');
+                if (p.length === 3) { dd = p[0]; mm = p[1]; yyyy = p[2]; }
+                else if (p.length === 2) { dd = '01'; mm = p[0]; yyyy = p[1]; }
+            } else if (d.includes('-')) {
+                const p = d.split('-');
+                if (p[0] && p[0].length === 4) { yyyy = p[0]; mm = p[1]; dd = p[2] || '01'; }
+                else { dd = p[0]; mm = p[1]; yyyy = p[2]; }
+            }
+            if (!yyyy || !mm) return '';
+            return `${yyyy}-${String(mm).padStart(2,'0')}-${String(dd || '01').padStart(2,'0')}`;
+        }
+
+        function exportarExtratoExcel() {
+            const conta = getContaById(contaSelecionadaId);
+            if (!conta) { alert("Selecione uma conta corrente."); return; }
+            if (typeof XLSX === 'undefined') { alert("Biblioteca de Excel não carregada."); return; }
+            const ini = document.getElementById('export-data-ini').value;
+            const fim = document.getElementById('export-data-fim').value;
+            const linhas = appState.transactions
+                .filter(t => t.contaId === contaSelecionadaId)
+                .filter(t => {
+                    const iso = dataTransacaoISO(t.data);
+                    if (!iso) return false;
+                    if (ini && iso < ini) return false;
+                    if (fim && iso > fim) return false;
+                    return true;
+                })
+                .sort((a,b) => dataTransacaoISO(a.data).localeCompare(dataTransacaoISO(b.data)));
+            if (linhas.length === 0) { alert("Nenhuma transação no período selecionado para esta conta."); return; }
+            let totEnt = 0, totSai = 0;
+            const dados = linhas.map(t => {
+                const ent = Number(t.credito) || 0;
+                const sai = Number(t.debito) || 0;
+                totEnt += ent; totSai += sai;
+                return { Conta: conta.nome, Data: t.data || '', 'Descrição': t.descricao || '', Categoria: t.categoria || '', 'Entrada (R$)': ent, 'Saída (R$)': sai };
+            });
+            dados.push({ Conta: '', Data: '', 'Descrição': 'TOTAL', Categoria: '', 'Entrada (R$)': totEnt, 'Saída (R$)': totSai });
+            const ws = XLSX.utils.json_to_sheet(dados);
+            ws['!cols'] = [{wch:18},{wch:12},{wch:40},{wch:22},{wch:14},{wch:14}];
+            const wb = XLSX.utils.book_new();
+            const aba = (conta.nome.replace(/[\\\/\?\*\[\]:]/g, '-').substring(0,31)) || 'Extrato';
+            XLSX.utils.book_append_sheet(wb, ws, aba);
+            const nomeArq = `extrato_${conta.nome.replace(/[^\w\-]+/g,'_')}_${ini||'inicio'}_a_${fim||'fim'}.xlsx`;
+            XLSX.writeFile(wb, nomeArq);
+        }
+
         function renderTransactionsBanco() {
             const container = document.getElementById('transactionsContainerBanco');
+            renderContasUI();
             const filter = document.getElementById('filterSelectBanco').value;
             const filterMes = document.getElementById('filterMesBanco') ? document.getElementById('filterMesBanco').value : 'todos';
-            
-            let filtered = [...appState.transactions];
+
+            let filtered = appState.transactions.filter(t => t.contaId === contaSelecionadaId);
             
             if (filterMes !== 'todos') {
                 filtered = filtered.filter(t => {
@@ -1554,47 +1832,24 @@
 
         // ========== INVESTIMENTOS COM CAMPO DE APORTE ==========
         function recalcularCascata(investimento, inicio) {
-            const DIAS_ANO = 365; // base para o juro diário (ACT/365)
+            const DIAS_ANO = 365;
             for (let i = inicio; i < investimento.historico.length; i++) {
                 const linha = investimento.historico[i];
                 let saldoAnterior = (i === 0) ? (investimento.valorInicial || 0) : investimento.historico[i-1].saldoFinal;
-                // Apenas a PRIMEIRA linha pode manter um saldo anterior próprio (o saldo inicial).
-                // Todas as demais herdam sempre o saldo final da linha anterior (mês anterior).
                 if (i === 0 && linha.saldoAnterior !== undefined && linha.saldoAnterior !== null && linha.saldoAnterior !== 0) {
                     saldoAnterior = linha.saldoAnterior;
                 }
                 let rendimento;
-                if (linha.rendimentoDiario) {
-                    // Juro diário: rende desde a data da linha anterior até a data desta linha
-                    const dias = (i === 0) ? 0 : diffDias(investimento.historico[i-1].data, linha.data);
-                    const taxaDiaria = (linha.taxaAnual || 0) / 100 / DIAS_ANO;
-                    rendimento = saldoAnterior * taxaDiaria * Math.max(0, dias);
+                if (i === 0) {
+                    rendimento = linha.rendimentoDiario ? 0 : saldoAnterior * ((linha.taxaAnual || 0) / 100 / 12);
                 } else {
-                    const taxaMensal = (linha.taxaAnual || 0) / 100 / 12;
-                    // Os rendimentos do mês são baseados no saldo que começou o mês (antes do novo aporte e resgate)
-                    rendimento = saldoAnterior * taxaMensal;
-                    // Se a linha anterior cair DENTRO do mesmo período mensal (ex.: aporte/resgate
-                    // intra-mês vindo da previsão), credita só a fração de dias restante do mês,
-                    // em vez de um mês cheio sobre poucos dias.
-                    if (i > 0) {
-                        const prevData = investimento.historico[i-1].data;
-                        const [yy, mm] = linha.data.split('-').map(Number);
-                        const dPrevEnd = new Date(yy, mm - 1, 0); // último dia do mês anterior
-                        const inicioPeriodo = `${dPrevEnd.getFullYear()}-${String(dPrevEnd.getMonth()+1).padStart(2,'0')}-${String(dPrevEnd.getDate()).padStart(2,'0')}`;
-                        if (prevData > inicioPeriodo) {
-                            const diasPeriodo = diffDias(inicioPeriodo, linha.data);
-                            const diasDecorridos = diffDias(prevData, linha.data);
-                            if (diasPeriodo > 0) {
-                                rendimento = saldoAnterior * taxaMensal * (Math.max(0, diasDecorridos) / diasPeriodo);
-                            }
-                        }
-                    }
+                    const dias = Math.max(0, diffDias(investimento.historico[i-1].data, linha.data));
+                    const taxaDiaria = (linha.taxaAnual || 0) / 100 / DIAS_ANO;
+                    rendimento = saldoAnterior * taxaDiaria * dias;
                 }
                 const aporte = linha.aporte || 0;
                 const resgate = linha.resgate || 0;
-                
                 const saldoFinal = saldoAnterior + aporte + rendimento - resgate;
-                
                 linha.saldoAnterior = saldoAnterior;
                 linha.rendimento = rendimento;
                 linha.saldoFinal = saldoFinal;
@@ -1873,14 +2128,14 @@
             const dataInformada = document.getElementById('modalData').value;
             if (!dataInformada) { alert("Informe a data!"); return; }
             const data = dataCompleta(dataInformada); // já vem "YYYY-MM-DD"; converte registros antigos "YYYY-MM"
-            
+
             const saldoAnterior = parseFloat(document.getElementById('modalSaldoAnterior').value) || 0;
             const aporte = parseFloat(document.getElementById('modalAporte').value) || 0;
             const taxaAnual = parseFloat(document.getElementById('modalTaxaAnual').value) || 0;
             const resgate = parseFloat(document.getElementById('modalResgate').value) || 0;
             const rendimento = parseFloat(document.getElementById('modalRendimento').value) || 0;
             const saldoFinal = parseFloat(document.getElementById('modalSaldoFinal').value) || 0;
-            
+
             if (editingLinhaMensalId) {
                 const idx = inv.historico.findIndex(h => h.id === editingLinhaMensalId);
                 if (idx === -1) return;
@@ -2033,7 +2288,7 @@
             }
         }
 
-        function salvarSaldoInicial() { appState.saldoInicial = parseFloat(document.getElementById('input-saldo-inicial').value) || 0; saveData(); alert("Saldo inicial salvo!"); }
+        function salvarSaldoInicial() { const el = document.getElementById('input-saldo-inicial'); if (!el) return; appState.saldoInicial = parseFloat(el.value) || 0; saveData(); alert("Saldo inicial salvo!"); }
 
         function exportData() {
             const dataStr = JSON.stringify(appState, null, 2);
@@ -2055,7 +2310,11 @@
                         if(!appState.ccTransactions) appState.ccTransactions = [];
                         if(!appState.investimentos) appState.investimentos = [];
                         if(!appState.categories) appState.categories = { despesas: [], receitas: [] };
-                        document.getElementById('input-saldo-inicial').value = Number(appState.saldoInicial).toFixed(2);
+                        if(!appState.contas) appState.contas = [];
+                        garantirContas();
+                        const elSi = document.getElementById('input-saldo-inicial');
+                        if (elSi) elSi.value = Number(appState.saldoInicial || 0).toFixed(2);
+                        renderContasUI(); preencherFormConta();
                         saveData(); alert("Backup restaurado com sucesso para o banco de dados interno (IndexedDB)!");
                     }
                 } catch (err) { alert("Erro ao ler o arquivo .json"); }
@@ -2104,18 +2363,22 @@
         function resetarBancoDeDados() {
             if (confirm("ATENÇÃO: Tem certeza que deseja apagar TODOS os dados do IndexedDB? Esta ação não pode ser desfeita!")) {
                 if (confirm("Você tem certeza ABSOLUTA? Todo o seu histórico financeiro será perdido.")) {
-                    appState = { saldoInicial: 0, transactions: [], ccTransactions: [], futureTransactions: [], investimentos: [], categories: { despesas: ["Outros"], receitas: ["Outros"] } };
+                    appState = { saldoInicial: 0, contas: [], transactions: [], ccTransactions: [], futureTransactions: [], investimentos: [], categories: { despesas: ["Outros"], receitas: ["Outros"] } };
+                    garantirContas(); renderContasUI(); preencherFormConta();
                     saveData(); alert("O banco de dados foi completamente zerado.");
                 }
             }
         }
 
         function apagarMesContaCorrente() {
-            const mesStr = prompt("Digite o mês e ano que deseja apagar (Exemplo: 06/2026):");
+            const conta = getContaById(contaSelecionadaId);
+            if (!conta) { alert("Selecione uma Conta Corrente primeiro."); return; }
+            const mesStr = prompt(`Digite o mês e ano que deseja apagar da conta "${conta.nome}" (Exemplo: 06/2026):`);
             if (!mesStr) return;
             if (!/^\d{2}\/\d{4}$/.test(mesStr)) { alert("Formato inválido. Use MM/AAAA."); return; }
-            if (confirm(`Tem certeza que deseja apagar TODAS as transações do mês ${mesStr}?`)) {
+            if (confirm(`Tem certeza que deseja apagar TODAS as transações do mês ${mesStr} da conta "${conta.nome}"?`)) {
                 appState.transactions = appState.transactions.filter(t => {
+                    if (t.contaId !== contaSelecionadaId) return true;
                     if(!t.data) return true; let mes, ano;
                     if (t.data.includes('/')) { const p = t.data.split('/'); mes = p[1]; ano = p[2]; }
                     else if (t.data.includes('-')) { const p = t.data.split('-'); mes = p[1]; ano = p[0]; }
