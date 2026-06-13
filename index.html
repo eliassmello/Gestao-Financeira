@@ -519,13 +519,14 @@
                 </div>
 
                 <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100 flex flex-col justify-center">
-                    <h2 class="font-bold text-slate-700 text-lg mb-1">Backup Completo (Formato JSON)</h2>
-                    <p class="text-sm text-slate-500 mb-4">Mecanismo mantido compatível com o sistema antigo.</p>
-                    <div class="flex gap-3">
-                        <button onclick="exportData()" class="flex-1 bg-slate-800 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-slate-900 transition text-center">💾 Salvar backup (.json)</button>
-                        <label class="flex-1 bg-slate-200 text-slate-700 px-4 py-2 rounded-md text-sm font-bold hover:bg-slate-300 cursor-pointer transition text-center">
-                            📂 Restaurar backup (.json)
-                            <input type="file" accept=".json" onchange="importData(event)" class="hidden">
+                    <h2 class="font-bold text-slate-700 text-lg mb-1">Backup Completo</h2>
+                    <p class="text-sm text-slate-500 mb-4"><b>Protegido (.pib)</b>: comprimido e criptografado por senha. <b>.json</b>: texto simples (compatível com o sistema antigo). A restauração reconhece os dois formatos automaticamente. <span class="text-rose-600">Se usar senha e esquecê-la, não há recuperação.</span></p>
+                    <div class="flex gap-3 flex-wrap">
+                        <button onclick="exportDataProtegido()" class="flex-1 bg-emerald-700 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-emerald-800 transition text-center whitespace-nowrap">🔒 Salvar protegido (senha)</button>
+                        <button onclick="exportData()" class="flex-1 bg-slate-800 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-slate-900 transition text-center whitespace-nowrap">💾 Salvar .json simples</button>
+                        <label class="flex-1 bg-slate-200 text-slate-700 px-4 py-2 rounded-md text-sm font-bold hover:bg-slate-300 cursor-pointer transition text-center whitespace-nowrap">
+                            📂 Restaurar backup
+                            <input type="file" accept=".json,.pib" onchange="importData(event)" class="hidden">
                         </label>
                     </div>
                 </div>
@@ -2290,37 +2291,88 @@
 
         function salvarSaldoInicial() { const el = document.getElementById('input-saldo-inicial'); if (!el) return; appState.saldoInicial = parseFloat(el.value) || 0; saveData(); alert("Saldo inicial salvo!"); }
 
-        function exportData() {
-            const dataStr = JSON.stringify(appState, null, 2);
-            const blob = new Blob([dataStr], { type: "application/json" });
+        // ===== Backup: helpers de compressão (gzip) e criptografia (AES-GCM + PBKDF2) =====
+        function _baixarBackup(blob, nome) {
             const url = URL.createObjectURL(blob);
-            const a = document.createElement('a'); a.href = url; a.download = `backup_financeiro_${new Date().toISOString().split('T')[0]}.json`;
-            document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+            const a = document.createElement('a'); a.href = url; a.download = nome;
+            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(url), 5000);
+        }
+        const _temGzip = typeof CompressionStream !== "undefined" && typeof DecompressionStream !== "undefined";
+        async function _gzip(u8) { const cs = new CompressionStream("gzip"); const w = cs.writable.getWriter(); w.write(u8); w.close(); return new Uint8Array(await new Response(cs.readable).arrayBuffer()); }
+        async function _gunzip(u8) { const ds = new DecompressionStream("gzip"); const w = ds.writable.getWriter(); w.write(u8); w.close(); return new Uint8Array(await new Response(ds.readable).arrayBuffer()); }
+        async function _deriveKey(senha, salt) {
+            const km = await crypto.subtle.importKey("raw", new TextEncoder().encode(senha), "PBKDF2", false, ["deriveKey"]);
+            return crypto.subtle.deriveKey({ name: "PBKDF2", salt, iterations: 210000, hash: "SHA-256" }, km, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
         }
 
-        function importData(e) {
+        function exportData() {
+            const dataStr = JSON.stringify(appState, null, 2);
+            _baixarBackup(new Blob([dataStr], { type: "application/json" }), `backup_financeiro_${new Date().toISOString().split('T')[0]}.json`);
+        }
+
+        // Exportar protegido (.pib): magic "FIN1" + flag(1) + salt(16) + iv(12) + ciphertext
+        async function exportDataProtegido() {
+            if (!window.crypto || !crypto.subtle) { alert("Criptografia indisponível neste navegador. Use o backup .json simples."); return; }
+            const senha = prompt("Defina uma senha para o backup:");
+            if (senha === null) return;
+            if (senha.length < 4) { alert("Use uma senha com pelo menos 4 caracteres."); return; }
+            if (prompt("Confirme a senha:") !== senha) { alert("As senhas não conferem."); return; }
+            try {
+                let payload = new TextEncoder().encode(JSON.stringify(appState));
+                const flag = _temGzip ? 1 : 0;
+                if (flag) payload = await _gzip(payload);
+                const salt = crypto.getRandomValues(new Uint8Array(16));
+                const iv = crypto.getRandomValues(new Uint8Array(12));
+                const key = await _deriveKey(senha, salt);
+                const cipher = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, payload));
+                const magic = new TextEncoder().encode("FIN1");
+                const out = new Uint8Array(4 + 1 + 16 + 12 + cipher.length);
+                out.set(magic, 0); out[4] = flag; out.set(salt, 5); out.set(iv, 21); out.set(cipher, 33);
+                _baixarBackup(new Blob([out], { type: "application/octet-stream" }), `backup_financeiro_${new Date().toISOString().split('T')[0]}.pib`);
+            } catch (err) { alert("Falha ao gerar o backup protegido."); }
+        }
+
+        function _aplicarBackup(imported) {
+            if (!imported || typeof imported !== "object" || Array.isArray(imported)) throw new Error("formato");
+            appState = imported;
+            if (!appState.saldoInicial) appState.saldoInicial = 0;
+            if (!appState.ccTransactions) appState.ccTransactions = [];
+            if (!appState.investimentos) appState.investimentos = [];
+            if (!appState.categories) appState.categories = { despesas: [], receitas: [] };
+            if (!appState.contas) appState.contas = [];
+            garantirContas();
+            const elSi = document.getElementById('input-saldo-inicial');
+            if (elSi) elSi.value = Number(appState.saldoInicial || 0).toFixed(2);
+            renderContasUI(); preencherFormConta();
+            saveData();
+        }
+
+        // Importar — detecta automaticamente .json simples ou .pib protegido
+        async function importData(e) {
             const file = e.target.files[0]; if (!file) return;
-            const reader = new FileReader();
-            reader.onload = function(evt) {
-                try {
-                    const imported = JSON.parse(evt.target.result);
-                    if(imported) {
-                        appState = imported;
-                        if(!appState.saldoInicial) appState.saldoInicial = 0;
-                        if(!appState.ccTransactions) appState.ccTransactions = [];
-                        if(!appState.investimentos) appState.investimentos = [];
-                        if(!appState.categories) appState.categories = { despesas: [], receitas: [] };
-                        if(!appState.contas) appState.contas = [];
-                        garantirContas();
-                        const elSi = document.getElementById('input-saldo-inicial');
-                        if (elSi) elSi.value = Number(appState.saldoInicial || 0).toFixed(2);
-                        renderContasUI(); preencherFormConta();
-                        saveData(); alert("Backup restaurado com sucesso para o banco de dados interno (IndexedDB)!");
-                    }
-                } catch (err) { alert("Erro ao ler o arquivo .json"); }
-                e.target.value = ''; 
-            };
-            reader.readAsText(file);
+            try {
+                const buf = new Uint8Array(await file.arrayBuffer());
+                const ehProtegido = buf.length > 33 && String.fromCharCode(buf[0], buf[1], buf[2], buf[3]) === "FIN1";
+                let imported;
+                if (ehProtegido) {
+                    if (!window.crypto || !crypto.subtle) throw new Error("cripto");
+                    const senha = prompt("Senha do backup protegido:");
+                    if (senha === null) { e.target.value = ''; return; }
+                    const flag = buf[4], salt = buf.slice(5, 21), iv = buf.slice(21, 33), cipher = buf.slice(33);
+                    const key = await _deriveKey(senha, salt);
+                    let plain;
+                    try { plain = new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, cipher)); }
+                    catch (_) { alert("Senha incorreta ou arquivo corrompido."); e.target.value = ''; return; }
+                    if (flag === 1) plain = await _gunzip(plain);
+                    imported = JSON.parse(new TextDecoder().decode(plain));
+                } else {
+                    imported = JSON.parse(new TextDecoder().decode(buf));
+                }
+                _aplicarBackup(imported);
+                alert("Backup restaurado com sucesso para o banco de dados interno (IndexedDB)!");
+            } catch (err) { alert("Arquivo inválido ou erro ao restaurar o backup."); }
+            e.target.value = '';
         }
 
         function renderCategoriesTab() {
