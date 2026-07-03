@@ -12,6 +12,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
     <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
 </head>
 <body class="bg-slate-50 text-slate-800 font-sans antialiased">
@@ -321,8 +322,8 @@
                     </div>
                 </div>
                 <div class="max-w-md mx-auto pt-2 text-left">
-                    <h3 class="text-sm font-bold text-slate-700 mb-2">2. Importar Extrato (<b>.txt</b> ou <b>.csv</b>)</h3>
-                    <input type="file" id="fileInputCartao" accept=".txt, .csv" class="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-amber-100 file:text-amber-800 hover:file:bg-amber-200 border border-slate-200 rounded-lg p-2 bg-slate-50 transition cursor-pointer" />
+                    <h3 class="text-sm font-bold text-slate-700 mb-2">2. Importar Extrato (<b>.txt</b>, <b>.csv</b>) ou Fatura em <b>.pdf</b> (Santander)</h3>
+                    <input type="file" id="fileInputCartao" accept=".txt, .csv, .pdf" class="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-amber-100 file:text-amber-800 hover:file:bg-amber-200 border border-slate-200 rounded-lg p-2 bg-slate-50 transition cursor-pointer" />
                 </div>
             </div>
 
@@ -849,6 +850,252 @@
             } else { alert(`Nenhum lançamento encontrado em ${mes}/${ano}.`); }
         }
 
+        // ===== Rotina de importacao do Cartao (mesma logica original, agora reutilizavel) =====
+        function processarConteudoCartao(content, e, dataVencimentoFatura, anoFaturaCartao) {
+            try {
+                const lines = content.split(/\r?\n/);
+                let headerIndex = -1;
+                for (let i = 0; i < Math.min(5, lines.length); i++) {
+                    if (lines[i].includes('Tipo') && lines[i].includes('Data') && lines[i].includes('Descricao')) { headerIndex = i; break; }
+                }
+                if (headerIndex === -1) {
+                    alert("Arquivo não reconhecido. Verifique se o formato está correto."); e.target.value = ''; return;
+                }
+                
+                let addedCount = 0;
+                for (let i = headerIndex + 1; i < lines.length; i++) {
+                    const line = lines[i].trim();
+                    if (!line) continue;
+                    const parts = line.split(',');
+                    if (parts.length < 5) continue;
+                    
+                    const tipo = parts[0].trim();
+                    const dataRaw = parts[1].trim();
+                    const descricao = parts[2].trim();
+                    const parcelas = parts[3].trim();
+                    const valorRaw = parts[4].trim();
+                    
+                    if (!dataRaw.match(/^\d{2}\/\d{2}$/)) continue;
+                    if (valorRaw === '0' || valorRaw === '0.00' || valorRaw === '0,00') continue;
+                    
+                    const anoParaOriginal = anoFaturaCartao;
+                    const dataOriginalCompraCompleta = `${dataRaw}/${anoParaOriginal}`;
+                    const dataVencimentoReal = dataVencimentoFatura;
+                    
+                    let descricaoFinal = descricao;
+                    if (parcelas && parcelas !== '-' && parcelas !== '') { descricaoFinal += ` (Parc. ${parcelas})`; }
+                    
+                    const parseValue = (val) => {
+                        if (!val || val === '-') return 0;
+                        if (typeof val === 'number') return Math.abs(val);
+                        let clean = String(val).replace(/\s/g, '').replace('R$', '').trim();
+                        clean = clean.replace(',', '.');
+                        const num = parseFloat(clean);
+                        return isNaN(num) ? 0 : num;
+                    };
+                    const valor = parseValue(valorRaw);
+                    if (valor === 0) continue;
+                    
+                    let credito = 0, debito = 0;
+                    const tipoLower = tipo.toLowerCase();
+                    if (tipoLower === 'credito') credito = valor;
+                    else if (tipoLower === 'despesa' || tipoLower === 'debito') debito = valor;
+                    else debito = valor;
+                    
+                    let finalCat = findBestCategoryMatch(descricaoFinal, debito > 0);
+                    if (finalCat) {
+                        const tipoCat = debito > 0 ? 'despesas' : 'receitas';
+                        if (!appState.categories[tipoCat]) appState.categories[tipoCat] = [];
+                        if (!appState.categories[tipoCat].includes(finalCat)) appState.categories[tipoCat].push(finalCat);
+                    }
+                    
+                    const realUniqueId = 'cc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9) + '_' + i;
+                    
+                    const exists = appState.ccTransactions.some(t => 
+                        t.descricao === descricaoFinal && t.dataCompra === dataOriginalCompraCompleta && Math.abs((t.debito || t.credito) - valor) < 0.01
+                    );
+                    if (!exists) {
+                        appState.ccTransactions.push({ 
+                            id: realUniqueId, data: dataVencimentoReal, dataCompra: dataOriginalCompraCompleta, 
+                            descricao: descricaoFinal, credito: credito, debito: debito, categoria: finalCat || '', isDuplicate: false 
+                        });
+                        addedCount++;
+                    }
+                }
+                
+                appState.ccTransactions.sort((a, b) => {
+                    if (!a.data || !b.data) return 0;
+                    const d1 = a.data.split('/'); const d2 = b.data.split('/');
+                    return new Date(d2[2], d2[1] - 1, d2[0]) - new Date(d1[2], d1[1] - 1, d1[0]);
+                });
+                updateFilterMesCartaoLight();
+                
+                updateFutureCategoriesDropdown(); updatePrevSumDropdown();
+                if (addedCount > 0) alert(`Foram importados ${addedCount} lançamentos do Cartão com sucesso.`);
+                else alert("Nenhum lançamento foi importado. Eles já existem ou o arquivo está vazio.");
+                
+                e.target.value = ''; saveData();
+            } catch (err) { alert("Erro ao processar o arquivo: " + err.message); e.target.value = ''; }
+        }
+
+        // ===== Importacao de Fatura em PDF (Cartao) =====
+        // Le o PDF no navegador (pdf.js), extrai as secoes "Despesas",
+        // "Parcelamentos" e "Pagamento e Demais Creditos", converte para o
+        // formato Tipo,Data,Descricao,Parcela,Valor e entrega a MESMA rotina
+        // de importacao acima. Nos parcelamentos, o numero da parcela (ex.
+        // 12/12) vai no campo Parcela e a rotina o anexa a descricao.
+        async function importarPdfFaturaCartao(file, e, dataVencimentoFatura, anoFaturaCartao) {
+            try {
+                if (typeof pdfjsLib === 'undefined') {
+                    alert("A biblioteca de leitura de PDF nao foi carregada. Verifique sua conexao com a internet e recarregue a pagina.");
+                    e.target.value = ''; return;
+                }
+                pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+
+                const linhas = await extrairLinhasPdf(file);
+                const resultado = converterPdfFaturaParaCsv(linhas);
+
+                if (resultado.total === 0) {
+                    alert("Nenhum lancamento foi encontrado no PDF. Verifique se e uma fatura Santander no layout esperado (secoes 'Despesas', 'Parcelamentos' e 'Pagamento e Demais Creditos').");
+                    e.target.value = ''; return;
+                }
+                processarConteudoCartao(resultado.csv, e, dataVencimentoFatura, anoFaturaCartao);
+            } catch (err) {
+                alert("Erro ao ler o PDF: " + err.message);
+                e.target.value = '';
+            }
+        }
+
+        // Extrai o texto do PDF linha a linha, respeitando o layout de 2 colunas
+        async function extrairLinhasPdf(file) {
+            const buf = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+            const linhas = [];
+            for (let p = 1; p <= pdf.numPages; p++) {
+                const page = await pdf.getPage(p);
+                const viewport = page.getViewport({ scale: 1 });
+                const midX = viewport.width / 2;
+                const tc = await page.getTextContent();
+                const itens = tc.items
+                    .filter(it => it.str && it.str.trim() !== '')
+                    .map(it => ({ str: it.str, x: it.transform[4], y: it.transform[5], w: it.width || 0 }));
+
+                // separa em coluna esquerda e direita (layout da fatura)
+                const colunas = [itens.filter(it => it.x < midX), itens.filter(it => it.x >= midX)];
+                for (const col of colunas) {
+                    col.sort((a, b) => (b.y - a.y) || (a.x - b.x));
+                    const grupos = [];
+                    let atual = null;
+                    for (const it of col) {
+                        if (atual && Math.abs(atual.y - it.y) <= 3) { atual.itens.push(it); }
+                        else { atual = { y: it.y, itens: [it] }; grupos.push(atual); }
+                    }
+                    for (const g of grupos) {
+                        g.itens.sort((a, b) => a.x - b.x);
+                        let texto = '';
+                        let fimAnterior = null;
+                        for (const it of g.itens) {
+                            if (fimAnterior !== null && (it.x - fimAnterior) > 1.5) texto += ' ';
+                            texto += it.str;
+                            fimAnterior = it.x + it.w;
+                        }
+                        texto = texto.replace(/\s+/g, ' ').trim();
+                        if (texto) linhas.push(texto);
+                    }
+                }
+            }
+            return linhas;
+        }
+
+        function normalizarTextoPdf(t) {
+            return t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().trim();
+        }
+
+        function valorPdfParaDecimal(v) {
+            // "1.344,76" -> "1344.76"
+            const n = parseFloat(String(v).replace(/\./g, '').replace(',', '.'));
+            return isNaN(n) ? null : n.toFixed(2);
+        }
+
+        // Converte as linhas extraidas do PDF para o formato da rotina existente
+        function converterPdfFaturaParaCsv(linhas) {
+            // Despesa avulsa: (opcional indicador "1 "/"2 "/"3 ") + data DD/MM + descricao + valor R$ (+ valor US$ opcional)
+            const RE_TRANSACAO = /^(?:\d\s+)?(\d{2}\/\d{2})\s+(.+?)\s+(-?\d{1,3}(?:\.\d{3})*,\d{2})(?:\s+-?\d{1,3}(?:\.\d{3})*,\d{2})?$/;
+            // Parcelamento: idem, porem com o campo Parcela (NN/NN) entre a descricao e o valor
+            const RE_PARCELAMENTO = /^(?:\d\s+)?(\d{2}\/\d{2})\s+(.+?)\s+(\d{2}\/\d{2})\s+(-?\d{1,3}(?:\.\d{3})*,\d{2})$/;
+            const RE_IOF = /^(?:\d\s+)?IOF DESPESA NO EXTERIOR\s+(-?\d{1,3}(?:\.\d{3})*,\d{2})$/;
+
+            let modo = 'skip'; // 'despesa' | 'credito' | 'parcelamento' | 'skip'
+            let ultimaData = null;
+            let total = 0;
+            const saida = ['Tipo,Data,Descricao,Parcela,Valor'];
+
+            for (const bruta of linhas) {
+                const linhaLimpa = bruta.replace(/\s+/g, ' ').trim();
+                const norm = normalizarTextoPdf(linhaLimpa);
+
+                // Cabecalhos de secao
+                if (norm === 'PAGAMENTO E DEMAIS CREDITOS') { modo = 'credito'; continue; }
+                if (norm === 'PARCELAMENTOS') { modo = 'parcelamento'; continue; }
+                if (norm === 'DESPESAS') { modo = 'despesa'; continue; }
+                if (norm.startsWith('RESUMO DA FATURA') || norm.startsWith('SALDO TOTAL CONSOLIDADO') || norm.startsWith('JUROS E CUSTO EFETIVO')) { modo = 'skip'; continue; }
+                if (norm.indexOf('XXXX XXXX') !== -1) { modo = 'skip'; continue; } // cabecalho de portador: aguarda proxima secao
+                if (modo === 'skip') continue;
+                if (norm.startsWith('VALOR TOTAL')) { modo = 'skip'; continue; }
+                if (norm.startsWith('COTACAO DOLAR')) continue;
+
+                // Parcelamentos: parcela (NN/NN) vai no campo Parcela; sao lancados como Despesa
+                if (modo === 'parcelamento') {
+                    const mp = linhaLimpa.match(RE_PARCELAMENTO);
+                    if (!mp) continue;
+                    const dataP = mp[1];
+                    const descP = mp[2].replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
+                    const parcelaP = mp[3];
+                    const valorP = valorPdfParaDecimal(mp[4]);
+                    if (valorP === null) continue;
+                    const valorNumP = parseFloat(valorP);
+                    if (valorNumP === 0) continue;
+                    saida.push(['Despesa', dataP, descP, parcelaP, Math.abs(valorNumP).toFixed(2)].join(','));
+                    total++;
+                    continue;
+                }
+
+                // IOF de despesa no exterior: linha sem data propria -> usa a data da compra anterior
+                const mIof = norm.match(RE_IOF);
+                if (mIof && modo === 'despesa' && ultimaData) {
+                    const vIof = valorPdfParaDecimal(mIof[1]);
+                    if (vIof && parseFloat(vIof) !== 0) {
+                        saida.push(['Despesa', ultimaData, 'IOF DESPESA NO EXTERIOR', '-', vIof].join(','));
+                        total++;
+                    }
+                    continue;
+                }
+
+                const m = linhaLimpa.match(RE_TRANSACAO);
+                if (!m) continue;
+
+                const data = m[1];
+                const descricao = m[2].replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
+                const valorDec = valorPdfParaDecimal(m[3]);
+                if (valorDec === null) continue;
+                const valorNum = parseFloat(valorDec);
+                if (valorNum === 0) continue;
+
+                if (modo === 'credito') {
+                    const descNorm = normalizarTextoPdf(descricao);
+                    // pagamento da fatura anterior nao e importado como lancamento
+                    if (descNorm.indexOf('DEB AUTOM') !== -1 || descNorm.indexOf('PAGAMENTO') !== -1) { continue; }
+                    saida.push(['Credito', data, descricao, '-', Math.abs(valorNum).toFixed(2)].join(','));
+                    total++;
+                } else if (modo === 'despesa') {
+                    saida.push(['Despesa', data, descricao, '-', Math.abs(valorNum).toFixed(2)].join(','));
+                    ultimaData = data;
+                    total++;
+                }
+            }
+            return { csv: saida.join('\n'), total: total };
+        }
+
         function handleFileUpload(e, targetType) {
             const file = e.target.files[0];
             if (!file) return;
@@ -867,93 +1114,14 @@
                 anoFaturaCartao = anoFat; 
                 dataVencimentoFatura = `${String(fatDia).padStart(2, '0')}/${mesFat}/${anoFat}`;
 
+                if ((file.name || '').toLowerCase().endsWith('.pdf')) {
+                    importarPdfFaturaCartao(file, e, dataVencimentoFatura, anoFaturaCartao);
+                    return;
+                }
+
                 const reader = new FileReader();
                 reader.onload = function(evt) {
-                    try {
-                        const content = evt.target.result;
-                        const lines = content.split(/\r?\n/);
-                        let headerIndex = -1;
-                        for (let i = 0; i < Math.min(5, lines.length); i++) {
-                            if (lines[i].includes('Tipo') && lines[i].includes('Data') && lines[i].includes('Descricao')) { headerIndex = i; break; }
-                        }
-                        if (headerIndex === -1) {
-                            alert("Arquivo não reconhecido. Verifique se o formato está correto."); e.target.value = ''; return;
-                        }
-                        
-                        let addedCount = 0;
-                        for (let i = headerIndex + 1; i < lines.length; i++) {
-                            const line = lines[i].trim();
-                            if (!line) continue;
-                            const parts = line.split(',');
-                            if (parts.length < 5) continue;
-                            
-                            const tipo = parts[0].trim();
-                            const dataRaw = parts[1].trim();
-                            const descricao = parts[2].trim();
-                            const parcelas = parts[3].trim();
-                            const valorRaw = parts[4].trim();
-                            
-                            if (!dataRaw.match(/^\d{2}\/\d{2}$/)) continue;
-                            if (valorRaw === '0' || valorRaw === '0.00' || valorRaw === '0,00') continue;
-                            
-                            const anoParaOriginal = anoFaturaCartao;
-                            const dataOriginalCompraCompleta = `${dataRaw}/${anoParaOriginal}`;
-                            const dataVencimentoReal = dataVencimentoFatura;
-                            
-                            let descricaoFinal = descricao;
-                            if (parcelas && parcelas !== '-' && parcelas !== '') { descricaoFinal += ` (Parc. ${parcelas})`; }
-                            
-                            const parseValue = (val) => {
-                                if (!val || val === '-') return 0;
-                                if (typeof val === 'number') return Math.abs(val);
-                                let clean = String(val).replace(/\s/g, '').replace('R$', '').trim();
-                                clean = clean.replace(',', '.');
-                                const num = parseFloat(clean);
-                                return isNaN(num) ? 0 : num;
-                            };
-                            const valor = parseValue(valorRaw);
-                            if (valor === 0) continue;
-                            
-                            let credito = 0, debito = 0;
-                            const tipoLower = tipo.toLowerCase();
-                            if (tipoLower === 'credito') credito = valor;
-                            else if (tipoLower === 'despesa' || tipoLower === 'debito') debito = valor;
-                            else debito = valor;
-                            
-                            let finalCat = findBestCategoryMatch(descricaoFinal, debito > 0);
-                            if (finalCat) {
-                                const tipoCat = debito > 0 ? 'despesas' : 'receitas';
-                                if (!appState.categories[tipoCat]) appState.categories[tipoCat] = [];
-                                if (!appState.categories[tipoCat].includes(finalCat)) appState.categories[tipoCat].push(finalCat);
-                            }
-                            
-                            const realUniqueId = 'cc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9) + '_' + i;
-                            
-                            const exists = appState.ccTransactions.some(t => 
-                                t.descricao === descricaoFinal && t.dataCompra === dataOriginalCompraCompleta && Math.abs((t.debito || t.credito) - valor) < 0.01
-                            );
-                            if (!exists) {
-                                appState.ccTransactions.push({ 
-                                    id: realUniqueId, data: dataVencimentoReal, dataCompra: dataOriginalCompraCompleta, 
-                                    descricao: descricaoFinal, credito: credito, debito: debito, categoria: finalCat || '', isDuplicate: false 
-                                });
-                                addedCount++;
-                            }
-                        }
-                        
-                        appState.ccTransactions.sort((a, b) => {
-                            if (!a.data || !b.data) return 0;
-                            const d1 = a.data.split('/'); const d2 = b.data.split('/');
-                            return new Date(d2[2], d2[1] - 1, d2[0]) - new Date(d1[2], d1[1] - 1, d1[0]);
-                        });
-                        updateFilterMesCartaoLight();
-                        
-                        updateFutureCategoriesDropdown(); updatePrevSumDropdown();
-                        if (addedCount > 0) alert(`Foram importados ${addedCount} lançamentos do Cartão com sucesso.`);
-                        else alert("Nenhum lançamento foi importado. Eles já existem ou o arquivo está vazio.");
-                        
-                        e.target.value = ''; saveData();
-                    } catch (err) { alert("Erro ao processar o arquivo: " + err.message); e.target.value = ''; }
+                    processarConteudoCartao(evt.target.result, e, dataVencimentoFatura, anoFaturaCartao);
                 };
                 reader.readAsText(file, 'UTF-8');
 
