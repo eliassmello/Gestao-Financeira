@@ -81,6 +81,25 @@
                 </div>
             </div>
 
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-sm font-bold text-slate-500">Evolução Mensal (últimos 12 meses)</h3>
+                    <p class="text-[10px] text-slate-400">Entradas × Saídas das contas marcadas + cartão, terminando no mês de referência</p>
+                </div>
+                <div class="relative w-full" style="height:280px"><canvas id="chartEvolucao"></canvas></div>
+            </div>
+
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+                <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-1 border-b pb-2 mb-4">
+                    <div>
+                        <h3 class="text-base font-bold text-slate-700">🎯 Orçamento por Categoria</h3>
+                        <p id="orcamento-nota" class="text-xs text-slate-400">Gasto do período vs. limite mensal definido em ⚙️ Config</p>
+                    </div>
+                    <span id="orcamento-resumo" class="text-sm font-semibold text-slate-500"></span>
+                </div>
+                <div id="lista-orcamento" class="space-y-3"></div>
+            </div>
+
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-col items-center relative">
                     <h3 class="text-sm font-bold text-slate-500 mb-4 self-start">Distribuição de Despesas</h3>
@@ -535,7 +554,8 @@
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100 space-y-4">
-                    <h2 class="font-bold text-rose-600 text-base border-b pb-2 flex justify-between items-center"><span>Categorias de Despesa</span></h2>
+                    <h2 class="font-bold text-rose-600 text-base border-b pb-2 flex justify-between items-center"><span>Categorias de Despesa</span><span class="text-xs font-medium text-slate-400">Orçamento mensal (R$)</span></h2>
+                    <p class="text-xs text-slate-400">Defina um limite mensal por categoria para acompanhar no painel <b>🎯 Orçamento por Categoria</b> do Dashboard. Deixe em branco para não acompanhar.</p>
                     <div class="flex gap-2">
                         <input type="text" id="new-cat-despesa" placeholder="Nova despesa..." class="flex-1 text-sm border border-slate-200 rounded-md p-2 outline-none">
                         <button onclick="addCategory('despesas')" class="bg-rose-500 text-white px-3 py-2 rounded-md text-sm font-bold hover:bg-rose-600">+</button>
@@ -588,11 +608,13 @@
             ccTransactions: [],
             futureTransactions: [],
             investimentos: [],
-            categories: { despesas: [], receitas: [] }
+            categories: { despesas: [], receitas: [] },
+            orcamentos: {}
         };
 
         let expenseChartInstance = null;
         let incomeChartInstance = null;
+        let evolucaoChartInstance = null;
         let editingFutureId = null;
         let cachedSaldoAtual = null;
         let debounceTimers = {};
@@ -638,6 +660,7 @@
 
                     appState.saldoInicial = Number(confObj.saldoInicial) || 0;
                     appState.categories = confObj.categories || { despesas: [], receitas: [] };
+                    appState.orcamentos = confObj.orcamentos || {};
                     appState.contas = confObj.contas || [];
                     appState.transactions = tr || [];
                     appState.ccTransactions = cr || [];
@@ -651,7 +674,7 @@
         async function saveToDB() {
             try {
                 await db.transaction('rw', db.transacoes, db.cartao, db.previsoes, db.investimentos, db.config, async () => {
-                    await db.config.put({ id: 'global', saldoInicial: appState.saldoInicial, categories: appState.categories, contas: appState.contas });
+                    await db.config.put({ id: 'global', saldoInicial: appState.saldoInicial, categories: appState.categories, orcamentos: appState.orcamentos, contas: appState.contas });
                     await db.transacoes.clear(); if(appState.transactions.length > 0) await db.transacoes.bulkPut(appState.transactions);
                     await db.cartao.clear(); if(appState.ccTransactions.length > 0) await db.cartao.bulkPut(appState.ccTransactions);
                     await db.previsoes.clear(); if(appState.futureTransactions.length > 0) await db.previsoes.bulkPut(appState.futureTransactions);
@@ -1363,6 +1386,25 @@
             const b = new Date(dataCompleta(d2) + 'T00:00:00');
             return Math.round((b - a) / 86400000);
         }
+        // Número sequencial do mês (ano*12 + mês) de uma data em qualquer formato usado no app
+        // ("DD/MM/YYYY", "MM/YYYY", "YYYY-MM-DD", "YYYY-MM" ou "DD-MM-YYYY"); null se inválida
+        function mesAnoNum(dataStr) {
+            if (!dataStr) return null;
+            let m, y;
+            if (dataStr.includes('/')) {
+                const p = dataStr.split('/');
+                if (p.length === 3) { m = parseInt(p[1], 10); y = parseInt(p[2], 10); }
+                else if (p.length === 2) { m = parseInt(p[0], 10); y = parseInt(p[1], 10); }
+            } else if (dataStr.includes('-')) {
+                const p = dataStr.split('-');
+                if (p.length >= 2) {
+                    if (p[0].length === 4) { y = parseInt(p[0], 10); m = parseInt(p[1], 10); }
+                    else { y = parseInt(p[2], 10); m = parseInt(p[1], 10); }
+                }
+            }
+            return (!m || !y) ? null : y * 12 + m;
+        }
+
         function converterDataBR(dataStrISO) {
             if(!dataStrISO) return ''; const parts = dataStrISO.split('-');
             return parts.length !== 3 ? dataStrISO : `${parts[2]}/${parts[1]}/${parts[0]}`;
@@ -1412,22 +1454,8 @@
             const startNum = endNum - range + 1;
 
             const inRange = (dataStr) => {
-                if(!dataStr) return false;
-                let m, y;
-                if (dataStr.includes('/')) {
-                    const p = dataStr.split('/');
-                    if (p.length === 3) { m = parseInt(p[1], 10); y = parseInt(p[2], 10); }
-                    else if (p.length === 2) { m = parseInt(p[0], 10); y = parseInt(p[1], 10); }
-                } else if (dataStr.includes('-')) {
-                    const p = dataStr.split('-');
-                    if (p.length >= 2) {
-                        if (p[0].length === 4) { y = parseInt(p[0], 10); m = parseInt(p[1], 10); }
-                        else { y = parseInt(p[2], 10); m = parseInt(p[1], 10); }
-                    }
-                }
-                if (!m || !y) return false;
-                const tNum = y * 12 + m;
-                return tNum >= startNum && tNum <= endNum;
+                const tNum = mesAnoNum(dataStr);
+                return tNum !== null && tNum >= startNum && tNum <= endNum;
             };
 
             transReais = transReais.filter(t => inRange(t.data)); 
@@ -1508,6 +1536,115 @@
                     });
                 }
             } catch(e) {}
+
+            safeRun(() => renderOrcamento(desMap, range));
+            safeRun(() => renderEvolucaoMensal(endNum));
+        }
+
+        // Gráfico de barras Entradas x Saídas (+ linha de balanço) dos 12 meses que
+        // terminam no mês de referência do Dashboard. Usa as mesmas fontes do relatório:
+        // contas correntes marcadas para refletir + cartão de crédito.
+        function renderEvolucaoMensal(endNum) {
+            const ctx = document.getElementById('chartEvolucao');
+            if (!ctx) return;
+            const NUM_MESES = 12;
+            const startNum = endNum - NUM_MESES + 1;
+            const receitas = new Array(NUM_MESES).fill(0);
+            const despesas = new Array(NUM_MESES).fill(0);
+            const somar = (t) => {
+                const n = mesAnoNum(t.data);
+                if (n === null || n < startNum || n > endNum) return;
+                receitas[n - startNum] += Number(t.credito) || 0;
+                despesas[n - startNum] += Number(t.debito) || 0;
+            };
+            for (let t of appState.transactions) { if (contaIncluida(t.contaId)) somar(t); }
+            for (let t of appState.ccTransactions) somar(t);
+
+            const labels = [];
+            for (let i = 0; i < NUM_MESES; i++) {
+                const num = startNum + i;
+                const y = Math.floor((num - 1) / 12);
+                const m = ((num - 1) % 12) + 1;
+                labels.push(`${String(m).padStart(2, '0')}/${String(y).slice(2)}`);
+            }
+            const balanco = receitas.map((r, i) => r - despesas[i]);
+
+            if (evolucaoChartInstance) evolucaoChartInstance.destroy();
+            evolucaoChartInstance = new Chart(ctx.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [
+                        { label: 'Entradas', data: receitas, backgroundColor: 'rgba(16, 185, 129, 0.75)', borderRadius: 3, order: 2 },
+                        { label: 'Saídas', data: despesas, backgroundColor: 'rgba(244, 63, 94, 0.75)', borderRadius: 3, order: 2 },
+                        { label: 'Balanço', data: balanco, type: 'line', borderColor: '#4f46e5', backgroundColor: '#4f46e5', borderWidth: 2, pointRadius: 3, tension: 0.3, order: 1 }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } },
+                        tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${formatCurrency(c.parsed.y)}` } }
+                    },
+                    scales: {
+                        x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+                        y: { ticks: { font: { size: 10 }, callback: (v) => formatCurrencyNumber(v) } }
+                    }
+                }
+            });
+        }
+
+        // Painel de orçamento do Dashboard: compara o gasto de cada categoria no período
+        // filtrado com o limite mensal (multiplicado pelo nº de meses do período)
+        function renderOrcamento(desMap, range) {
+            const cont = document.getElementById('lista-orcamento');
+            const resumo = document.getElementById('orcamento-resumo');
+            const nota = document.getElementById('orcamento-nota');
+            if (!cont) return;
+            if (nota) nota.innerText = range > 1
+                ? `Gasto do período vs. limite mensal × ${range} meses`
+                : 'Gasto do período vs. limite mensal definido em ⚙️ Config';
+
+            const items = [];
+            const catsDespesa = appState.categories.despesas || [];
+            for (let cat in (appState.orcamentos || {})) {
+                if (!catsDespesa.includes(cat)) continue;
+                const limMensal = Number(appState.orcamentos[cat]) || 0;
+                if (limMensal <= 0) continue;
+                const lim = limMensal * range;
+                const gasto = Number(desMap[cat]) || 0;
+                items.push({ cat, lim, gasto, pct: (gasto / lim) * 100 });
+            }
+            if (items.length === 0) {
+                cont.innerHTML = `<p class="text-sm text-slate-400">Nenhum limite definido. Informe o orçamento mensal das categorias de despesa em <b>⚙️ Config</b>.</p>`;
+                if (resumo) resumo.innerText = '';
+                return;
+            }
+            items.sort((a, b) => b.pct - a.pct);
+
+            let totLim = 0, totGasto = 0, html = '';
+            for (let it of items) {
+                totLim += it.lim; totGasto += it.gasto;
+                const corBarra = it.pct > 100 ? 'bg-rose-500' : (it.pct >= 80 ? 'bg-amber-400' : 'bg-emerald-500');
+                const corTexto = it.pct > 100 ? 'text-rose-600' : (it.pct >= 80 ? 'text-amber-600' : 'text-emerald-600');
+                html += `
+                    <div>
+                        <div class="flex justify-between items-baseline text-sm mb-1">
+                            <span class="font-medium text-slate-600 truncate mr-2">${escapeHtml(it.cat)}${it.pct > 100 ? ' ⚠️' : ''}</span>
+                            <span class="whitespace-nowrap text-xs text-slate-500">${formatCurrency(it.gasto)} de ${formatCurrency(it.lim)} <b class="${corTexto}">(${Math.round(it.pct)}%)</b></span>
+                        </div>
+                        <div class="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
+                            <div class="${corBarra} h-2.5 rounded-full transition-all" style="width:${Math.min(100, it.pct)}%"></div>
+                        </div>
+                    </div>`;
+            }
+            cont.innerHTML = html;
+            if (resumo) {
+                const pctTotal = totLim > 0 ? Math.round((totGasto / totLim) * 100) : 0;
+                resumo.innerText = `Total: ${formatCurrency(totGasto)} de ${formatCurrency(totLim)} (${pctTotal}%)`;
+                resumo.className = 'text-sm font-semibold whitespace-nowrap ' + (pctTotal > 100 ? 'text-rose-600' : (pctTotal >= 80 ? 'text-amber-600' : 'text-emerald-600'));
+            }
         }
 
         function updatePrevSumDropdown() {
@@ -2555,6 +2692,7 @@
             if (!appState.ccTransactions) appState.ccTransactions = [];
             if (!appState.investimentos) appState.investimentos = [];
             if (!appState.categories) appState.categories = { despesas: [], receitas: [] };
+            if (!appState.orcamentos) appState.orcamentos = {};
             if (!appState.contas) appState.contas = [];
             garantirContas();
             const elSi = document.getElementById('input-saldo-inicial');
@@ -2591,10 +2729,17 @@
         }
 
         function renderCategoriesTab() {
-            const desC = document.getElementById('list-cat-despesas'); 
-            if(desC) { 
-                desC.innerHTML = ''; 
-                for (let c of sortedCats(appState.categories.despesas)) { desC.innerHTML += `<li class="flex justify-between py-2"><span class="text-slate-600">${escapeHtml(c)}</span><button onclick="deleteCategory('despesas', '${c.replace(/'/g, "\\'")}')" class="text-rose-500 font-bold">&times;</button></li>`; }
+            const desC = document.getElementById('list-cat-despesas');
+            if(desC) {
+                desC.innerHTML = '';
+                for (let c of sortedCats(appState.categories.despesas)) {
+                    const orc = Number((appState.orcamentos || {})[c]) || 0;
+                    desC.innerHTML += `<li class="flex justify-between items-center gap-2 py-2">
+                        <span class="text-slate-600 flex-1 min-w-0 truncate">${escapeHtml(c)}</span>
+                        <input type="number" min="0" step="0.01" placeholder="Sem limite" value="${orc > 0 ? orc : ''}" onchange="salvarOrcamento('${c.replace(/'/g, "\\'")}', this.value)" class="w-28 text-sm border border-slate-200 rounded-md p-1.5 text-right outline-none focus:ring-1 focus:ring-indigo-500">
+                        <button onclick="deleteCategory('despesas', '${c.replace(/'/g, "\\'")}')" class="text-rose-500 font-bold">&times;</button>
+                    </li>`;
+                }
             }
             const recC = document.getElementById('list-cat-receitas'); 
             if(recC) { 
@@ -2613,7 +2758,18 @@
         
         function deleteCategory(type, cat) {
             if(!appState.categories[type]) return;
-            appState.categories[type] = appState.categories[type].filter(c => c !== cat); updateFutureCategoriesDropdown(); updatePrevSumDropdown(); saveData();
+            appState.categories[type] = appState.categories[type].filter(c => c !== cat);
+            if (type === 'despesas' && appState.orcamentos) delete appState.orcamentos[cat];
+            updateFutureCategoriesDropdown(); updatePrevSumDropdown(); saveData();
+        }
+
+        // Define/remove o limite mensal de orçamento de uma categoria de despesa
+        function salvarOrcamento(cat, valor) {
+            if (!appState.orcamentos) appState.orcamentos = {};
+            const v = parseFloat(valor);
+            if (v > 0) appState.orcamentos[cat] = v;
+            else delete appState.orcamentos[cat];
+            saveData();
         }
 
         function generateColors(count, type) {
@@ -2630,7 +2786,7 @@
         function resetarBancoDeDados() {
             if (confirm("ATENÇÃO: Tem certeza que deseja apagar TODOS os dados do IndexedDB? Esta ação não pode ser desfeita!")) {
                 if (confirm("Você tem certeza ABSOLUTA? Todo o seu histórico financeiro será perdido.")) {
-                    appState = { saldoInicial: 0, contas: [], transactions: [], ccTransactions: [], futureTransactions: [], investimentos: [], categories: { despesas: ["Outros"], receitas: ["Outros"] } };
+                    appState = { saldoInicial: 0, contas: [], transactions: [], ccTransactions: [], futureTransactions: [], investimentos: [], categories: { despesas: ["Outros"], receitas: ["Outros"] }, orcamentos: {} };
                     garantirContas(); renderContasUI(); preencherFormConta();
                     saveData(); alert("O banco de dados foi completamente zerado.");
                 }
