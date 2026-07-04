@@ -1,4 +1,4 @@
-const CACHE_NAME = 'financas-pwa-v3';
+const CACHE_NAME = 'financas-pwa-v4';
 const urlsToCache = [
   './',
   './index.html',

@@ -27,12 +27,27 @@
                 <button onclick="switchTab('cartao')" id="btn-cartao" class="tab-btn px-3 py-2 rounded-lg text-indigo-100 hover:bg-indigo-500 font-medium text-sm transition">💳 Cartão</button>
                 <button onclick="switchTab('investimentos')" id="btn-investimentos" class="tab-btn px-3 py-2 rounded-lg text-indigo-100 hover:bg-indigo-500 font-medium text-sm transition">📈 Investimentos</button>
                 <button onclick="switchTab('config')" id="btn-config" class="tab-btn px-3 py-2 rounded-lg text-indigo-100 hover:bg-indigo-500 font-medium text-sm transition">⚙️ Config</button>
+                <button onclick="abrirBuscaGlobal()" title="Busca global: encontre lançamentos em todas as contas, cartão e previsões" class="px-3 py-2 rounded-lg text-indigo-100 hover:bg-indigo-500 font-medium text-sm transition border border-indigo-400/50">🔍 Buscar</button>
             </nav>
         </div>
     </header>
 
     <main class="max-w-7xl mx-auto px-4 py-6">
-        
+
+        <div id="banner-backup" class="hidden mb-6 bg-amber-50 border border-amber-300 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+                <span class="text-2xl">⚠️</span>
+                <div>
+                    <p id="banner-backup-texto" class="text-sm font-bold text-amber-800"></p>
+                    <p class="text-xs text-amber-700">Seus dados vivem apenas neste navegador (IndexedDB). Sem backup, limpar o navegador ou trocar de máquina significa perder tudo.</p>
+                </div>
+            </div>
+            <div class="flex gap-2 shrink-0">
+                <button onclick="exportData()" class="bg-amber-600 hover:bg-amber-700 text-white px-3 py-2 rounded-md text-xs font-bold transition whitespace-nowrap">💾 Salvar backup agora</button>
+                <button onclick="adiarLembreteBackup()" class="bg-white border border-amber-300 text-amber-700 hover:bg-amber-100 px-3 py-2 rounded-md text-xs font-bold transition whitespace-nowrap">Lembrar em 7 dias</button>
+            </div>
+        </div>
+
         <section id="tab-dashboard" class="tab-content space-y-6">
             <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-4">
                 <div class="flex flex-col">
@@ -594,6 +609,7 @@
                             <input type="file" accept=".json,.pib" onchange="importData(event)" class="hidden">
                         </label>
                     </div>
+                    <p id="info-ultimo-backup" class="text-xs font-bold text-slate-400 mt-3"></p>
                 </div>
             </div>
 
@@ -624,6 +640,18 @@
                 </button>
             </div>
         </section>
+
+        <div id="modal-busca" class="hidden fixed inset-0 bg-slate-900/60 z-[60] p-4 sm:p-8" onclick="if(event.target === this) fecharBuscaGlobal()">
+            <div class="max-w-3xl mx-auto bg-white rounded-xl shadow-2xl flex flex-col max-h-full overflow-hidden">
+                <div class="p-4 border-b border-slate-100 flex items-center gap-3">
+                    <span class="text-xl">🔍</span>
+                    <input type="text" id="busca-global-input" placeholder="Buscar por descrição, categoria ou valor (ex.: mercado, 1500,00)..." oninput="debouncedBuscaGlobal()" onkeydown="if(event.key === 'Escape') fecharBuscaGlobal()" class="flex-1 text-sm border border-slate-200 rounded-md p-2.5 outline-none focus:ring-2 focus:ring-indigo-500">
+                    <button onclick="fecharBuscaGlobal()" class="text-slate-400 hover:text-slate-600 font-bold text-2xl px-2 leading-none">&times;</button>
+                </div>
+                <div id="busca-global-info" class="px-4 pt-3 text-xs text-slate-400"></div>
+                <div id="busca-global-resultados" class="p-4 overflow-y-auto divide-y divide-slate-50"></div>
+            </div>
+        </div>
     </main>
 
     <script>
@@ -654,7 +682,9 @@
             futureTransactions: [],
             investimentos: [],
             categories: { despesas: [], receitas: [] },
-            orcamentos: {}
+            orcamentos: {},
+            ultimoBackup: null,
+            backupAdiadoAte: null
         };
 
         let expenseChartInstance = null;
@@ -681,6 +711,7 @@
         function debouncedRenderTransactionsCartao() { debounce('renderTransactionsCartao', () => renderTransactionsCartao(), 100); }
         function debouncedCalcularSaldoAlvo() { debounce('calcularSaldoAlvo', () => calcularSaldoAlvo(), 100); }
         function debouncedCalcularSomaCategoriaFuturo() { debounce('calcularSomaCategoriaFuturo', () => calcularSomaCategoriaFuturo(), 100); }
+        function debouncedBuscaGlobal() { debounce('buscaGlobal', () => executarBuscaGlobal(), 200); }
 
         function safeRun(fn) { try { fn(); } catch(e) { console.error("Erro protegido em", fn.name, e); } }
 
@@ -706,6 +737,8 @@
                     appState.saldoInicial = Number(confObj.saldoInicial) || 0;
                     appState.categories = confObj.categories || { despesas: [], receitas: [] };
                     appState.orcamentos = confObj.orcamentos || {};
+                    appState.ultimoBackup = confObj.ultimoBackup || null;
+                    appState.backupAdiadoAte = confObj.backupAdiadoAte || null;
                     appState.contas = confObj.contas || [];
                     appState.transactions = tr || [];
                     appState.ccTransactions = cr || [];
@@ -719,7 +752,7 @@
         async function saveToDB() {
             try {
                 await db.transaction('rw', db.transacoes, db.cartao, db.previsoes, db.investimentos, db.config, async () => {
-                    await db.config.put({ id: 'global', saldoInicial: appState.saldoInicial, categories: appState.categories, orcamentos: appState.orcamentos, contas: appState.contas });
+                    await db.config.put({ id: 'global', saldoInicial: appState.saldoInicial, categories: appState.categories, orcamentos: appState.orcamentos, contas: appState.contas, ultimoBackup: appState.ultimoBackup, backupAdiadoAte: appState.backupAdiadoAte });
                     await db.transacoes.clear(); if(appState.transactions.length > 0) await db.transacoes.bulkPut(appState.transactions);
                     await db.cartao.clear(); if(appState.ccTransactions.length > 0) await db.cartao.bulkPut(appState.ccTransactions);
                     await db.previsoes.clear(); if(appState.futureTransactions.length > 0) await db.previsoes.bulkPut(appState.futureTransactions);
@@ -753,6 +786,8 @@
             
             safeRun(renderContasUI);
             safeRun(preencherFormConta);
+            safeRun(atualizarLembreteBackup);
+            safeRun(atualizarInfoUltimoBackup);
             updateFilterMesBancoLight();
             updateFilterMesCartaoLight();
             renderInvestimentos();
@@ -782,6 +817,8 @@
                 else if (activeTab === 'tab-cartao') renderTransactionsCartao();
                 else if (activeTab === 'tab-investimentos') renderInvestimentos();
                 else if (activeTab === 'tab-config') renderCategoriesTab();
+                safeRun(atualizarLembreteBackup);
+                safeRun(atualizarInfoUltimoBackup);
             }).catch(e => alert("Erro ao salvar no banco de dados."));
         }
 
@@ -862,7 +899,7 @@
                 if (tabId === 'extrato') { renderContasUI(); preencherFormConta(); renderTransactionsBanco(); }
                 if (tabId === 'cartao') renderTransactionsCartao();
                 if (tabId === 'investimentos') renderInvestimentos();
-                if (tabId === 'config') renderCategoriesTab();
+                if (tabId === 'config') { renderCategoriesTab(); safeRun(atualizarInfoUltimoBackup); }
             } catch(err) {}
         }
 
@@ -2911,8 +2948,11 @@
         }
 
         function exportData() {
+            appState.ultimoBackup = new Date().toISOString();
+            appState.backupAdiadoAte = null;
             const dataStr = JSON.stringify(appState, null, 2);
             _baixarBackup(new Blob([dataStr], { type: "application/json" }), `backup_financeiro_${new Date().toISOString().split('T')[0]}.json`);
+            saveData();
         }
 
         // Exportar protegido (.pib): magic "FIN1" + flag(1) + salt(16) + iv(12) + ciphertext
@@ -2923,6 +2963,8 @@
             if (senha.length < 4) { alert("Use uma senha com pelo menos 4 caracteres."); return; }
             if (prompt("Confirme a senha:") !== senha) { alert("As senhas não conferem."); return; }
             try {
+                appState.ultimoBackup = new Date().toISOString();
+                appState.backupAdiadoAte = null;
                 let payload = new TextEncoder().encode(JSON.stringify(appState));
                 const flag = _temGzip ? 1 : 0;
                 if (flag) payload = await _gzip(payload);
@@ -2934,7 +2976,132 @@
                 const out = new Uint8Array(4 + 1 + 16 + 12 + cipher.length);
                 out.set(magic, 0); out[4] = flag; out.set(salt, 5); out.set(iv, 21); out.set(cipher, 33);
                 _baixarBackup(new Blob([out], { type: "application/octet-stream" }), `backup_financeiro_${new Date().toISOString().split('T')[0]}.pib`);
+                saveData();
             } catch (err) { alert("Falha ao gerar o backup protegido."); }
+        }
+
+        // ===== Lembrete de backup =====
+
+        const DIAS_LEMBRETE_BACKUP = 30;
+
+        function atualizarLembreteBackup() {
+            const banner = document.getElementById('banner-backup'); if (!banner) return;
+            const texto = document.getElementById('banner-backup-texto');
+            const temDados = (appState.transactions.length + appState.ccTransactions.length + appState.futureTransactions.length + (appState.investimentos || []).length) > 0;
+            if (!temDados) { banner.classList.add('hidden'); return; }
+            const agora = Date.now();
+            if (appState.backupAdiadoAte && agora < new Date(appState.backupAdiadoAte).getTime()) { banner.classList.add('hidden'); return; }
+            if (!appState.ultimoBackup) {
+                if (texto) texto.innerText = "Você ainda não salvou nenhum backup dos seus dados.";
+                banner.classList.remove('hidden');
+                return;
+            }
+            const dias = Math.floor((agora - new Date(appState.ultimoBackup).getTime()) / 86400000);
+            if (dias >= DIAS_LEMBRETE_BACKUP) {
+                if (texto) texto.innerText = `Seu último backup foi há ${dias} dias.`;
+                banner.classList.remove('hidden');
+            } else {
+                banner.classList.add('hidden');
+            }
+        }
+
+        function adiarLembreteBackup() {
+            appState.backupAdiadoAte = new Date(Date.now() + 7 * 86400000).toISOString();
+            saveData();
+        }
+
+        function atualizarInfoUltimoBackup() {
+            const el = document.getElementById('info-ultimo-backup'); if (!el) return;
+            if (!appState.ultimoBackup) {
+                el.innerText = "Nenhum backup salvo até agora.";
+                el.className = "text-xs font-bold text-rose-600 mt-3";
+            } else {
+                const d = new Date(appState.ultimoBackup);
+                el.innerText = `Último backup: ${d.toLocaleDateString('pt-BR')} às ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+                el.className = "text-xs font-bold text-emerald-700 mt-3";
+            }
+        }
+
+        // ===== Busca global =====
+
+        function abrirBuscaGlobal() {
+            const modal = document.getElementById('modal-busca'); if (!modal) return;
+            modal.classList.remove('hidden');
+            const input = document.getElementById('busca-global-input');
+            if (input) { input.focus(); input.select(); }
+            executarBuscaGlobal();
+        }
+
+        function fecharBuscaGlobal() {
+            const modal = document.getElementById('modal-busca');
+            if (modal) modal.classList.add('hidden');
+        }
+
+        // Normaliza texto para busca: minúsculas e sem acentos (mantém números)
+        function normalizarTextoBusca(s) {
+            return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        }
+
+        function executarBuscaGlobal() {
+            const input = document.getElementById('busca-global-input');
+            const info = document.getElementById('busca-global-info');
+            const cont = document.getElementById('busca-global-resultados');
+            if (!input || !cont) return;
+            const q = input.value.trim();
+            if (q.length < 2) {
+                cont.innerHTML = '';
+                if (info) info.innerText = "Digite ao menos 2 caracteres. A busca cobre todas as contas correntes, o cartão e as previsões, em todos os meses.";
+                return;
+            }
+            const qNorm = normalizarTextoBusca(q);
+            let qValor = null;
+            const somenteNumero = q.replace(/[R$\s]/g, '');
+            if (/^-?[\d.,]+$/.test(somenteNumero)) {
+                const vStr = somenteNumero.includes(',') ? somenteNumero.replace(/\./g, '').replace(',', '.') : somenteNumero;
+                const n = Math.abs(parseFloat(vStr));
+                if (!isNaN(n)) qValor = n;
+            }
+            const bateValor = (v) => qValor !== null && Math.abs(Math.abs(Number(v) || 0) - qValor) < 0.005;
+            const bateTexto = (t) => (normalizarTextoBusca(t.descricao).includes(qNorm) || normalizarTextoBusca(t.categoria).includes(qNorm));
+
+            const resultados = [];
+            for (let t of appState.transactions) {
+                if (bateTexto(t) || bateValor(t.credito) || bateValor(t.debito)) {
+                    const conta = getContaById(t.contaId);
+                    resultados.push({ origem: `🏦 ${conta ? conta.nome : 'Conta'}`, data: t.data, descricao: t.descricao, categoria: t.categoria, valor: (Number(t.credito) || 0) - (Number(t.debito) || 0) });
+                }
+            }
+            for (let t of appState.ccTransactions) {
+                if (bateTexto(t) || bateValor(t.credito) || bateValor(t.debito)) {
+                    resultados.push({ origem: '💳 Cartão', data: t.data, descricao: t.descricao, categoria: t.categoria, valor: (Number(t.credito) || 0) - (Number(t.debito) || 0) });
+                }
+            }
+            for (let f of appState.futureTransactions) {
+                if (bateTexto(f) || bateValor(f.valor)) {
+                    resultados.push({ origem: f.conciliado ? '📅 Previsão (efetivada)' : '📅 Previsão', data: f.data, descricao: f.descricao, categoria: f.categoria, valor: f.tipo === 'debito' ? -(Number(f.valor) || 0) : (Number(f.valor) || 0) });
+                }
+            }
+            resultados.sort((a, b) => dataTransacaoISO(b.data).localeCompare(dataTransacaoISO(a.data)));
+
+            const LIMITE = 150;
+            const exibidos = resultados.slice(0, LIMITE);
+            if (info) info.innerText = resultados.length === 0
+                ? 'Nenhum lançamento encontrado.'
+                : (resultados.length > LIMITE ? `Mostrando os ${LIMITE} mais recentes de ${resultados.length} resultados.` : `${resultados.length} resultado${resultados.length > 1 ? 's' : ''}.`);
+
+            let html = '';
+            for (let r of exibidos) {
+                const cor = r.valor >= 0 ? 'text-emerald-600' : 'text-rose-600';
+                html += `
+                    <div class="py-2.5 flex justify-between items-center gap-3">
+                        <div class="min-w-0">
+                            <p class="text-sm font-medium text-slate-700 truncate">${escapeHtml(r.descricao)}</p>
+                            <p class="text-xs text-slate-400">${r.origem} &bull; ${escapeHtml(r.data || '')} &bull; ${escapeHtml(r.categoria || 'Não Categorizado')}</p>
+                        </div>
+                        <span class="font-bold text-sm whitespace-nowrap ${cor}">${r.valor >= 0 ? '+' : '-'} ${formatCurrency(Math.abs(r.valor))}</span>
+                    </div>`;
+            }
+            cont.innerHTML = html;
         }
 
         function _aplicarBackup(imported) {

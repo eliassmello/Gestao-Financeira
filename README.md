@@ -62,6 +62,9 @@ Aplicativo de orçamento pessoal em **um único arquivo HTML**, que roda direto 
   - O **saldo anterior** de cada linha é sempre herdado do saldo final do mês anterior, e qualquer alteração **se propaga** para as linhas posteriores.
 - Botão **🔁 Repetir** projeta vários meses de uma vez (repetindo aporte, taxa e resgate), continuando a partir do último mês.
 
+### 🔍 Busca Global
+- Botão **🔍 Buscar** no topo: encontre lançamentos por **descrição, categoria ou valor** (ex.: `mercado`, `1.500,00`) em **todas as contas correntes, cartão e previsões**, em todos os meses, ordenados do mais recente para o mais antigo.
+
 ### ⚙️ Configurações
 - **Backup completo** dos dados: **exportar** e **restaurar** em arquivo **.json** (inclui as contas e os orçamentos).
 - Cadastro e exclusão de **categorias** de despesa e de receita.
@@ -75,6 +78,7 @@ Aplicativo de orçamento pessoal em **um único arquivo HTML**, que roda direto 
 
 - Os dados são gravados em **IndexedDB** (banco local do navegador, `AppFinancas_DB`), com migração automática de dados antigos em `localStorage`. Contas correntes antigas (de uma única conta) são migradas automaticamente para uma "Conta Principal".
 - **Faça backup periodicamente** em **Config → Salvar backup (.json)**. Para migrar de máquina ou recuperar, use **Restaurar backup (.json)**.
+- **Lembrete automático**: o app mostra um aviso no topo se você **nunca fez backup** ou se o último foi há **30 dias ou mais** (dá para adiar por 7 dias). A data/hora do último backup aparece em **Config → Backup Completo**.
 - Limpar os dados do navegador, trocar de dispositivo ou usar janela anônima **apaga ou não enxerga** os dados — por isso o backup é essencial.
 
 ---
