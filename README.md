@@ -34,6 +34,8 @@ Aplicativo de orçamento pessoal em **um único arquivo HTML**, que roda direto 
 - **Agendamento** de lançamentos futuros (entradas e saídas) com data, descrição, categoria e valor.
 - **Cronograma da Conta Corrente** com o **saldo projetado** linha a linha; a **Caixa de Partida** usa o saldo das contas marcadas para refletir.
 - Previsões já vencidas aparecem **destacadas em amarelo** para você conciliar com o banco.
+- **✔ Efetivar previsão (Previsto × Realizado)**: quando o valor real cair no banco, clique em **✔** no cronograma e informe o valor realizado. A previsão sai do cronograma/simulador e vai para o painel **✅ Previsto × Realizado**, que mostra por mês: previsto, realizado e **diferença** (positiva = melhor que o previsto) por lançamento, totais de entradas/saídas e **resumo por categoria**. Dá para **desfazer** (↩️) e a previsão volta ao cronograma.
+- **💳 Parcelamentos Futuros do Cartão**: as parcelas restantes dos lançamentos "Parc. N/M" das faturas importadas são projetadas automaticamente mês a mês, com total comprometido e detalhe por compra. Compras repetidas em faturas consecutivas são deduplicadas (vale a fatura mais recente). Painel informativo — não altera o Saldo Projetado.
 - **Reflexo em Investimento (opcional)**: uma **Saída** vira **Aporte** e uma **Entrada** vira **Resgate** no investimento escolhido, lançado na data e recalculado em cascata.
 
 ### 🏦 Conta Corrente (várias contas)
