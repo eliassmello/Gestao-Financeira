@@ -23,6 +23,8 @@ Aplicativo de orçamento pessoal em **um único arquivo HTML**, que roda direto 
 - Relatório mensal de **receitas e despesas** (Conta Corrente + Cartão).
 - Filtro por **mês de referência** e por **período** (último mês até 12 meses).
 - Cartões de resumo: **Saldo Real** (soma das contas marcadas), **Entradas**, **Saídas** e **Balanço do período**.
+- **Evolução Mensal**: gráfico de barras com Entradas × Saídas dos **últimos 12 meses** (terminando no mês de referência) e linha de **balanço** mês a mês.
+- **🎯 Orçamento por Categoria**: barras de progresso comparando o gasto do período com o **limite mensal** definido em Config — verde (ok), amarelo (a partir de 80%) e vermelho (estourou). Com período de vários meses, o limite é multiplicado pelo nº de meses.
 - **Gráficos de pizza** de distribuição de despesas e de receitas.
 - Listas detalhadas de cada lançamento por categoria.
 
@@ -59,8 +61,9 @@ Aplicativo de orçamento pessoal em **um único arquivo HTML**, que roda direto 
 - Botão **🔁 Repetir** projeta vários meses de uma vez (repetindo aporte, taxa e resgate), continuando a partir do último mês.
 
 ### ⚙️ Configurações
-- **Backup completo** dos dados: **exportar** e **restaurar** em arquivo **.json** (inclui as contas).
+- **Backup completo** dos dados: **exportar** e **restaurar** em arquivo **.json** (inclui as contas e os orçamentos).
 - Cadastro e exclusão de **categorias** de despesa e de receita.
+- **Orçamento mensal por categoria de despesa**: informe um limite (R$) ao lado de cada categoria para acompanhá-la no painel 🎯 do Dashboard; deixe em branco para não acompanhar.
 - O **saldo inicial** é definido por conta na aba Conta Corrente (atalho disponível aqui).
 - **Zona de Perigo**: zerar todo o banco de dados.
 
