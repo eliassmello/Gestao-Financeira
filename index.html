@@ -809,14 +809,54 @@
             }
         }
 
+        // Retorna uma cópia da lista de categorias em ordem alfabética (pt-BR, ignora acentos/maiúsculas)
+        function sortedCats(arr) {
+            return [...(arr || [])].sort((a, b) => String(a).localeCompare(String(b), 'pt-BR', { sensitivity: 'base' }));
+        }
+
+        // Normaliza descrição para comparação: minúsculas, sem acentos, sem números/pontuação
+        function normalizeDesc(s) {
+            return String(s || '').toLowerCase()
+                .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+                .replace(/\d+/g, ' ')
+                .replace(/[^a-z ]/g, ' ')
+                .replace(/\s+/g, ' ').trim();
+        }
+
         function findBestCategoryMatch(descricao, isDebito) {
             if(!descricao) return '';
             const desc = String(descricao).toLowerCase();
-            const cats = isDebito ? appState.categories.despesas : appState.categories.receitas;
+            const cats = (isDebito ? appState.categories.despesas : appState.categories.receitas) || [];
+
+            // 1) Aprende com o histórico: reutiliza a categoria mais frequente de descrições parecidas já categorizadas
+            const alvo = normalizeDesc(descricao);
+            if (alvo.length >= 4) {
+                const contagem = {};
+                const historico = [...(appState.transactions || []), ...(appState.ccTransactions || [])];
+                for (let t of historico) {
+                    if (!t.categoria) continue;
+                    if (((Number(t.debito) || 0) > 0) !== !!isDebito) continue;
+                    if (!cats.includes(t.categoria)) continue;
+                    const descHist = normalizeDesc(t.descricao);
+                    if (descHist.length < 4) continue;
+                    if (descHist === alvo || descHist.includes(alvo) || alvo.includes(descHist)) {
+                        contagem[t.categoria] = (contagem[t.categoria] || 0) + 1;
+                    }
+                }
+                let melhor = '', melhorN = 0;
+                for (let c in contagem) { if (contagem[c] > melhorN) { melhor = c; melhorN = contagem[c]; } }
+                if (melhor) return melhor;
+            }
+
+            // 2) Palavras-chave comuns na descrição
             const commonKeywords = {
                 'mercado': 'Supermercado', 'atakadao': 'Supermercado', 'hiperideal': 'Supermercado', 'assai': 'Supermercado',
-                'drogaria': 'Farmácia', 'drogasil': 'Farmácia', 'pague menos': 'Farmácia',
+                'drogaria': 'Farmácia', 'drogasil': 'Farmácia', 'pague menos': 'Farmácia', 'farmacia': 'Farmácia', 'farmácia': 'Farmácia',
                 'restaurante': 'Restaurante', 'ifood': 'Restaurante', 'uber': 'Diversos', 'posto': 'Combustivel',
+                'combust': 'Combustivel', 'gasolina': 'Combustivel', 'padaria': 'Padaria',
+                'energia': 'Energia', 'coelba': 'Energia', 'embasa': 'Água', 'condominio': 'Condomínio', 'condomínio': 'Condomínio',
+                'telefone': 'Telefone', 'vivo': 'Telefone', 'claro': 'Telefone', 'tim s': 'Telefone',
+                'salario': 'Salário', 'salário': 'Salário',
                 'amazon': 'Contas Internet', 'netflix': 'Contas Internet', 'google': 'Contas Internet', 'seguro': 'Seguros'
             };
             for (let key in commonKeywords) {
@@ -1194,6 +1234,14 @@
                                 dataStr = dataStr.replace(/-/g, '/');
                             }
 
+                            // Só importa linhas cujo campo de data contenha uma data válida (ignora saldo, totais, rodapé)
+                            const mData = dataStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/);
+                            if (!mData) continue;
+                            const diaD = parseInt(mData[1], 10), mesD = parseInt(mData[2], 10);
+                            const anoD = mData[3].length === 2 ? '20' + mData[3] : mData[3];
+                            if (diaD < 1 || diaD > 31 || mesD < 1 || mesD > 12) continue;
+                            dataStr = `${String(diaD).padStart(2, '0')}/${String(mesD).padStart(2, '0')}/${anoD}`;
+
                             let descricao = String(row[finalIdxDesc] || '').trim();
                             
                             const parseVal = (v) => {
@@ -1466,8 +1514,7 @@
             const dropdown = document.getElementById('prev-sum-categoria');
             if(!dropdown) return;
             const selected = dropdown.value; dropdown.innerHTML = '<option value="">-- Categoria --</option>';
-            const todas = [...(appState.categories.despesas||[]), ...(appState.categories.receitas||[])];
-            todas.sort();
+            const todas = sortedCats([...(appState.categories.despesas||[]), ...(appState.categories.receitas||[])]);
             for (let cat of todas) { const opt = document.createElement('option'); opt.value = cat; opt.innerText = cat; dropdown.appendChild(opt); }
             if(todas.includes(selected)) dropdown.value = selected;
         }
@@ -1548,7 +1595,7 @@
             const tipo = document.getElementById('fut-tipo').value;
             const dropdown = document.getElementById('fut-categoria'); if(!dropdown) return; 
             dropdown.innerHTML = '';
-            const lista = tipo === 'debito' ? (appState.categories.despesas||[]) : (appState.categories.receitas||[]);
+            const lista = sortedCats(tipo === 'debito' ? appState.categories.despesas : appState.categories.receitas);
             for (let cat of lista) { const opt = document.createElement('option'); opt.value = cat; opt.innerText = cat; dropdown.appendChild(opt); }
         }
 
@@ -1906,7 +1953,7 @@
             for (let t of filtered) {
                 const isDeb = t.debito > 0; const val = isDeb ? t.debito : t.credito;
                 const cor = isDeb ? 'text-rose-600' : 'text-emerald-600';
-                const cats = isDeb ? (appState.categories.despesas || []) : (appState.categories.receitas || []);
+                const cats = sortedCats(isDeb ? appState.categories.despesas : appState.categories.receitas);
                 let opts = `<option value="">-- Selecione --</option>`;
                 for (let c of cats) { opts += `<option value="${c.replace(/"/g, '&quot;')}" ${t.categoria === c ? 'selected' : ''}>${c}</option>`; }
 
@@ -1972,7 +2019,7 @@
             for (let t of filtered) {
                 const isDeb = t.debito > 0; const val = isDeb ? t.debito : t.credito;
                 const cor = isDeb ? 'text-amber-600' : 'text-emerald-600';
-                const cats = isDeb ? (appState.categories.despesas || []) : (appState.categories.receitas || []);
+                const cats = sortedCats(isDeb ? appState.categories.despesas : appState.categories.receitas);
                 let opts = `<option value="">-- Selecione --</option>`;
                 for (let c of cats) { opts += `<option value="${c.replace(/"/g, '&quot;')}" ${t.categoria === c ? 'selected' : ''}>${c}</option>`; }
 
@@ -2547,12 +2594,12 @@
             const desC = document.getElementById('list-cat-despesas'); 
             if(desC) { 
                 desC.innerHTML = ''; 
-                for (let c of (appState.categories.despesas||[])) { desC.innerHTML += `<li class="flex justify-between py-2"><span class="text-slate-600">${escapeHtml(c)}</span><button onclick="deleteCategory('despesas', '${c.replace(/'/g, "\\'")}')" class="text-rose-500 font-bold">&times;</button></li>`; }
+                for (let c of sortedCats(appState.categories.despesas)) { desC.innerHTML += `<li class="flex justify-between py-2"><span class="text-slate-600">${escapeHtml(c)}</span><button onclick="deleteCategory('despesas', '${c.replace(/'/g, "\\'")}')" class="text-rose-500 font-bold">&times;</button></li>`; }
             }
             const recC = document.getElementById('list-cat-receitas'); 
             if(recC) { 
                 recC.innerHTML = ''; 
-                for (let c of (appState.categories.receitas||[])) { recC.innerHTML += `<li class="flex justify-between py-2"><span class="text-slate-600">${escapeHtml(c)}</span><button onclick="deleteCategory('receitas', '${c.replace(/'/g, "\\'")}')" class="text-rose-500 font-bold">&times;</button></li>`; }
+                for (let c of sortedCats(appState.categories.receitas)) { recC.innerHTML += `<li class="flex justify-between py-2"><span class="text-slate-600">${escapeHtml(c)}</span><button onclick="deleteCategory('receitas', '${c.replace(/'/g, "\\'")}')" class="text-rose-500 font-bold">&times;</button></li>`; }
             }
         }
 
