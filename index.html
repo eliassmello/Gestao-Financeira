@@ -27,12 +27,27 @@
                 <button onclick="switchTab('cartao')" id="btn-cartao" class="tab-btn px-3 py-2 rounded-lg text-indigo-100 hover:bg-indigo-500 font-medium text-sm transition">💳 Cartão</button>
                 <button onclick="switchTab('investimentos')" id="btn-investimentos" class="tab-btn px-3 py-2 rounded-lg text-indigo-100 hover:bg-indigo-500 font-medium text-sm transition">📈 Investimentos</button>
                 <button onclick="switchTab('config')" id="btn-config" class="tab-btn px-3 py-2 rounded-lg text-indigo-100 hover:bg-indigo-500 font-medium text-sm transition">⚙️ Config</button>
+                <button onclick="abrirBuscaGlobal()" title="Busca global: encontre lançamentos em todas as contas, cartão e previsões" class="px-3 py-2 rounded-lg text-indigo-100 hover:bg-indigo-500 font-medium text-sm transition border border-indigo-400/50">🔍 Buscar</button>
             </nav>
         </div>
     </header>
 
     <main class="max-w-7xl mx-auto px-4 py-6">
-        
+
+        <div id="banner-backup" class="hidden mb-6 bg-amber-50 border border-amber-300 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+                <span class="text-2xl">⚠️</span>
+                <div>
+                    <p id="banner-backup-texto" class="text-sm font-bold text-amber-800"></p>
+                    <p class="text-xs text-amber-700">Seus dados vivem apenas neste navegador (IndexedDB). Sem backup, limpar o navegador ou trocar de máquina significa perder tudo.</p>
+                </div>
+            </div>
+            <div class="flex gap-2 shrink-0">
+                <button onclick="exportData()" class="bg-amber-600 hover:bg-amber-700 text-white px-3 py-2 rounded-md text-xs font-bold transition whitespace-nowrap">💾 Salvar backup agora</button>
+                <button onclick="adiarLembreteBackup()" class="bg-white border border-amber-300 text-amber-700 hover:bg-amber-100 px-3 py-2 rounded-md text-xs font-bold transition whitespace-nowrap">Lembrar em 7 dias</button>
+            </div>
+        </div>
+
         <section id="tab-dashboard" class="tab-content space-y-6">
             <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-4">
                 <div class="flex flex-col">
@@ -218,7 +233,7 @@
                 
                 <div class="flex gap-2 items-center mb-3">
                     <div class="w-3 h-3 rounded-full bg-amber-200 border border-amber-400"></div>
-                    <span class="text-xs font-medium text-slate-500">Linhas amarelas indicam previsões que já venceram hoje ou no passado. Edite ou exclua quando a conta real cair no banco.</span>
+                    <span class="text-xs font-medium text-slate-500">Linhas amarelas indicam previsões que já venceram hoje ou no passado. Quando o valor real cair no banco, clique em <b class="text-emerald-600">✔ Efetivar</b> para informar o valor realizado — a previsão sai do cronograma e vai para o painel <b>Previsto × Realizado</b>.</span>
                 </div>
 
                 <div class="overflow-x-auto rounded-lg border border-slate-100">
@@ -236,6 +251,51 @@
                         <tbody id="lista-previsao-cronologica" class="divide-y divide-slate-100 bg-white"></tbody>
                     </table>
                 </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+                <div class="flex flex-col md:flex-row justify-between md:items-center gap-4 border-b border-slate-100 pb-4 mb-4">
+                    <div>
+                        <h2 class="font-bold text-slate-700 text-xl">💳 Parcelamentos Futuros do Cartão</h2>
+                        <p class="text-sm text-slate-500 mt-1">Parcelas restantes identificadas automaticamente nas faturas importadas (lançamentos com "Parc. N/M"). Painel informativo: os valores <b>não</b> entram no Saldo Projetado do cronograma.</p>
+                    </div>
+                    <div class="bg-rose-50 px-6 py-3 rounded-xl border border-rose-100 text-right shrink-0">
+                        <span class="block text-xs font-bold text-rose-600 uppercase mb-1">Total Comprometido</span>
+                        <span id="parc-total-futuro" class="font-bold text-rose-600 text-2xl">R$ 0,00</span>
+                    </div>
+                </div>
+                <div id="lista-parcelamentos" class="space-y-3"></div>
+            </div>
+
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+                <div class="flex flex-col md:flex-row justify-between md:items-center gap-4 border-b border-slate-100 pb-4 mb-4">
+                    <div>
+                        <h2 class="font-bold text-slate-700 text-xl">✅ Previsto × Realizado</h2>
+                        <p class="text-sm text-slate-500 mt-1">Previsões efetivadas com o botão ✔ do cronograma. <b>Diferença positiva = melhor que o previsto</b> (gastou menos ou recebeu mais).</p>
+                    </div>
+                    <div class="flex items-center gap-2 bg-slate-50 p-2 rounded-lg border border-slate-100 shrink-0">
+                        <label class="text-sm font-bold text-slate-600">Mês:</label>
+                        <input type="month" id="pr-month-filter" onchange="renderPrevistoRealizado()" class="text-sm border border-slate-300 rounded-md p-1.5 outline-none text-indigo-700 font-semibold focus:ring-1 focus:ring-indigo-500">
+                    </div>
+                </div>
+                <div id="pr-cards" class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4"></div>
+                <div class="overflow-x-auto rounded-lg border border-slate-100">
+                    <table class="w-full text-left text-sm text-slate-600">
+                        <thead class="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
+                            <tr>
+                                <th class="p-3 whitespace-nowrap">Data Prevista</th>
+                                <th class="p-3">Descrição</th>
+                                <th class="p-3">Categoria</th>
+                                <th class="p-3 text-right whitespace-nowrap">Previsto</th>
+                                <th class="p-3 text-right whitespace-nowrap">Realizado</th>
+                                <th class="p-3 text-right whitespace-nowrap">Diferença</th>
+                                <th class="p-3 text-center whitespace-nowrap">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="lista-previsto-realizado" class="divide-y divide-slate-100 bg-white"></tbody>
+                    </table>
+                </div>
+                <div id="pr-por-categoria" class="mt-4"></div>
             </div>
         </section>
 
@@ -549,6 +609,7 @@
                             <input type="file" accept=".json,.pib" onchange="importData(event)" class="hidden">
                         </label>
                     </div>
+                    <p id="info-ultimo-backup" class="text-xs font-bold text-slate-400 mt-3"></p>
                 </div>
             </div>
 
@@ -579,6 +640,18 @@
                 </button>
             </div>
         </section>
+
+        <div id="modal-busca" class="hidden fixed inset-0 bg-slate-900/60 z-[60] p-4 sm:p-8" onclick="if(event.target === this) fecharBuscaGlobal()">
+            <div class="max-w-3xl mx-auto bg-white rounded-xl shadow-2xl flex flex-col max-h-full overflow-hidden">
+                <div class="p-4 border-b border-slate-100 flex items-center gap-3">
+                    <span class="text-xl">🔍</span>
+                    <input type="text" id="busca-global-input" placeholder="Buscar por descrição, categoria ou valor (ex.: mercado, 1500,00)..." oninput="debouncedBuscaGlobal()" onkeydown="if(event.key === 'Escape') fecharBuscaGlobal()" class="flex-1 text-sm border border-slate-200 rounded-md p-2.5 outline-none focus:ring-2 focus:ring-indigo-500">
+                    <button onclick="fecharBuscaGlobal()" class="text-slate-400 hover:text-slate-600 font-bold text-2xl px-2 leading-none">&times;</button>
+                </div>
+                <div id="busca-global-info" class="px-4 pt-3 text-xs text-slate-400"></div>
+                <div id="busca-global-resultados" class="p-4 overflow-y-auto divide-y divide-slate-50"></div>
+            </div>
+        </div>
     </main>
 
     <script>
@@ -609,7 +682,9 @@
             futureTransactions: [],
             investimentos: [],
             categories: { despesas: [], receitas: [] },
-            orcamentos: {}
+            orcamentos: {},
+            ultimoBackup: null,
+            backupAdiadoAte: null
         };
 
         let expenseChartInstance = null;
@@ -636,6 +711,7 @@
         function debouncedRenderTransactionsCartao() { debounce('renderTransactionsCartao', () => renderTransactionsCartao(), 100); }
         function debouncedCalcularSaldoAlvo() { debounce('calcularSaldoAlvo', () => calcularSaldoAlvo(), 100); }
         function debouncedCalcularSomaCategoriaFuturo() { debounce('calcularSomaCategoriaFuturo', () => calcularSomaCategoriaFuturo(), 100); }
+        function debouncedBuscaGlobal() { debounce('buscaGlobal', () => executarBuscaGlobal(), 200); }
 
         function safeRun(fn) { try { fn(); } catch(e) { console.error("Erro protegido em", fn.name, e); } }
 
@@ -661,6 +737,8 @@
                     appState.saldoInicial = Number(confObj.saldoInicial) || 0;
                     appState.categories = confObj.categories || { despesas: [], receitas: [] };
                     appState.orcamentos = confObj.orcamentos || {};
+                    appState.ultimoBackup = confObj.ultimoBackup || null;
+                    appState.backupAdiadoAte = confObj.backupAdiadoAte || null;
                     appState.contas = confObj.contas || [];
                     appState.transactions = tr || [];
                     appState.ccTransactions = cr || [];
@@ -674,7 +752,7 @@
         async function saveToDB() {
             try {
                 await db.transaction('rw', db.transacoes, db.cartao, db.previsoes, db.investimentos, db.config, async () => {
-                    await db.config.put({ id: 'global', saldoInicial: appState.saldoInicial, categories: appState.categories, orcamentos: appState.orcamentos, contas: appState.contas });
+                    await db.config.put({ id: 'global', saldoInicial: appState.saldoInicial, categories: appState.categories, orcamentos: appState.orcamentos, contas: appState.contas, ultimoBackup: appState.ultimoBackup, backupAdiadoAte: appState.backupAdiadoAte });
                     await db.transacoes.clear(); if(appState.transactions.length > 0) await db.transacoes.bulkPut(appState.transactions);
                     await db.cartao.clear(); if(appState.ccTransactions.length > 0) await db.cartao.bulkPut(appState.ccTransactions);
                     await db.previsoes.clear(); if(appState.futureTransactions.length > 0) await db.previsoes.bulkPut(appState.futureTransactions);
@@ -699,6 +777,7 @@
                 document.getElementById('fatura-mes').value = `${yyyy}-${mm}`;
                 document.getElementById('prev-target-date').value = `${yyyy}-${mm}-${dd}`;
                 document.getElementById('inv-month-filter').value = `${yyyy}-${mm}`;
+                document.getElementById('pr-month-filter').value = `${yyyy}-${mm}`;
             } catch(e) {}
 
             safeRun(updateFutureCategoriesDropdown);
@@ -707,6 +786,8 @@
             
             safeRun(renderContasUI);
             safeRun(preencherFormConta);
+            safeRun(atualizarLembreteBackup);
+            safeRun(atualizarInfoUltimoBackup);
             updateFilterMesBancoLight();
             updateFilterMesCartaoLight();
             renderInvestimentos();
@@ -736,6 +817,8 @@
                 else if (activeTab === 'tab-cartao') renderTransactionsCartao();
                 else if (activeTab === 'tab-investimentos') renderInvestimentos();
                 else if (activeTab === 'tab-config') renderCategoriesTab();
+                safeRun(atualizarLembreteBackup);
+                safeRun(atualizarInfoUltimoBackup);
             }).catch(e => alert("Erro ao salvar no banco de dados."));
         }
 
@@ -816,7 +899,7 @@
                 if (tabId === 'extrato') { renderContasUI(); preencherFormConta(); renderTransactionsBanco(); }
                 if (tabId === 'cartao') renderTransactionsCartao();
                 if (tabId === 'investimentos') renderInvestimentos();
-                if (tabId === 'config') renderCategoriesTab();
+                if (tabId === 'config') { renderCategoriesTab(); safeRun(atualizarInfoUltimoBackup); }
             } catch(err) {}
         }
 
@@ -1661,7 +1744,7 @@
             const resultEl = document.getElementById('prev-sum-result');
             if(!resultEl) return;
             if(!catSel) { resultEl.innerText = 'R$ 0,00'; return; }
-            let soma = 0; for (let f of appState.futureTransactions) { if(f.categoria === catSel) soma += Number(f.valor) || 0; }
+            let soma = 0; for (let f of appState.futureTransactions) { if(!f.conciliado && f.categoria === catSel) soma += Number(f.valor) || 0; }
             resultEl.innerText = formatCurrency(soma);
         }
 
@@ -1674,10 +1757,11 @@
             const tbody = document.getElementById('lista-previsao-cronologica'); tbody.innerHTML = '';
             const today = new Date(); today.setHours(0,0,0,0);
 
-            if (appState.futureTransactions.length === 0) {
+            const pendentes = appState.futureTransactions.filter(f => !f.conciliado);
+            if (pendentes.length === 0) {
                 tbody.innerHTML = `<tr><td colspan="6" class="p-8 text-center text-slate-400">Nenhum agendamento.</td></tr>`;
             } else {
-                const futs = [...appState.futureTransactions];
+                const futs = [...pendentes];
                 futs.sort((a,b) => converterDataBRParaDate(a.data) - converterDataBRParaDate(b.data));
                 let html = '';
                 for (let f of futs) {
@@ -1699,6 +1783,7 @@
                             <td class="p-4 font-bold ${corVal} whitespace-nowrap">${isDeb?'-':'+'} ${formatCurrency(val)}</td>
                             <td class="p-4 text-right font-bold ${corSal} whitespace-nowrap">${formatCurrency(saldoMutavel)}</td>
                             <td class="p-4 text-right whitespace-nowrap">
+                                <button onclick="efetivarPrevisao('${f.id}')" title="Efetivar: informar o valor realizado e enviar para Previsto × Realizado" class="text-emerald-600 hover:bg-emerald-50 bg-white border p-1 rounded transition font-bold">✔</button>
                                 <button onclick="editFutureTransaction('${f.id}')" class="text-indigo-500 hover:bg-indigo-50 bg-white border p-1 rounded transition">✏️</button>
                                 <button onclick="repeatFutureTransaction('${f.id}')" class="text-sky-500 hover:bg-sky-50 bg-white border p-1 rounded transition">🔁</button>
                                 <button onclick="deleteFutureTransaction('${f.id}')" class="text-rose-500 hover:bg-rose-50 bg-white border p-1 rounded transition">🗑️</button>
@@ -1707,7 +1792,8 @@
                 }
                 tbody.innerHTML = html;
             }
-            calcularSaldoAlvo(); calcularSomaCategoriaFuturo(); 
+            calcularSaldoAlvo(); calcularSomaCategoriaFuturo();
+            safeRun(renderParcelamentosFuturos); safeRun(renderPrevistoRealizado);
         }
 
         function escapeHtml(str) {
@@ -1722,6 +1808,7 @@
             if(!dtInput) { document.getElementById('prev-target-result').innerText = 'R$ 0,00'; return; }
             const tgt = new Date(dtInput + 'T23:59:59'); let sim = getSaldoAtualReal();
             for (let f of appState.futureTransactions) {
+                if (f.conciliado) continue;
                 if (converterDataBRParaDate(f.data) <= tgt) { if (f.tipo === 'debito') sim -= Number(f.valor)||0; else sim += Number(f.valor)||0; }
             }
             const resEl = document.getElementById('prev-target-result');
@@ -1824,6 +1911,208 @@
                 appState.futureTransactions = appState.futureTransactions.filter(f => f.id !== id);
                 saveData();
             }
+        }
+
+        // ===== Previsto × Realizado =====
+
+        // Efetiva (concilia) uma previsão: registra o valor que realmente caiu no banco.
+        // A previsão sai do cronograma/simulador e passa a aparecer no painel Previsto × Realizado.
+        function efetivarPrevisao(id) {
+            const item = appState.futureTransactions.find(f => f.id === id); if(!item) return;
+            const resp = prompt(`Valor realmente ${item.tipo === 'debito' ? 'pago' : 'recebido'} de "${item.descricao}"\n(previsto: ${formatCurrency(item.valor)}):`, Number(item.valor).toFixed(2));
+            if (resp === null) return;
+            let v = String(resp).trim().replace(/[R$\s]/g, '');
+            if (v.includes(',')) v = v.replace(/\./g, '').replace(',', '.');
+            const num = parseFloat(v);
+            if (isNaN(num) || num < 0) { alert("Valor inválido."); return; }
+            item.conciliado = true;
+            item.realizado = num;
+            const hj = new Date();
+            item.dataConciliacao = `${String(hj.getDate()).padStart(2,'0')}/${String(hj.getMonth()+1).padStart(2,'0')}/${hj.getFullYear()}`;
+            saveData();
+        }
+
+        function desfazerConciliacao(id) {
+            const item = appState.futureTransactions.find(f => f.id === id); if(!item) return;
+            if (!confirm(`Desfazer a efetivação de "${item.descricao}"? Ela voltará ao cronograma como pendente.`)) return;
+            delete item.conciliado; delete item.realizado; delete item.dataConciliacao;
+            saveData();
+        }
+
+        // Diferença normalizada: positiva = melhor que o previsto
+        // (despesa: gastou menos; receita: recebeu mais)
+        function diferencaConciliacao(f) {
+            const prev = Number(f.valor) || 0, real = Number(f.realizado) || 0;
+            return f.tipo === 'debito' ? prev - real : real - prev;
+        }
+
+        function renderPrevistoRealizado() {
+            const tbody = document.getElementById('lista-previsto-realizado'); if(!tbody) return;
+            const filtroEl = document.getElementById('pr-month-filter');
+            let filtro = filtroEl ? filtroEl.value : '';
+            if (!filtro) {
+                const t = new Date();
+                filtro = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}`;
+                if (filtroEl) filtroEl.value = filtro;
+            }
+            const [fy, fm] = filtro.split('-').map(Number);
+            const filtroNum = fy * 12 + fm;
+
+            const itens = appState.futureTransactions.filter(f => f.conciliado && mesAnoNum(f.data) === filtroNum);
+            itens.sort((a,b) => converterDataBRParaDate(a.data) - converterDataBRParaDate(b.data));
+
+            const cards = document.getElementById('pr-cards');
+            const porCat = document.getElementById('pr-por-categoria');
+            if (itens.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-slate-400">Nenhuma previsão efetivada neste mês. Use o botão ✔ no cronograma acima.</td></tr>`;
+                if (cards) cards.innerHTML = '';
+                if (porCat) porCat.innerHTML = '';
+                return;
+            }
+
+            let html = '';
+            let prevDeb = 0, realDeb = 0, prevCred = 0, realCred = 0, difTotal = 0;
+            const mapaCat = {};
+            for (let f of itens) {
+                const isDeb = f.tipo === 'debito';
+                const prev = Number(f.valor) || 0, real = Number(f.realizado) || 0;
+                const dif = diferencaConciliacao(f);
+                difTotal += dif;
+                if (isDeb) { prevDeb += prev; realDeb += real; } else { prevCred += prev; realCred += real; }
+                const c = f.categoria || 'Não Categorizado';
+                if (!mapaCat[c]) mapaCat[c] = { prev: 0, real: 0, dif: 0 };
+                mapaCat[c].prev += prev; mapaCat[c].real += real; mapaCat[c].dif += dif;
+
+                const corDif = dif > 0 ? 'text-emerald-600' : (dif < 0 ? 'text-rose-600' : 'text-slate-400');
+                html += `
+                    <tr class="hover:bg-slate-50 transition">
+                        <td class="p-3 font-semibold text-slate-600 whitespace-nowrap">${f.data}<span class="block text-[10px] font-normal text-slate-400">efetivada ${f.dataConciliacao || ''}</span></td>
+                        <td class="p-3 text-slate-800 font-medium">${escapeHtml(f.descricao)} <span class="text-[10px] ${isDeb ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'} px-1.5 py-0.5 rounded font-bold">${isDeb ? 'Saída' : 'Entrada'}</span></td>
+                        <td class="p-3"><span class="text-[11px] bg-white border border-slate-200 px-2 py-1 rounded text-slate-600">${escapeHtml(f.categoria)}</span></td>
+                        <td class="p-3 text-right whitespace-nowrap text-slate-500">${formatCurrency(prev)}</td>
+                        <td class="p-3 text-right whitespace-nowrap font-bold ${isDeb ? 'text-rose-600' : 'text-emerald-600'}">${formatCurrency(real)}</td>
+                        <td class="p-3 text-right whitespace-nowrap font-bold ${corDif}">${dif > 0 ? '+' : ''}${formatCurrency(dif)}</td>
+                        <td class="p-3 text-center whitespace-nowrap">
+                            <button onclick="desfazerConciliacao('${f.id}')" title="Desfazer: volta ao cronograma como pendente" class="text-sky-500 hover:bg-sky-50 bg-white border p-1 rounded transition">↩️</button>
+                            <button onclick="deleteFutureTransaction('${f.id}')" title="Excluir definitivamente" class="text-rose-500 hover:bg-rose-50 bg-white border p-1 rounded transition">🗑️</button>
+                        </td>
+                    </tr>`;
+            }
+            tbody.innerHTML = html;
+
+            if (cards) {
+                const corDifT = difTotal > 0 ? 'text-emerald-600' : (difTotal < 0 ? 'text-rose-600' : 'text-slate-500');
+                cards.innerHTML = `
+                    <div class="bg-rose-50 p-4 rounded-xl border border-rose-100">
+                        <p class="text-xs font-semibold text-rose-500 uppercase">Saídas</p>
+                        <p class="text-sm text-slate-500 mt-1">Previsto: <b>${formatCurrency(prevDeb)}</b></p>
+                        <p class="text-sm text-slate-500">Realizado: <b class="text-rose-600">${formatCurrency(realDeb)}</b></p>
+                    </div>
+                    <div class="bg-emerald-50 p-4 rounded-xl border border-emerald-100">
+                        <p class="text-xs font-semibold text-emerald-600 uppercase">Entradas</p>
+                        <p class="text-sm text-slate-500 mt-1">Previsto: <b>${formatCurrency(prevCred)}</b></p>
+                        <p class="text-sm text-slate-500">Realizado: <b class="text-emerald-600">${formatCurrency(realCred)}</b></p>
+                    </div>
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                        <p class="text-xs font-semibold text-slate-500 uppercase">Diferença Total</p>
+                        <p class="text-2xl font-bold mt-1 ${corDifT}">${difTotal > 0 ? '+' : ''}${formatCurrency(difTotal)}</p>
+                        <p class="text-[10px] text-slate-400">Positiva = melhor que o previsto</p>
+                    </div>`;
+            }
+
+            if (porCat) {
+                let chips = '';
+                const catsOrdenadas = Object.keys(mapaCat).sort((a,b) => mapaCat[a].dif - mapaCat[b].dif);
+                for (let c of catsOrdenadas) {
+                    const m = mapaCat[c];
+                    const cor = m.dif > 0 ? 'text-emerald-600' : (m.dif < 0 ? 'text-rose-600' : 'text-slate-400');
+                    chips += `
+                        <div class="flex justify-between items-center gap-2 bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-sm">
+                            <span class="font-medium text-slate-600 truncate">${escapeHtml(c)}</span>
+                            <span class="whitespace-nowrap text-xs text-slate-500">${formatCurrency(m.prev)} → ${formatCurrency(m.real)} <b class="${cor}">(${m.dif > 0 ? '+' : ''}${formatCurrency(m.dif)})</b></span>
+                        </div>`;
+                }
+                porCat.innerHTML = `<p class="text-xs font-bold text-slate-500 uppercase mb-2">Resumo por categoria</p><div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">${chips}</div>`;
+            }
+        }
+
+        // ===== Parcelamentos futuros do cartão =====
+
+        // Varre as faturas importadas em busca de lançamentos parcelados ("Parc. N/M") e
+        // projeta as parcelas restantes. Compras repetidas em faturas consecutivas
+        // (ex.: 3/12 em junho e 4/12 em julho) são deduplicadas pela descrição + total
+        // de parcelas + valor, mantendo a ocorrência mais recente.
+        function calcularParcelamentosFuturos() {
+            const RE_PARC = /parc\w*\.?\s*(\d{1,3})\s*\/\s*(\d{1,3})/i;
+            const compras = {};
+            for (let t of appState.ccTransactions) {
+                const val = Number(t.debito) || 0;
+                if (val <= 0) continue;
+                const m = String(t.descricao || '').match(RE_PARC);
+                if (!m) continue;
+                const atual = parseInt(m[1], 10), total = parseInt(m[2], 10);
+                if (!atual || !total || atual > total || total < 2) continue;
+                const baseNum = mesAnoNum(t.data);
+                if (baseNum === null) continue;
+                const descBase = String(t.descricao).replace(RE_PARC, '').replace(/\(\s*\)/g, '').replace(/\s{2,}/g, ' ').trim();
+                const key = normalizeDesc(descBase) + '|' + total + '|' + val.toFixed(2);
+                const ex = compras[key];
+                if (!ex || baseNum > ex.baseNum || (baseNum === ex.baseNum && atual > ex.atual)) {
+                    compras[key] = { descBase, atual, total, valor: val, baseNum };
+                }
+            }
+            const hoje = new Date();
+            const hojeNum = hoje.getFullYear() * 12 + (hoje.getMonth() + 1);
+            const porMes = {};
+            for (let k in compras) {
+                const c = compras[k];
+                for (let i = 1; i <= c.total - c.atual; i++) {
+                    const n = c.baseNum + i;
+                    if (n < hojeNum) continue;
+                    if (!porMes[n]) porMes[n] = [];
+                    porMes[n].push({ desc: c.descBase, parcela: c.atual + i, total: c.total, valor: c.valor });
+                }
+            }
+            return porMes;
+        }
+
+        function renderParcelamentosFuturos() {
+            const cont = document.getElementById('lista-parcelamentos');
+            const totalEl = document.getElementById('parc-total-futuro');
+            if (!cont) return;
+            const porMes = calcularParcelamentosFuturos();
+            const meses = Object.keys(porMes).map(Number).sort((a,b) => a - b);
+            if (meses.length === 0) {
+                cont.innerHTML = `<p class="text-sm text-slate-400">Nenhum parcelamento futuro identificado nas faturas importadas.</p>`;
+                if (totalEl) totalEl.innerText = formatCurrency(0);
+                return;
+            }
+            let totalGeral = 0, html = '';
+            for (let n of meses) {
+                const itens = porMes[n].sort((a,b) => b.valor - a.valor);
+                const totalMes = itens.reduce((s, i) => s + i.valor, 0);
+                totalGeral += totalMes;
+                const y = Math.floor((n - 1) / 12), mm = ((n - 1) % 12) + 1;
+                const rotulo = `${String(mm).padStart(2,'0')}/${y}`;
+                let linhas = '';
+                for (let it of itens) {
+                    linhas += `
+                        <li class="flex justify-between items-center px-4 py-1.5">
+                            <span class="text-slate-600 truncate mr-2">${escapeHtml(it.desc)} <span class="text-[10px] text-slate-400 whitespace-nowrap">(parcela ${it.parcela}/${it.total})</span></span>
+                            <span class="text-rose-600 font-medium whitespace-nowrap">${formatCurrency(it.valor)}</span>
+                        </li>`;
+                }
+                html += `
+                    <details class="border border-slate-100 rounded-lg overflow-hidden">
+                        <summary class="flex justify-between items-center bg-slate-50 hover:bg-slate-100 px-4 py-2.5 cursor-pointer select-none">
+                            <span class="font-bold text-slate-700 text-sm">📅 ${rotulo} <span class="font-normal text-xs text-slate-400">(${itens.length} parcela${itens.length > 1 ? 's' : ''})</span></span>
+                            <span class="font-bold text-rose-600 text-sm">${formatCurrency(totalMes)}</span>
+                        </summary>
+                        <ul class="divide-y divide-slate-50 text-sm bg-white">${linhas}</ul>
+                    </details>`;
+            }
+            cont.innerHTML = html;
+            if (totalEl) totalEl.innerText = formatCurrency(totalGeral);
         }
 
         function assignCategory(transactionId, category, type) {
@@ -2659,8 +2948,11 @@
         }
 
         function exportData() {
+            appState.ultimoBackup = new Date().toISOString();
+            appState.backupAdiadoAte = null;
             const dataStr = JSON.stringify(appState, null, 2);
             _baixarBackup(new Blob([dataStr], { type: "application/json" }), `backup_financeiro_${new Date().toISOString().split('T')[0]}.json`);
+            saveData();
         }
 
         // Exportar protegido (.pib): magic "FIN1" + flag(1) + salt(16) + iv(12) + ciphertext
@@ -2671,6 +2963,8 @@
             if (senha.length < 4) { alert("Use uma senha com pelo menos 4 caracteres."); return; }
             if (prompt("Confirme a senha:") !== senha) { alert("As senhas não conferem."); return; }
             try {
+                appState.ultimoBackup = new Date().toISOString();
+                appState.backupAdiadoAte = null;
                 let payload = new TextEncoder().encode(JSON.stringify(appState));
                 const flag = _temGzip ? 1 : 0;
                 if (flag) payload = await _gzip(payload);
@@ -2682,7 +2976,132 @@
                 const out = new Uint8Array(4 + 1 + 16 + 12 + cipher.length);
                 out.set(magic, 0); out[4] = flag; out.set(salt, 5); out.set(iv, 21); out.set(cipher, 33);
                 _baixarBackup(new Blob([out], { type: "application/octet-stream" }), `backup_financeiro_${new Date().toISOString().split('T')[0]}.pib`);
+                saveData();
             } catch (err) { alert("Falha ao gerar o backup protegido."); }
+        }
+
+        // ===== Lembrete de backup =====
+
+        const DIAS_LEMBRETE_BACKUP = 30;
+
+        function atualizarLembreteBackup() {
+            const banner = document.getElementById('banner-backup'); if (!banner) return;
+            const texto = document.getElementById('banner-backup-texto');
+            const temDados = (appState.transactions.length + appState.ccTransactions.length + appState.futureTransactions.length + (appState.investimentos || []).length) > 0;
+            if (!temDados) { banner.classList.add('hidden'); return; }
+            const agora = Date.now();
+            if (appState.backupAdiadoAte && agora < new Date(appState.backupAdiadoAte).getTime()) { banner.classList.add('hidden'); return; }
+            if (!appState.ultimoBackup) {
+                if (texto) texto.innerText = "Você ainda não salvou nenhum backup dos seus dados.";
+                banner.classList.remove('hidden');
+                return;
+            }
+            const dias = Math.floor((agora - new Date(appState.ultimoBackup).getTime()) / 86400000);
+            if (dias >= DIAS_LEMBRETE_BACKUP) {
+                if (texto) texto.innerText = `Seu último backup foi há ${dias} dias.`;
+                banner.classList.remove('hidden');
+            } else {
+                banner.classList.add('hidden');
+            }
+        }
+
+        function adiarLembreteBackup() {
+            appState.backupAdiadoAte = new Date(Date.now() + 7 * 86400000).toISOString();
+            saveData();
+        }
+
+        function atualizarInfoUltimoBackup() {
+            const el = document.getElementById('info-ultimo-backup'); if (!el) return;
+            if (!appState.ultimoBackup) {
+                el.innerText = "Nenhum backup salvo até agora.";
+                el.className = "text-xs font-bold text-rose-600 mt-3";
+            } else {
+                const d = new Date(appState.ultimoBackup);
+                el.innerText = `Último backup: ${d.toLocaleDateString('pt-BR')} às ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+                el.className = "text-xs font-bold text-emerald-700 mt-3";
+            }
+        }
+
+        // ===== Busca global =====
+
+        function abrirBuscaGlobal() {
+            const modal = document.getElementById('modal-busca'); if (!modal) return;
+            modal.classList.remove('hidden');
+            const input = document.getElementById('busca-global-input');
+            if (input) { input.focus(); input.select(); }
+            executarBuscaGlobal();
+        }
+
+        function fecharBuscaGlobal() {
+            const modal = document.getElementById('modal-busca');
+            if (modal) modal.classList.add('hidden');
+        }
+
+        // Normaliza texto para busca: minúsculas e sem acentos (mantém números)
+        function normalizarTextoBusca(s) {
+            return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        }
+
+        function executarBuscaGlobal() {
+            const input = document.getElementById('busca-global-input');
+            const info = document.getElementById('busca-global-info');
+            const cont = document.getElementById('busca-global-resultados');
+            if (!input || !cont) return;
+            const q = input.value.trim();
+            if (q.length < 2) {
+                cont.innerHTML = '';
+                if (info) info.innerText = "Digite ao menos 2 caracteres. A busca cobre todas as contas correntes, o cartão e as previsões, em todos os meses.";
+                return;
+            }
+            const qNorm = normalizarTextoBusca(q);
+            let qValor = null;
+            const somenteNumero = q.replace(/[R$\s]/g, '');
+            if (/^-?[\d.,]+$/.test(somenteNumero)) {
+                const vStr = somenteNumero.includes(',') ? somenteNumero.replace(/\./g, '').replace(',', '.') : somenteNumero;
+                const n = Math.abs(parseFloat(vStr));
+                if (!isNaN(n)) qValor = n;
+            }
+            const bateValor = (v) => qValor !== null && Math.abs(Math.abs(Number(v) || 0) - qValor) < 0.005;
+            const bateTexto = (t) => (normalizarTextoBusca(t.descricao).includes(qNorm) || normalizarTextoBusca(t.categoria).includes(qNorm));
+
+            const resultados = [];
+            for (let t of appState.transactions) {
+                if (bateTexto(t) || bateValor(t.credito) || bateValor(t.debito)) {
+                    const conta = getContaById(t.contaId);
+                    resultados.push({ origem: `🏦 ${conta ? conta.nome : 'Conta'}`, data: t.data, descricao: t.descricao, categoria: t.categoria, valor: (Number(t.credito) || 0) - (Number(t.debito) || 0) });
+                }
+            }
+            for (let t of appState.ccTransactions) {
+                if (bateTexto(t) || bateValor(t.credito) || bateValor(t.debito)) {
+                    resultados.push({ origem: '💳 Cartão', data: t.data, descricao: t.descricao, categoria: t.categoria, valor: (Number(t.credito) || 0) - (Number(t.debito) || 0) });
+                }
+            }
+            for (let f of appState.futureTransactions) {
+                if (bateTexto(f) || bateValor(f.valor)) {
+                    resultados.push({ origem: f.conciliado ? '📅 Previsão (efetivada)' : '📅 Previsão', data: f.data, descricao: f.descricao, categoria: f.categoria, valor: f.tipo === 'debito' ? -(Number(f.valor) || 0) : (Number(f.valor) || 0) });
+                }
+            }
+            resultados.sort((a, b) => dataTransacaoISO(b.data).localeCompare(dataTransacaoISO(a.data)));
+
+            const LIMITE = 150;
+            const exibidos = resultados.slice(0, LIMITE);
+            if (info) info.innerText = resultados.length === 0
+                ? 'Nenhum lançamento encontrado.'
+                : (resultados.length > LIMITE ? `Mostrando os ${LIMITE} mais recentes de ${resultados.length} resultados.` : `${resultados.length} resultado${resultados.length > 1 ? 's' : ''}.`);
+
+            let html = '';
+            for (let r of exibidos) {
+                const cor = r.valor >= 0 ? 'text-emerald-600' : 'text-rose-600';
+                html += `
+                    <div class="py-2.5 flex justify-between items-center gap-3">
+                        <div class="min-w-0">
+                            <p class="text-sm font-medium text-slate-700 truncate">${escapeHtml(r.descricao)}</p>
+                            <p class="text-xs text-slate-400">${r.origem} &bull; ${escapeHtml(r.data || '')} &bull; ${escapeHtml(r.categoria || 'Não Categorizado')}</p>
+                        </div>
+                        <span class="font-bold text-sm whitespace-nowrap ${cor}">${r.valor >= 0 ? '+' : '-'} ${formatCurrency(Math.abs(r.valor))}</span>
+                    </div>`;
+            }
+            cont.innerHTML = html;
         }
 
         function _aplicarBackup(imported) {
