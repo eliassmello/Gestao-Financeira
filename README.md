@@ -36,6 +36,7 @@ Aplicativo de orçamento pessoal em **um único arquivo HTML**, que roda direto 
 - Previsões já vencidas aparecem **destacadas em amarelo** para você conciliar com o banco.
 - **✔ Efetivar previsão (Previsto × Realizado)**: quando o valor real cair no banco, clique em **✔** no cronograma e informe o valor realizado. A previsão sai do cronograma/simulador e vai para o painel **✅ Previsto × Realizado**, que mostra por mês: previsto, realizado e **diferença** (positiva = melhor que o previsto) por lançamento, totais de entradas/saídas e **resumo por categoria**. Dá para **desfazer** (↩️) e a previsão volta ao cronograma.
 - **💳 Parcelamentos Futuros do Cartão**: as parcelas restantes dos lançamentos "Parc. N/M" das faturas importadas são projetadas automaticamente mês a mês, com total comprometido e detalhe por compra. Compras repetidas em faturas consecutivas são deduplicadas (vale a fatura mais recente). Painel informativo — não altera o Saldo Projetado.
+- **🧹 Excluir por categoria**: remova de uma vez todos os agendamentos pendentes de uma categoria (útil para refazer planos gerados em massa). Previsões já efetivadas são preservadas e reflexos em investimentos são revertidos.
 - **Reflexo em Investimento (opcional)**: uma **Saída** vira **Aporte** e uma **Entrada** vira **Resgate** no investimento escolhido, lançado na data e recalculado em cascata.
 
 ### 🏦 Conta Corrente (várias contas)
@@ -62,6 +63,12 @@ Aplicativo de orçamento pessoal em **um único arquivo HTML**, que roda direto 
   - Rendimento **pro rata por dias** (ACT/365) para lançamentos no meio do mês (inclusive os gerados pela Previsão); o rendimento da linha seguinte é ajustado proporcionalmente aos dias.
   - O **saldo anterior** de cada linha é sempre herdado do saldo final do mês anterior, e qualquer alteração **se propaga** para as linhas posteriores.
 - Botão **🔁 Repetir** projeta vários meses de uma vez (repetindo aporte, taxa e resgate), continuando a partir do último mês.
+
+### 🧮 Quitação (Compras Parceladas)
+- Cadastre uma compra parcelada (ex.: imóvel em 22×) com **indexador estimado** (INCC/IPCA/IGP-M, % a.a.), vincule um **investimento de origem** (com **rendimento % a.a.** — use a taxa líquida de IR) e o app simula mês a mês se o investimento **quita as parcelas restantes**.
+- Resultado na tela: veredicto (✅ cobre / ⚠️ saldo acaba na parcela N), **aporte mensal mínimo** para fechar a conta (botão "mín." preenche), total corrigido a pagar, análise **quitar × manter aplicado**, tabela mês a mês e gráfico do saldo projetado × parcelas.
+- **Tudo é só simulação** até clicar em **✅ Efetivar**: aí cada parcela vira um par na 📅 Previsão (Entrada "Resgate p/ ..." refletida como **saque no investimento** + Saída da parcela) e os aportes viram Saídas refletidas como **aporte** — com recálculo em cascata no histórico do investimento. **↩️ Desfazer efetivação** remove tudo com um clique.
+- Suporta **várias compras** simultâneas, cada uma com seu indexador e investimento.
 
 ### 🔍 Busca Global
 - Botão **🔍 Buscar** no topo: encontre lançamentos por **descrição, categoria ou valor** (ex.: `mercado`, `1.500,00`) em **todas as contas correntes, cartão e previsões**, em todos os meses, ordenados do mais recente para o mais antigo.

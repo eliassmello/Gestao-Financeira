@@ -26,6 +26,7 @@
                 <button onclick="switchTab('extrato')" id="btn-extrato" class="tab-btn px-3 py-2 rounded-lg text-indigo-100 hover:bg-indigo-500 font-medium text-sm transition">🏦 Conta Corrente</button>
                 <button onclick="switchTab('cartao')" id="btn-cartao" class="tab-btn px-3 py-2 rounded-lg text-indigo-100 hover:bg-indigo-500 font-medium text-sm transition">💳 Cartão</button>
                 <button onclick="switchTab('investimentos')" id="btn-investimentos" class="tab-btn px-3 py-2 rounded-lg text-indigo-100 hover:bg-indigo-500 font-medium text-sm transition">📈 Investimentos</button>
+                <button onclick="switchTab('quitacao')" id="btn-quitacao" class="tab-btn px-3 py-2 rounded-lg text-indigo-100 hover:bg-indigo-500 font-medium text-sm transition">🧮 Quitação</button>
                 <button onclick="switchTab('config')" id="btn-config" class="tab-btn px-3 py-2 rounded-lg text-indigo-100 hover:bg-indigo-500 font-medium text-sm transition">⚙️ Config</button>
                 <button onclick="abrirBuscaGlobal()" title="Busca global: encontre lançamentos em todas as contas, cartão e previsões" class="px-3 py-2 rounded-lg text-indigo-100 hover:bg-indigo-500 font-medium text-sm transition border border-indigo-400/50">🔍 Buscar</button>
             </nav>
@@ -234,6 +235,14 @@
                 <div class="flex gap-2 items-center mb-3">
                     <div class="w-3 h-3 rounded-full bg-amber-200 border border-amber-400"></div>
                     <span class="text-xs font-medium text-slate-500">Linhas amarelas indicam previsões que já venceram hoje ou no passado. Quando o valor real cair no banco, clique em <b class="text-emerald-600">✔ Efetivar</b> para informar o valor realizado — a previsão sai do cronograma e vai para o painel <b>Previsto × Realizado</b>.</span>
+                </div>
+
+                <div class="flex flex-wrap gap-2 items-center justify-end mb-3 bg-slate-50 border border-slate-100 rounded-lg p-2">
+                    <span class="text-xs font-bold text-slate-500">🧹 Excluir todos os agendamentos de uma categoria:</span>
+                    <select id="prev-limpar-categoria" class="text-sm border border-slate-200 rounded-md p-1.5 outline-none focus:ring-1 focus:ring-rose-400">
+                        <option value="">-- Categoria --</option>
+                    </select>
+                    <button onclick="excluirPrevisoesPorCategoria()" class="bg-rose-500 text-white px-3 py-1.5 rounded-md text-xs font-bold hover:bg-rose-600 transition">Excluir</button>
                 </div>
 
                 <div class="overflow-x-auto rounded-lg border border-slate-100">
@@ -590,6 +599,109 @@
             </div>
         </section>
 
+        <section id="tab-quitacao" class="tab-content hidden space-y-6">
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 space-y-3">
+                <div class="flex justify-between items-start flex-wrap gap-3">
+                    <div>
+                        <h2 class="font-bold text-slate-700 text-lg">🧮 Quitação de Compras Parceladas</h2>
+                        <p class="text-sm text-slate-500 mt-1">Simule se um investimento cobre as parcelas restantes de uma compra (com correção do indexador, ex.: INCC) e qual aporte mensal fecharia a conta. Nada é gravado até você clicar em <b>Efetivar</b> — aí as parcelas vão para a 📅 Previsão e os resgates/aportes para o 📈 investimento escolhido.</p>
+                    </div>
+                    <button onclick="novaCompraParcelada()" class="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-indigo-700 transition whitespace-nowrap">➕ Nova Compra</button>
+                </div>
+                <div id="lista-compras-parceladas" class="flex flex-wrap gap-2"></div>
+            </div>
+
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                <h3 class="font-bold text-slate-700 text-sm mb-3" id="form-compra-titulo">Dados da compra (a simulação recalcula automaticamente)</h3>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div class="col-span-2">
+                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Nome da compra</label>
+                        <input type="text" id="qp-nome" placeholder="Ex.: Apartamento" oninput="debouncedSimularQuitacao()" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Próxima parcela (R$)</label>
+                        <input type="number" step="0.01" id="qp-parcela" oninput="debouncedSimularQuitacao()" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Indexador (% a.a.)</label>
+                        <input type="number" step="0.01" id="qp-indexador" value="7" oninput="debouncedSimularQuitacao()" title="Correção estimada das parcelas (INCC, IPCA, IGP-M...). Use 0 para parcelas fixas." class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Parcelas totais</label>
+                        <input type="number" min="1" id="qp-total" oninput="debouncedSimularQuitacao()" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Já pagas</label>
+                        <input type="number" min="0" id="qp-pagas" value="0" oninput="debouncedSimularQuitacao()" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Mês da próx. parcela</label>
+                        <input type="month" id="qp-mes-primeira" onchange="debouncedSimularQuitacao()" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Dia do vencimento</label>
+                        <input type="number" min="1" max="31" id="qp-dia" value="10" oninput="debouncedSimularQuitacao()" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
+                    </div>
+                    <div class="col-span-2">
+                        <label class="block text-xs font-semibold text-indigo-600 uppercase mb-1">📈 Investimento de origem</label>
+                        <select id="qp-investimento" onchange="aoTrocarInvestimentoQuitacao()" class="w-full text-sm border border-indigo-200 bg-indigo-50/50 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500"></select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Rendimento (% a.a.)</label>
+                        <input type="number" step="0.01" id="qp-taxa" value="10" oninput="debouncedSimularQuitacao()" title="Use a taxa LÍQUIDA de imposto de renda para um resultado realista" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Saldo considerado (R$)</label>
+                        <input type="number" step="0.01" id="qp-saldo" oninput="debouncedSimularQuitacao()" title="Preenchido com o saldo atual do investimento; pode ajustar" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Aporte mensal (R$)</label>
+                        <div class="flex gap-1">
+                            <input type="number" step="0.01" id="qp-aporte" value="0" oninput="debouncedSimularQuitacao()" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
+                            <button onclick="usarAporteMinimo()" title="Preencher com o menor aporte que quita todas as parcelas" class="bg-emerald-600 text-white px-2 rounded-md text-xs font-bold hover:bg-emerald-700 whitespace-nowrap">mín.</button>
+                        </div>
+                    </div>
+                    <div class="col-span-2">
+                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Categoria da parcela (Previsão)</label>
+                        <select id="qp-categoria" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500"></select>
+                    </div>
+                    <div class="col-span-2 md:col-span-4 flex gap-2 justify-end flex-wrap">
+                        <button onclick="salvarCompraParcelada()" class="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-indigo-700 transition">💾 Salvar compra</button>
+                        <button id="btn-efetivar-compra" onclick="efetivarCompraParcelada()" class="bg-emerald-600 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-emerald-700 transition">✅ Efetivar no sistema</button>
+                        <button id="btn-desfazer-compra" onclick="desfazerEfetivacaoCompra()" class="hidden bg-amber-500 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-amber-600 transition">↩️ Desfazer efetivação</button>
+                        <button id="btn-excluir-compra" onclick="excluirCompraParcelada()" class="hidden bg-rose-600 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-rose-700 transition">🗑️ Excluir compra</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="quitacao-resultado" class="hidden space-y-6">
+                <div id="quitacao-veredicto" class="p-5 rounded-xl border text-base font-bold"></div>
+                <div id="quitacao-cards" class="grid grid-cols-2 lg:grid-cols-4 gap-4"></div>
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+                    <h3 class="text-sm font-bold text-slate-500 mb-4">Saldo projetado do investimento × parcelas</h3>
+                    <div class="relative w-full" style="height:260px"><canvas id="chartQuitacao"></canvas></div>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+                    <h3 class="text-base font-bold text-slate-700 border-b pb-2 mb-3">Projeção mês a mês</h3>
+                    <div class="overflow-x-auto rounded-lg border border-slate-100">
+                        <table class="w-full text-left text-sm text-slate-600">
+                            <thead class="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
+                                <tr>
+                                    <th class="p-3 whitespace-nowrap">Parcela</th>
+                                    <th class="p-3 whitespace-nowrap">Vencimento</th>
+                                    <th class="p-3 text-right whitespace-nowrap">Parcela corrigida</th>
+                                    <th class="p-3 text-right whitespace-nowrap">Rendimento</th>
+                                    <th class="p-3 text-right whitespace-nowrap">Aporte</th>
+                                    <th class="p-3 text-right whitespace-nowrap">Saldo do investimento</th>
+                                </tr>
+                            </thead>
+                            <tbody id="quitacao-tabela" class="divide-y divide-slate-100 bg-white"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
         <section id="tab-config" class="tab-content hidden space-y-6">
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100 space-y-2">
@@ -683,6 +795,7 @@
             investimentos: [],
             categories: { despesas: [], receitas: [] },
             orcamentos: {},
+            comprasParceladas: [],
             ultimoBackup: null,
             backupAdiadoAte: null
         };
@@ -712,6 +825,7 @@
         function debouncedCalcularSaldoAlvo() { debounce('calcularSaldoAlvo', () => calcularSaldoAlvo(), 100); }
         function debouncedCalcularSomaCategoriaFuturo() { debounce('calcularSomaCategoriaFuturo', () => calcularSomaCategoriaFuturo(), 100); }
         function debouncedBuscaGlobal() { debounce('buscaGlobal', () => executarBuscaGlobal(), 200); }
+        function debouncedSimularQuitacao() { debounce('simularQuitacao', () => renderSimulacaoQuitacao(), 250); }
 
         function safeRun(fn) { try { fn(); } catch(e) { console.error("Erro protegido em", fn.name, e); } }
 
@@ -737,6 +851,7 @@
                     appState.saldoInicial = Number(confObj.saldoInicial) || 0;
                     appState.categories = confObj.categories || { despesas: [], receitas: [] };
                     appState.orcamentos = confObj.orcamentos || {};
+                    appState.comprasParceladas = confObj.comprasParceladas || [];
                     appState.ultimoBackup = confObj.ultimoBackup || null;
                     appState.backupAdiadoAte = confObj.backupAdiadoAte || null;
                     appState.contas = confObj.contas || [];
@@ -752,7 +867,7 @@
         async function saveToDB() {
             try {
                 await db.transaction('rw', db.transacoes, db.cartao, db.previsoes, db.investimentos, db.config, async () => {
-                    await db.config.put({ id: 'global', saldoInicial: appState.saldoInicial, categories: appState.categories, orcamentos: appState.orcamentos, contas: appState.contas, ultimoBackup: appState.ultimoBackup, backupAdiadoAte: appState.backupAdiadoAte });
+                    await db.config.put({ id: 'global', saldoInicial: appState.saldoInicial, categories: appState.categories, orcamentos: appState.orcamentos, comprasParceladas: appState.comprasParceladas, contas: appState.contas, ultimoBackup: appState.ultimoBackup, backupAdiadoAte: appState.backupAdiadoAte });
                     await db.transacoes.clear(); if(appState.transactions.length > 0) await db.transacoes.bulkPut(appState.transactions);
                     await db.cartao.clear(); if(appState.ccTransactions.length > 0) await db.cartao.bulkPut(appState.ccTransactions);
                     await db.previsoes.clear(); if(appState.futureTransactions.length > 0) await db.previsoes.bulkPut(appState.futureTransactions);
@@ -817,6 +932,7 @@
                 else if (activeTab === 'tab-extrato') renderTransactionsBanco();
                 else if (activeTab === 'tab-cartao') renderTransactionsCartao();
                 else if (activeTab === 'tab-investimentos') renderInvestimentos();
+                else if (activeTab === 'tab-quitacao') renderQuitacao();
                 else if (activeTab === 'tab-config') renderCategoriesTab();
                 safeRun(atualizarLembreteBackup);
                 safeRun(atualizarInfoUltimoBackup);
@@ -863,6 +979,7 @@
                 if (tabId === 'extrato') { renderContasUI(); preencherFormConta(); renderTransactionsBanco(); }
                 if (tabId === 'cartao') renderTransactionsCartao();
                 if (tabId === 'investimentos') renderInvestimentos();
+                if (tabId === 'quitacao') renderQuitacao();
                 if (tabId === 'config') { renderCategoriesTab(); safeRun(atualizarInfoUltimoBackup); }
             } catch(err) {}
         }
@@ -1756,6 +1873,22 @@
                 }
                 tbody.innerHTML = html;
             }
+            // Dropdown de limpeza por categoria (só categorias com agendamentos pendentes)
+            const selLimpa = document.getElementById('prev-limpar-categoria');
+            if (selLimpa) {
+                const contagem = {};
+                for (const f of appState.futureTransactions) {
+                    if (f.conciliado) continue;
+                    const c = f.categoria || 'Não Categorizado';
+                    contagem[c] = (contagem[c] || 0) + 1;
+                }
+                const atual = selLimpa.value;
+                selLimpa.innerHTML = '<option value="">-- Categoria --</option>' +
+                    Object.keys(contagem).sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }))
+                        .map(c => `<option value="${c.replace(/"/g, '&quot;')}">${escapeHtml(c)} (${contagem[c]})</option>`).join('');
+                if ([...selLimpa.options].some(o => o.value === atual)) selLimpa.value = atual;
+            }
+
             calcularSaldoAlvo(); calcularSomaCategoriaFuturo();
             safeRun(renderParcelamentosFuturos); safeRun(renderPrevistoRealizado);
         }
@@ -2077,6 +2210,391 @@
             }
             cont.innerHTML = html;
             if (totalEl) totalEl.innerText = formatCurrency(totalGeral);
+        }
+
+        // ===== Quitação de Compras Parceladas =====
+
+        let compraQuitacaoId = null;
+        let quitacaoChartInstance = null;
+
+        function taxaMensalEquivalente(taxaAA) { return Math.pow(1 + (Number(taxaAA) || 0) / 100, 1 / 12) - 1; }
+
+        function saldoAtualInvestimento(inv) {
+            if (inv && inv.historico && inv.historico.length) return inv.historico[inv.historico.length - 1].saldoFinal || 0;
+            return inv ? (inv.valorInicial || inv.valor || 0) : 0;
+        }
+
+        // Projeção mês a mês: o investimento rende, recebe o aporte e paga a parcela
+        // corrigida pelo indexador. Retorna as linhas e se o saldo aguenta até o fim.
+        function simularQuitacao(p) {
+            const g = taxaMensalEquivalente(p.taxaIndexador);
+            const i = taxaMensalEquivalente(p.taxaRendimento);
+            const linhas = [];
+            let saldo = p.saldoInicial, quita = true, quebraEm = null, totalParcelas = 0;
+            for (let k = 0; k < p.restantes; k++) {
+                const parcela = p.valorParcela * Math.pow(1 + g, k);
+                const rendimento = saldo * i;
+                saldo = saldo + rendimento + p.aporte - parcela;
+                totalParcelas += parcela;
+                linhas.push({ k, parcela, rendimento, aporte: p.aporte, saldo });
+                if (quita && saldo < -0.005) { quita = false; quebraEm = k; }
+            }
+            return { linhas, quita, quebraEm, sobraFinal: saldo, totalParcelas };
+        }
+
+        // Menor aporte mensal que mantém o saldo do investimento ≥ 0 até a última parcela
+        function aporteMinimoQuitacao(p) {
+            if (simularQuitacao({ ...p, aporte: 0 }).quita) return 0;
+            let lo = 0;
+            let hi = p.valorParcela * Math.pow(1 + taxaMensalEquivalente(p.taxaIndexador), p.restantes) + Math.max(0, -p.saldoInicial);
+            for (let it = 0; it < 60; it++) {
+                const mid = (lo + hi) / 2;
+                if (simularQuitacao({ ...p, aporte: mid }).quita) hi = mid; else lo = mid;
+            }
+            return Math.ceil(hi * 100) / 100;
+        }
+
+        function lerFormCompra() {
+            const total = parseInt(document.getElementById('qp-total').value) || 0;
+            const pagas = parseInt(document.getElementById('qp-pagas').value) || 0;
+            return {
+                nome: document.getElementById('qp-nome').value.trim(),
+                valorParcela: parseFloat(document.getElementById('qp-parcela').value) || 0,
+                total, pagas,
+                restantes: Math.max(0, total - pagas),
+                taxaIndexador: parseFloat(document.getElementById('qp-indexador').value) || 0,
+                mesPrimeira: document.getElementById('qp-mes-primeira').value,
+                dia: Math.min(31, Math.max(1, parseInt(document.getElementById('qp-dia').value) || 10)),
+                investimentoId: document.getElementById('qp-investimento').value,
+                taxaRendimento: parseFloat(document.getElementById('qp-taxa').value) || 0,
+                saldoInicial: parseFloat(document.getElementById('qp-saldo').value) || 0,
+                aporte: parseFloat(document.getElementById('qp-aporte').value) || 0,
+                categoria: document.getElementById('qp-categoria').value
+            };
+        }
+
+        // Data BR do vencimento da k-ésima parcela restante (k = 0 é a próxima)
+        function dataParcelaQuitacao(mesPrimeira, dia, k) {
+            const [y, m] = mesPrimeira.split('-').map(Number);
+            const alvoMes = m - 1 + k;
+            const ultimo = new Date(y, alvoMes + 1, 0).getDate();
+            const d = new Date(y, alvoMes, Math.min(dia, ultimo));
+            return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+        }
+
+        function renderSimulacaoQuitacao() {
+            const res = document.getElementById('quitacao-resultado');
+            if (!res) return;
+            const p = lerFormCompra();
+            if (!p.valorParcela || !p.restantes || !p.mesPrimeira) { res.classList.add('hidden'); return; }
+            res.classList.remove('hidden');
+
+            const sim = simularQuitacao(p);
+            const aporteMin = aporteMinimoQuitacao(p);
+
+            const ver = document.getElementById('quitacao-veredicto');
+            if (sim.quita) {
+                ver.className = "p-5 rounded-xl border text-base font-bold bg-emerald-50 border-emerald-200 text-emerald-800";
+                ver.innerHTML = `✅ O investimento ${p.aporte > 0 ? `com aporte de ${formatCurrency(p.aporte)}/mês ` : ''}cobre as <b>${p.restantes} parcelas restantes</b> — sobra projetada de <b>${formatCurrency(sim.sobraFinal)}</b> ao final.`;
+            } else {
+                ver.className = "p-5 rounded-xl border text-base font-bold bg-rose-50 border-rose-200 text-rose-800";
+                ver.innerHTML = `⚠️ O saldo do investimento acaba na <b>parcela ${p.pagas + sim.quebraEm + 1} de ${p.total}</b>. Aporte mensal necessário para quitar tudo: <b>${formatCurrency(aporteMin)}</b>.`;
+            }
+
+            const cards = document.getElementById('quitacao-cards');
+            const rotuloComparativo = p.taxaRendimento > p.taxaIndexador
+                ? `Rendimento (${p.taxaRendimento}% a.a.) supera o indexador (${p.taxaIndexador}% a.a.): manter aplicado e pagar mês a mês tende a ser melhor que quitar à vista.`
+                : `O indexador (${p.taxaIndexador}% a.a.) corre acima do rendimento (${p.taxaRendimento}% a.a.): avalie antecipar/quitar as parcelas.`;
+            cards.innerHTML = `
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+                    <p class="text-xs font-semibold text-slate-500 uppercase">Parcelas restantes</p>
+                    <p class="text-2xl font-bold text-slate-700 mt-1">${p.restantes}</p>
+                    <p class="text-[10px] text-slate-400 mt-1">de ${p.total} (${p.pagas} pagas)</p>
+                </div>
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+                    <p class="text-xs font-semibold text-rose-500 uppercase">Total corrigido a pagar</p>
+                    <p class="text-2xl font-bold text-rose-600 mt-1">${formatCurrency(sim.totalParcelas)}</p>
+                    <p class="text-[10px] text-slate-400 mt-1">soma das parcelas com ${p.taxaIndexador}% a.a.</p>
+                </div>
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+                    <p class="text-xs font-semibold text-emerald-600 uppercase">Aporte mínimo</p>
+                    <p class="text-2xl font-bold text-emerald-600 mt-1">${formatCurrency(aporteMin)}</p>
+                    <p class="text-[10px] text-slate-400 mt-1">por mês, para quitar sem faltar saldo</p>
+                </div>
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+                    <p class="text-xs font-semibold text-indigo-500 uppercase">Quitar × manter aplicado</p>
+                    <p class="text-xs text-slate-600 mt-2">${rotuloComparativo}</p>
+                </div>`;
+
+            const tbody = document.getElementById('quitacao-tabela');
+            let html = '';
+            for (const l of sim.linhas) {
+                const corSaldo = l.saldo >= 0 ? 'text-indigo-600' : 'text-rose-600';
+                html += `
+                    <tr class="${l.saldo < 0 ? 'bg-rose-50' : 'hover:bg-slate-50'}">
+                        <td class="p-3 font-semibold text-slate-600">${p.pagas + l.k + 1}/${p.total}</td>
+                        <td class="p-3 whitespace-nowrap">${dataParcelaQuitacao(p.mesPrimeira, p.dia, l.k)}</td>
+                        <td class="p-3 text-right whitespace-nowrap text-rose-600 font-medium">${formatCurrency(l.parcela)}</td>
+                        <td class="p-3 text-right whitespace-nowrap text-emerald-600">${formatCurrency(l.rendimento)}</td>
+                        <td class="p-3 text-right whitespace-nowrap text-slate-500">${l.aporte > 0 ? formatCurrency(l.aporte) : '—'}</td>
+                        <td class="p-3 text-right whitespace-nowrap font-bold ${corSaldo}">${formatCurrency(l.saldo)}</td>
+                    </tr>`;
+            }
+            tbody.innerHTML = html;
+
+            try {
+                const ctx = document.getElementById('chartQuitacao');
+                if (ctx) {
+                    const labels = sim.linhas.map(l => dataParcelaQuitacao(p.mesPrimeira, p.dia, l.k).substring(3));
+                    if (quitacaoChartInstance) quitacaoChartInstance.destroy();
+                    quitacaoChartInstance = new Chart(ctx.getContext('2d'), {
+                        type: 'bar',
+                        data: {
+                            labels,
+                            datasets: [
+                                { label: 'Parcela corrigida', data: sim.linhas.map(l => l.parcela), backgroundColor: 'rgba(244, 63, 94, 0.6)', borderRadius: 3, order: 2 },
+                                { label: 'Saldo do investimento', data: sim.linhas.map(l => l.saldo), type: 'line', borderColor: '#4f46e5', backgroundColor: '#4f46e5', borderWidth: 2, pointRadius: 3, tension: 0.3, order: 1 }
+                            ]
+                        },
+                        options: {
+                            responsive: true, maintainAspectRatio: false,
+                            interaction: { mode: 'index', intersect: false },
+                            plugins: {
+                                legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } },
+                                tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${formatCurrency(c.parsed.y)}` } }
+                            },
+                            scales: {
+                                x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+                                y: { ticks: { font: { size: 10 }, callback: (v) => formatCurrencyNumber(v) } }
+                            }
+                        }
+                    });
+                }
+            } catch (e) {}
+        }
+
+        function usarAporteMinimo() {
+            const p = lerFormCompra();
+            if (!p.valorParcela || !p.restantes) return;
+            document.getElementById('qp-aporte').value = aporteMinimoQuitacao(p).toFixed(2);
+            renderSimulacaoQuitacao();
+        }
+
+        function aoTrocarInvestimentoQuitacao() {
+            const inv = appState.investimentos.find(i => i.id === document.getElementById('qp-investimento').value);
+            document.getElementById('qp-saldo').value = saldoAtualInvestimento(inv).toFixed(2);
+            renderSimulacaoQuitacao();
+        }
+
+        function renderQuitacao() {
+            const selInv = document.getElementById('qp-investimento');
+            if (!selInv) return;
+            const invAtual = selInv.value;
+            selInv.innerHTML = '<option value="">-- Selecione o investimento --</option>';
+            for (const inv of (appState.investimentos || [])) {
+                const opt = document.createElement('option');
+                opt.value = inv.id;
+                opt.innerText = `${inv.nome} (${inv.banco}) — ${formatCurrency(saldoAtualInvestimento(inv))}`;
+                selInv.appendChild(opt);
+            }
+            if ([...selInv.options].some(o => o.value === invAtual)) selInv.value = invAtual;
+
+            const selCat = document.getElementById('qp-categoria');
+            const catAtual = selCat.value;
+            selCat.innerHTML = '<option value="__nova__">➕ Criar categoria com o nome da compra</option>';
+            for (const c of sortedCats(appState.categories.despesas)) {
+                const opt = document.createElement('option'); opt.value = c; opt.innerText = c; selCat.appendChild(opt);
+            }
+            if ([...selCat.options].some(o => o.value === catAtual)) selCat.value = catAtual;
+
+            if (!document.getElementById('qp-mes-primeira').value) {
+                const t = new Date();
+                document.getElementById('qp-mes-primeira').value = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}`;
+            }
+
+            renderListaComprasParceladas();
+            atualizarBotoesCompra();
+            renderSimulacaoQuitacao();
+        }
+
+        function renderListaComprasParceladas() {
+            const cont = document.getElementById('lista-compras-parceladas');
+            if (!cont) return;
+            if (!appState.comprasParceladas.length) {
+                cont.innerHTML = '<p class="text-xs text-slate-400">Nenhuma compra cadastrada ainda. Preencha o formulário abaixo e clique em 💾 Salvar compra.</p>';
+                return;
+            }
+            let html = '';
+            for (const c of appState.comprasParceladas) {
+                const ativa = c.id === compraQuitacaoId;
+                const badge = c.status === 'efetivada'
+                    ? '<span class="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold">EFETIVADA</span>'
+                    : '<span class="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-bold">SIMULAÇÃO</span>';
+                html += `
+                    <button onclick="carregarCompraParcelada('${c.id}')" class="flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition ${ativa ? 'bg-indigo-600 text-white border-indigo-700' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}">
+                        ${escapeHtml(c.nome)} ${badge}
+                        <span class="text-[10px] ${ativa ? 'text-indigo-200' : 'text-slate-400'}">${Math.max(0, c.total - c.pagas)} de ${c.total} restantes</span>
+                    </button>`;
+            }
+            cont.innerHTML = html;
+        }
+
+        function atualizarBotoesCompra() {
+            const compra = appState.comprasParceladas.find(c => c.id === compraQuitacaoId);
+            const efetivada = compra && compra.status === 'efetivada';
+            const btnEf = document.getElementById('btn-efetivar-compra');
+            const btnDes = document.getElementById('btn-desfazer-compra');
+            const btnExc = document.getElementById('btn-excluir-compra');
+            if (btnEf) btnEf.classList.toggle('hidden', !!efetivada);
+            if (btnDes) btnDes.classList.toggle('hidden', !efetivada);
+            if (btnExc) btnExc.classList.toggle('hidden', !compra);
+            document.getElementById('form-compra-titulo').innerText = compra
+                ? `${compra.nome} — ${efetivada ? 'efetivada (desfaça para editar valores e re-efetivar)' : 'em simulação'}`
+                : 'Dados da compra (a simulação recalcula automaticamente)';
+        }
+
+        function novaCompraParcelada() {
+            compraQuitacaoId = null;
+            for (const id of ['qp-nome', 'qp-parcela', 'qp-total']) document.getElementById(id).value = '';
+            document.getElementById('qp-pagas').value = '0';
+            document.getElementById('qp-aporte').value = '0';
+            document.getElementById('qp-indexador').value = '7';
+            document.getElementById('qp-taxa').value = '10';
+            renderQuitacao();
+        }
+
+        function salvarCompraParcelada(silencioso) {
+            const p = lerFormCompra();
+            if (!p.nome || !p.valorParcela || !p.total || !p.mesPrimeira) { alert("Preencha ao menos: nome, valor da parcela, parcelas totais e mês da próxima parcela."); return null; }
+            let compra = appState.comprasParceladas.find(c => c.id === compraQuitacaoId);
+            if (compra && compra.status === 'efetivada') { alert("Esta compra já foi efetivada. Desfaça a efetivação antes de alterá-la."); return null; }
+            if (!compra) {
+                compra = { id: 'compra_' + Date.now(), status: 'simulacao' };
+                appState.comprasParceladas.push(compra);
+                compraQuitacaoId = compra.id;
+            }
+            Object.assign(compra, p);
+            saveData();
+            if (!silencioso) alert("Compra salva. Use ✅ Efetivar quando quiser lançar as parcelas no sistema.");
+            return compra;
+        }
+
+        function carregarCompraParcelada(id) {
+            const c = appState.comprasParceladas.find(x => x.id === id);
+            if (!c) return;
+            compraQuitacaoId = id;
+            document.getElementById('qp-nome').value = c.nome;
+            document.getElementById('qp-parcela').value = c.valorParcela;
+            document.getElementById('qp-total').value = c.total;
+            document.getElementById('qp-pagas').value = c.pagas;
+            document.getElementById('qp-indexador').value = c.taxaIndexador;
+            document.getElementById('qp-mes-primeira').value = c.mesPrimeira;
+            document.getElementById('qp-dia').value = c.dia;
+            document.getElementById('qp-taxa').value = c.taxaRendimento;
+            document.getElementById('qp-saldo').value = c.saldoInicial;
+            document.getElementById('qp-aporte').value = c.aporte;
+            renderQuitacao();
+            document.getElementById('qp-investimento').value = c.investimentoId || '';
+            document.getElementById('qp-categoria').value = c.categoria || '__nova__';
+            renderSimulacaoQuitacao();
+        }
+
+        function garantirCategoria(tipo, nome) {
+            if (!appState.categories[tipo]) appState.categories[tipo] = [];
+            if (!appState.categories[tipo].includes(nome)) appState.categories[tipo].push(nome);
+            return nome;
+        }
+
+        // Efetivar: para cada parcela restante gera na Previsão um PAR de lançamentos —
+        // Entrada "Resgate p/ ..." com reflexo (saque no investimento) + Saída da parcela —
+        // e, se houver aporte mensal, uma Saída com reflexo de Aporte. Assim o saldo
+        // projetado da conta fica correto (resgate entra, parcela sai) e o histórico do
+        // investimento recebe os saques/aportes com recálculo em cascata.
+        function efetivarCompraParcelada() {
+            const compra = salvarCompraParcelada(true);
+            if (!compra) return;
+            if (!compra.investimentoId) { alert("Selecione o investimento de origem antes de efetivar."); return; }
+            const inv = appState.investimentos.find(i => i.id === compra.investimentoId);
+            if (!inv) { alert("Investimento não encontrado."); return; }
+            const sim = simularQuitacao(compra);
+            const nAportes = compra.aporte > 0.005 ? compra.restantes : 0;
+            if (!confirm(`Efetivar "${compra.nome}"?\n\nSerão criados na Previsão:\n• ${compra.restantes} parcelas (Saída) com o resgate correspondente em "${inv.nome}"\n${nAportes ? `• ${nAportes} aportes de ${formatCurrency(compra.aporte)} em "${inv.nome}"\n` : ''}\nTotal corrigido: ${formatCurrency(sim.totalParcelas)}. Você poderá desfazer tudo com um clique.`)) return;
+
+            const catParcela = compra.categoria && compra.categoria !== '__nova__'
+                ? garantirCategoria('despesas', compra.categoria)
+                : garantirCategoria('despesas', compra.nome);
+            const catResgate = garantirCategoria('receitas', 'Resgate Investimento');
+            const catAporte = garantirCategoria('despesas', 'Aporte Investimento');
+            compra.categoria = catParcela;
+
+            for (const l of sim.linhas) {
+                const dataBR = dataParcelaQuitacao(compra.mesPrimeira, compra.dia, l.k);
+                const vParc = Math.round(l.parcela * 100) / 100;
+                const nParc = `${compra.pagas + l.k + 1}/${compra.total}`;
+
+                const futResgate = {
+                    id: `fut_${compra.id}_r${l.k}`, data: dataBR, tipo: 'credito', valor: vParc,
+                    descricao: `Resgate p/ ${compra.nome} (parc. ${nParc})`, categoria: catResgate,
+                    investimentoId: compra.investimentoId, compraId: compra.id
+                };
+                aplicarReflexoInvestimento(futResgate);
+                appState.futureTransactions.push(futResgate);
+
+                appState.futureTransactions.push({
+                    id: `fut_${compra.id}_p${l.k}`, data: dataBR, tipo: 'debito', valor: vParc,
+                    descricao: `${compra.nome} (parcela ${nParc})`, categoria: catParcela,
+                    investimentoId: '', compraId: compra.id
+                });
+
+                if (compra.aporte > 0.005) {
+                    const futAporte = {
+                        id: `fut_${compra.id}_a${l.k}`, data: dataBR, tipo: 'debito', valor: Math.round(compra.aporte * 100) / 100,
+                        descricao: `Aporte p/ ${compra.nome}`, categoria: catAporte,
+                        investimentoId: compra.investimentoId, compraId: compra.id
+                    };
+                    aplicarReflexoInvestimento(futAporte);
+                    appState.futureTransactions.push(futAporte);
+                }
+            }
+            compra.status = 'efetivada';
+            updateFutureCategoriesDropdown(); updatePrevSumDropdown();
+            saveData();
+            alert(`"${compra.nome}" efetivada!\n• ${compra.restantes * 2 + nAportes} lançamentos criados na 📅 Previsão\n• ${compra.restantes + nAportes} movimentos no investimento "${inv.nome}"`);
+        }
+
+        function desfazerEfetivacaoCompra() {
+            const compra = appState.comprasParceladas.find(c => c.id === compraQuitacaoId);
+            if (!compra || compra.status !== 'efetivada') return;
+            const gerados = appState.futureTransactions.filter(f => f.compraId === compra.id);
+            if (!confirm(`Desfazer a efetivação de "${compra.nome}"?\n${gerados.length} lançamentos serão removidos da Previsão e os movimentos revertidos no investimento.`)) return;
+            for (const f of gerados) reverterReflexoInvestimento(f);
+            appState.futureTransactions = appState.futureTransactions.filter(f => f.compraId !== compra.id);
+            compra.status = 'simulacao';
+            saveData();
+        }
+
+        function excluirCompraParcelada() {
+            const compra = appState.comprasParceladas.find(c => c.id === compraQuitacaoId);
+            if (!compra) return;
+            if (compra.status === 'efetivada') { alert("Desfaça a efetivação antes de excluir a compra."); return; }
+            if (!confirm(`Excluir a compra "${compra.nome}"? (apenas o cadastro da simulação)`)) return;
+            appState.comprasParceladas = appState.comprasParceladas.filter(c => c.id !== compra.id);
+            compraQuitacaoId = null;
+            saveData();
+        }
+
+        // ===== Limpeza da Previsão por categoria =====
+        function excluirPrevisoesPorCategoria() {
+            const sel = document.getElementById('prev-limpar-categoria');
+            const cat = sel ? sel.value : '';
+            if (!cat) { alert("Escolha uma categoria."); return; }
+            const alvo = appState.futureTransactions.filter(f => !f.conciliado && (f.categoria || 'Não Categorizado') === cat);
+            if (!alvo.length) { alert("Nenhum agendamento pendente nessa categoria."); return; }
+            if (!confirm(`Excluir ${alvo.length} agendamento(s) pendente(s) da categoria "${cat}"?\n\n• Previsões já efetivadas (Previsto × Realizado) não serão tocadas.\n• Reflexos em investimentos serão revertidos.`)) return;
+            for (const f of alvo) reverterReflexoInvestimento(f);
+            const ids = new Set(alvo.map(f => f.id));
+            appState.futureTransactions = appState.futureTransactions.filter(f => !ids.has(f.id));
+            saveData();
         }
 
         function assignCategory(transactionId, category, type, selEl) {
@@ -3115,6 +3633,7 @@
             if (!appState.investimentos) appState.investimentos = [];
             if (!appState.categories) appState.categories = { despesas: [], receitas: [] };
             if (!appState.orcamentos) appState.orcamentos = {};
+            if (!appState.comprasParceladas) appState.comprasParceladas = [];
             if (!appState.contas) appState.contas = [];
             garantirContas();
             const elSi = document.getElementById('input-saldo-inicial');
@@ -3208,7 +3727,7 @@
         function resetarBancoDeDados() {
             if (confirm("ATENÇÃO: Tem certeza que deseja apagar TODOS os dados do IndexedDB? Esta ação não pode ser desfeita!")) {
                 if (confirm("Você tem certeza ABSOLUTA? Todo o seu histórico financeiro será perdido.")) {
-                    appState = { saldoInicial: 0, contas: [], transactions: [], ccTransactions: [], futureTransactions: [], investimentos: [], categories: { despesas: ["Outros"], receitas: ["Outros"] }, orcamentos: {} };
+                    appState = { saldoInicial: 0, contas: [], transactions: [], ccTransactions: [], futureTransactions: [], investimentos: [], categories: { despesas: ["Outros"], receitas: ["Outros"] }, orcamentos: {}, comprasParceladas: [] };
                     garantirContas(); renderContasUI(); preencherFormConta();
                     saveData(); alert("O banco de dados foi completamente zerado.");
                 }
