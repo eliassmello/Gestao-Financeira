@@ -2174,12 +2174,15 @@
             if (totalEl) totalEl.innerText = formatCurrency(totalGeral);
         }
 
-        // ==========================================================================
+
+// ==========================================================================
         // MÓDULO 7: QUITAÇÃO E SIMULADORES DE COMPRAS PARCELADAS
         // ==========================================================================
 
         let compraQuitacaoId = null;
         let quitacaoChartInstance = null;
+        let fontesQuitacao = [];
+        let taxasManuaisAtual = {}; // Guarda as taxas customizadas em cascata
 
         function taxaMensalEquivalente(taxaAA) { return Math.pow(1 + (Number(taxaAA) || 0) / 100, 1 / 12) - 1; }
 
@@ -2202,24 +2205,40 @@
             return c.fontes;
         }
 
-        function simularQuitacao(p) {
-            const g = taxaMensalEquivalente(p.taxaIndexador);
+function simularQuitacao(p) {
             const fontes = p.fontes || [];
             const taxas = fontes.map(f => taxaMensalEquivalente(f.taxa));
             const saldos = fontes.map(f => Number(f.saldo) || 0);
             const linhas = [];
             let quita = true, quebraEm = null, totalParcelas = 0;
+            
+            // Valor base de partida (a parcela 1)
+            let parcelaAtual = p.valorParcela;
+
             for (let k = 0; k < p.restantes; k++) {
-                const parcela = p.valorParcela * Math.pow(1 + g, k);
+                // Descobre qual taxa usar NESTE mês específico (Manual ou a Padrão)
+                let taxaAnualMes = p.taxaIndexador;
+                if (p.taxasManuais && p.taxasManuais[k] !== undefined) {
+                    taxaAnualMes = parseFloat(p.taxasManuais[k]);
+                }
+                
+                // O mês 0 é a base, não sofre juros no ato do parcelamento.
+                // A partir do mês 1, aplicamos o indexador daquele mês sobre o saldo do mês anterior.
+                if (k > 0) {
+                    const g = taxaMensalEquivalente(taxaAnualMes);
+                    parcelaAtual = parcelaAtual * (1 + g);
+                }
+                
                 let rendimento = 0;
                 for (let fi = 0; fi < saldos.length; fi++) {
                     if (saldos[fi] > 0) { const r = saldos[fi] * taxas[fi]; saldos[fi] += r; rendimento += r; }
                 }
+                
                 let aporteFonte = saldos.findIndex(s => s > 0);
                 if (aporteFonte === -1) aporteFonte = saldos.length - 1;
                 if (p.aporte > 0 && saldos.length) saldos[aporteFonte] += p.aporte;
 
-                let restante = parcela;
+                let restante = parcelaAtual;
                 const resgates = [];
                 for (let fi = 0; fi < saldos.length && restante > 0.004; fi++) {
                     if (saldos[fi] <= 0) continue;
@@ -2227,32 +2246,43 @@
                     saldos[fi] -= usa; restante -= usa;
                     resgates.push({ fi, valor: usa });
                 }
+                
                 let falta = 0;
                 if (restante > 0.004) {
                     falta = restante;
                     if (quita) { quita = false; quebraEm = k; }
                     if (saldos.length) saldos[saldos.length - 1] -= restante;
                 }
-                totalParcelas += parcela;
-                linhas.push({ k, parcela, rendimento, aporte: p.aporte, aporteFonte, resgates, falta, saldos: saldos.slice(), saldoTotal: saldos.reduce((a, b) => a + b, 0) });
+                totalParcelas += parcelaAtual;
+                
+                // Salvamos a taxa que foi efetivamente aplicada para exibi-la na tabela
+                linhas.push({ 
+                    k, parcela: parcelaAtual, rendimento, aporte: p.aporte, aporteFonte, 
+                    resgates, falta, saldos: saldos.slice(), 
+                    saldoTotal: saldos.reduce((a, b) => a + b, 0), 
+                    taxaAplicada: taxaAnualMes 
+                });
             }
             return { linhas, quita, quebraEm, sobraFinal: linhas.length ? linhas[linhas.length - 1].saldoTotal : saldos.reduce((a, b) => a + b, 0), totalParcelas };
         }
+
 
         function aporteMinimoQuitacao(p) {
             if (!(p.fontes || []).length) return 0;
             if (simularQuitacao({ ...p, aporte: 0 }).quita) return 0;
             const somaInicial = p.fontes.reduce((a, f) => a + (Number(f.saldo) || 0), 0);
+            
+            // Simula o total a pagar da pior forma para achar o teto do limite
+            let tetoEstimado = simularQuitacao({ ...p, aporte: 0 }).totalParcelas;
+            let hi = tetoEstimado + Math.max(0, -somaInicial);
             let lo = 0;
-            let hi = p.valorParcela * Math.pow(1 + taxaMensalEquivalente(p.taxaIndexador), p.restantes) + Math.max(0, -somaInicial);
+            
             for (let it = 0; it < 60; it++) {
                 const mid = (lo + hi) / 2;
                 if (simularQuitacao({ ...p, aporte: mid }).quita) hi = mid; else lo = mid;
             }
             return Math.ceil(hi * 100) / 100;
         }
-
-        let fontesQuitacao = [];
 
         function adicionarFonteQuitacao() {
             const sel = document.getElementById('qp-add-investimento');
@@ -2281,6 +2311,15 @@
             fontesQuitacao[i][campo] = parseFloat(valor) || 0;
             debouncedSimularQuitacao();
         }
+        
+        function atualizarTaxaMes(k, valor) {
+            if (valor === '') {
+                delete taxasManuaisAtual[k]; // Remove a taxa manual, deixando herdar em cascata da anterior
+            } else {
+                taxasManuaisAtual[k] = parseFloat(valor);
+            }
+            debouncedSimularQuitacao();
+        }
 
         function renderFontesQuitacao() {
             const cont = document.getElementById('qp-fontes');
@@ -2299,7 +2338,7 @@
                 }
             }
             if (!fontesQuitacao.length) {
-                cont.innerHTML = '<p class="text-xs text-slate-400">Nenhuma fonte adicionada. Escolha um investimento acima e clique em ➕ Adicionar.</p>';
+                cont.innerHTML = '<p class="text-xs text-slate-400">Nenhuma fonte adicionada. O saldo será abatido diretamente da conta corrente na Previsão.</p>';
                 return;
             }
             let html = '';
@@ -2336,6 +2375,7 @@
                 total, pagas,
                 restantes: Math.max(0, total - pagas),
                 taxaIndexador: parseFloat(document.getElementById('qp-indexador').value) || 0,
+                taxasManuais: { ...taxasManuaisAtual },
                 mesPrimeira: document.getElementById('qp-mes-primeira').value,
                 dia: Math.min(31, Math.max(1, parseInt(document.getElementById('qp-dia').value) || 10)),
                 fontes: fontesQuitacao.map(f => ({ ...f })),
@@ -2357,12 +2397,12 @@
             return inv ? inv.nome : '(removido)';
         }
 
-        function renderSimulacaoQuitacao() {
+        
+function renderSimulacaoQuitacao() {
             const res = document.getElementById('quitacao-resultado');
             if (!res) return;
             const p = lerFormCompra();
             
-            // Modificado: Deixou de exigir p.fontes.length > 0 para desenhar a simulação
             if (!p.valorParcela || !p.restantes || !p.mesPrimeira) { res.classList.add('hidden'); return; }
             res.classList.remove('hidden');
 
@@ -2389,8 +2429,8 @@
             const rotuloComparativo = !temFontes 
                 ? `Sem um investimento vinculado, as parcelas serão pagas pelo saldo geral da sua conta corrente.`
                 : (taxaMedia > p.taxaIndexador
-                    ? `Rendimento médio das fontes (${taxaMedia.toFixed(1)}% a.a.) supera o indexador (${p.taxaIndexador}% a.a.): manter aplicado e pagar mês a mês tende a ser melhor que quitar à vista.`
-                    : `O indexador (${p.taxaIndexador}% a.a.) corre acima do rendimento médio das fontes (${taxaMedia.toFixed(1)}% a.a.): avalie antecipar/quitar as parcelas.`);
+                    ? `Rendimento médio das fontes (${taxaMedia.toFixed(1)}% a.a.) supera a média do indexador: manter aplicado tende a ser melhor que quitar à vista.`
+                    : `O indexador corre acima do rendimento médio das fontes (${taxaMedia.toFixed(1)}% a.a.): avalie antecipar/quitar as parcelas.`);
             
             cards.innerHTML = `
                 <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
@@ -2401,7 +2441,7 @@
                 <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
                     <p class="text-xs font-semibold text-rose-500 uppercase">Total corrigido a pagar</p>
                     <p class="text-2xl font-bold text-rose-600 mt-1">${formatCurrency(sim.totalParcelas)}</p>
-                    <p class="text-[10px] text-slate-400 mt-1">soma das parcelas com ${p.taxaIndexador}% a.a.</p>
+                    <p class="text-[10px] text-slate-400 mt-1">soma das parcelas com correção progressiva</p>
                 </div>
                 <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
                     <p class="text-xs font-semibold text-emerald-600 uppercase">Aporte mínimo</p>
@@ -2417,6 +2457,7 @@
             head.innerHTML = `
                 <th class="p-3 whitespace-nowrap">Parcela</th>
                 <th class="p-3 whitespace-nowrap">Vencimento</th>
+                <th class="p-3 text-right whitespace-nowrap" title="Taxa que incidiu deste mês sobre o saldo anterior">Índice Mês (% a.a.)</th>
                 <th class="p-3 text-right whitespace-nowrap">Parcela corrigida</th>
                 ${temFontes ? `
                 <th class="p-3 text-right whitespace-nowrap">Rendimento</th>
@@ -2446,10 +2487,20 @@
                     `;
                 }
 
+                // Verifica se há taxa manual configurada para o mês
+                const isManual = taxasManuaisAtual[l.k] !== undefined;
+                const classInput = isManual ? 'bg-amber-100 border-amber-400 text-amber-900 font-bold' : 'bg-transparent border-slate-200 text-slate-500 hover:bg-slate-50';
+
+                // A parcela atual (k=0) é a base e não sofre juros no mês de partida, então ocultamos o input dela.
+                const inputTaxa = l.k === 0 
+                    ? `<span class="text-slate-300 text-xs">— base —</span>`
+                    : `<input type="number" step="0.01" value="${l.taxaAplicada}" onchange="atualizarTaxaMes(${l.k}, this.value)" title="Taxa que incidiu para chegar neste valor" class="w-20 text-right text-sm border rounded-md p-1.5 outline-none focus:ring-1 focus:ring-indigo-500 transition ${classInput}">`;
+
                 html += `
                     <tr class="${l.falta > 0 && temFontes ? 'bg-rose-50' : 'hover:bg-slate-50'}">
                         <td class="p-3 font-semibold text-slate-600">${p.pagas + l.k + 1}/${p.total}</td>
                         <td class="p-3 whitespace-nowrap">${dataParcelaQuitacao(p.mesPrimeira, p.dia, l.k)}</td>
+                        <td class="p-3 text-right whitespace-nowrap">${inputTaxa}</td>
                         <td class="p-3 text-right whitespace-nowrap text-rose-600 font-medium">${formatCurrency(l.parcela)}</td>
                         ${celulasFontesHTML}
                     </tr>`;
@@ -2479,26 +2530,19 @@
                     if (quitacaoChartInstance) quitacaoChartInstance.destroy();
                     quitacaoChartInstance = new Chart(ctx.getContext('2d'), {
                         type: 'bar',
-                        data: {
-                            labels,
-                            datasets: datasets
-                        },
+                        data: { labels, datasets: datasets },
                         options: {
                             responsive: true, maintainAspectRatio: false,
                             interaction: { mode: 'index', intersect: false },
-                            plugins: {
-                                legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } },
-                                tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${formatCurrency(c.parsed.y)}` } }
-                            },
-                            scales: {
-                                x: { grid: { display: false }, ticks: { font: { size: 10 } } },
-                                y: { ticks: { font: { size: 10 }, callback: (v) => formatCurrencyNumber(v) } }
-                            }
+                            plugins: { legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } }, tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${formatCurrency(c.parsed.y)}` } } },
+                            scales: { x: { grid: { display: false }, ticks: { font: { size: 10 } } }, y: { ticks: { font: { size: 10 }, callback: (v) => formatCurrencyNumber(v) } } }
                         }
                     });
                 }
             } catch (e) {}
         }
+
+
 
         function usarAporteMinimo() {
             const p = lerFormCompra();
@@ -2568,6 +2612,7 @@
         function novaCompraParcelada() {
             compraQuitacaoId = null;
             fontesQuitacao = [];
+            taxasManuaisAtual = {}; // Limpa o cache das taxas customizadas
             for (const id of ['qp-nome', 'qp-parcela', 'qp-total']) document.getElementById(id).value = '';
             document.getElementById('qp-pagas').value = '0';
             document.getElementById('qp-aporte').value = '0';
@@ -2596,6 +2641,8 @@
             if (!c) return;
             compraQuitacaoId = id;
             fontesQuitacao = normalizarFontesCompra(c).map(f => ({ ...f }));
+            taxasManuaisAtual = c.taxasManuais ? { ...c.taxasManuais } : {}; // Restaura as taxas salvas
+            
             document.getElementById('qp-nome').value = c.nome;
             document.getElementById('qp-parcela').value = c.valorParcela;
             document.getElementById('qp-total').value = c.total;
@@ -2615,7 +2662,7 @@
             return nome;
         }
 
-function efetivarCompraParcelada() {
+        function efetivarCompraParcelada() {
             const compra = salvarCompraParcelada(true);
             if (!compra) return;
             
@@ -2627,7 +2674,11 @@ function efetivarCompraParcelada() {
                 return; 
             }
 
-            if (!confirm(`Efetivar "${compra.nome}" com conciliação líquida (Aporte - Resgate)?`)) return;
+            let msgConfirmacao = temFontes
+                ? `Efetivar "${compra.nome}" com conciliação líquida (Aporte - Resgate)?\n\nTotal corrigido a pagar: ${formatCurrency(sim.totalParcelas)}.`
+                : `Efetivar "${compra.nome}"?\n\nNenhum investimento atrelado. Serão criados apenas os lançamentos de ${compra.restantes} parcelas na Previsão.\n\nTotal corrigido a pagar: ${formatCurrency(sim.totalParcelas)}.`;
+
+            if (!confirm(msgConfirmacao)) return;
 
             const catParcela = garantirCategoria('despesas', compra.categoria !== '__nova__' ? compra.categoria : compra.nome);
             const catResgate = garantirCategoria('receitas', 'Resgate Investimento');
@@ -2638,29 +2689,21 @@ function efetivarCompraParcelada() {
                 const nParc = `${compra.pagas + l.k + 1}/${compra.total}`;
 
                 if (temFontes) {
-                    // 1. Dicionário para conciliar (Soma aportes, subtrai resgates)
                     let saldoLiquidoPorInv = {}; 
-
-                    // Computa todos os resgates do mês
                     for (const r of l.resgates) {
                         const fonte = compra.fontes[r.fi];
                         if (!saldoLiquidoPorInv[fonte.investimentoId]) saldoLiquidoPorInv[fonte.investimentoId] = 0;
                         saldoLiquidoPorInv[fonte.investimentoId] -= r.valor;
                     }
-
-                    // Computa o aporte do mês
                     if (compra.aporte > 0.005) {
                         const fonteAporte = compra.fontes[l.aporteFonte] || compra.fontes[0];
                         if (!saldoLiquidoPorInv[fonteAporte.investimentoId]) saldoLiquidoPorInv[fonteAporte.investimentoId] = 0;
                         saldoLiquidoPorInv[fonteAporte.investimentoId] += compra.aporte;
                     }
 
-                    // 2. Lança apenas o valor resultante da subtração
                     for (const invId in saldoLiquidoPorInv) {
                         const valorConciliado = Math.round(saldoLiquidoPorInv[invId] * 100) / 100;
-
                         if (valorConciliado < -0.005) { 
-                            // Resultado é negativo: houve mais resgate que aporte (Resgate Líquido)
                             const futResgate = {
                                 id: `fut_${compra.id}_r${l.k}_${invId}`, data: dataBR, tipo: 'credito', valor: Math.abs(valorConciliado),
                                 descricao: `Resgate Líquido p/ ${compra.nome} (parc. ${nParc}) — ${nomeCurtoInvestimento(invId)}`, categoria: catResgate,
@@ -2669,7 +2712,6 @@ function efetivarCompraParcelada() {
                             aplicarReflexoInvestimento(futResgate);
                             appState.futureTransactions.push(futResgate);
                         } else if (valorConciliado > 0.005) { 
-                            // Resultado é positivo: houve mais aporte que resgate (Aporte Líquido)
                             const futAporte = {
                                 id: `fut_${compra.id}_a${l.k}_${invId}`, data: dataBR, tipo: 'debito', valor: valorConciliado,
                                 descricao: `Aporte Líquido p/ ${compra.nome} — ${nomeCurtoInvestimento(invId)}`, categoria: catAporte,
@@ -2681,7 +2723,6 @@ function efetivarCompraParcelada() {
                     }
                 }
 
-                // 3. Lança a parcela normal
                 appState.futureTransactions.push({
                     id: `fut_${compra.id}_p${l.k}`, data: dataBR, tipo: 'debito', valor: Math.round(l.parcela * 100) / 100,
                     descricao: `${compra.nome} (parcela ${nParc})`, categoria: catParcela,
@@ -2691,7 +2732,7 @@ function efetivarCompraParcelada() {
             
             compra.status = 'efetivada';
             saveData();
-            alert(`"${compra.nome}" efetivada com sucesso e saldos conciliados!`);
+            alert(`"${compra.nome}" efetivada com sucesso!`);
         }
 
         function desfazerEfetivacaoCompra() {
@@ -2715,18 +2756,7 @@ function efetivarCompraParcelada() {
             saveData();
         }
 
-        function excluirPrevisoesPorCategoria() {
-            const sel = document.getElementById('prev-limpar-categoria');
-            const cat = sel ? sel.value : '';
-            if (!cat) { alert("Escolha uma categoria."); return; }
-            const alvo = appState.futureTransactions.filter(f => !f.conciliado && (f.categoria || 'Não Categorizado') === cat);
-            if (!alvo.length) { alert("Nenhum agendamento pendente nessa categoria."); return; }
-            if (!confirm(`Excluir ${alvo.length} agendamento(s) pendente(s) da categoria "${cat}"?\n\n• Previsões já efetivadas (Previsto × Realizado) não serão tocadas.\n• Reflexos em investimentos serão revertidos.`)) return;
-            for (const f of alvo) reverterReflexoInvestimento(f);
-            const ids = new Set(alvo.map(f => f.id));
-            appState.futureTransactions = appState.futureTransactions.filter(f => !ids.has(f.id));
-            saveData();
-        }
+
 
         // ==========================================================================
         // MÓDULO 8: CONTAS CORRENTES, TRANSAÇÕES E UI DOS LANÇAMENTOS
