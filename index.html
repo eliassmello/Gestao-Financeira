@@ -26,6 +26,7 @@
                 <button onclick="switchTab('extrato')" id="btn-extrato" class="tab-btn px-3 py-2 rounded-lg text-indigo-100 hover:bg-indigo-500 font-medium text-sm transition">🏦 Conta Corrente</button>
                 <button onclick="switchTab('cartao')" id="btn-cartao" class="tab-btn px-3 py-2 rounded-lg text-indigo-100 hover:bg-indigo-500 font-medium text-sm transition">💳 Cartão</button>
                 <button onclick="switchTab('investimentos')" id="btn-investimentos" class="tab-btn px-3 py-2 rounded-lg text-indigo-100 hover:bg-indigo-500 font-medium text-sm transition">📈 Investimentos</button>
+                <button onclick="switchTab('quitacao')" id="btn-quitacao" class="tab-btn px-3 py-2 rounded-lg text-indigo-100 hover:bg-indigo-500 font-medium text-sm transition">🧮 Quitação</button>
                 <button onclick="switchTab('config')" id="btn-config" class="tab-btn px-3 py-2 rounded-lg text-indigo-100 hover:bg-indigo-500 font-medium text-sm transition">⚙️ Config</button>
                 <button onclick="abrirBuscaGlobal()" title="Busca global: encontre lançamentos em todas as contas, cartão e previsões" class="px-3 py-2 rounded-lg text-indigo-100 hover:bg-indigo-500 font-medium text-sm transition border border-indigo-400/50">🔍 Buscar</button>
             </nav>
@@ -234,6 +235,14 @@
                 <div class="flex gap-2 items-center mb-3">
                     <div class="w-3 h-3 rounded-full bg-amber-200 border border-amber-400"></div>
                     <span class="text-xs font-medium text-slate-500">Linhas amarelas indicam previsões que já venceram hoje ou no passado. Quando o valor real cair no banco, clique em <b class="text-emerald-600">✔ Efetivar</b> para informar o valor realizado — a previsão sai do cronograma e vai para o painel <b>Previsto × Realizado</b>.</span>
+                </div>
+
+                <div class="flex flex-wrap gap-2 items-center justify-end mb-3 bg-slate-50 border border-slate-100 rounded-lg p-2">
+                    <span class="text-xs font-bold text-slate-500">🧹 Excluir todos os agendamentos de uma categoria:</span>
+                    <select id="prev-limpar-categoria" class="text-sm border border-slate-200 rounded-md p-1.5 outline-none focus:ring-1 focus:ring-rose-400">
+                        <option value="">-- Categoria --</option>
+                    </select>
+                    <button onclick="excluirPrevisoesPorCategoria()" class="bg-rose-500 text-white px-3 py-1.5 rounded-md text-xs font-bold hover:bg-rose-600 transition">Excluir</button>
                 </div>
 
                 <div class="overflow-x-auto rounded-lg border border-slate-100">
@@ -590,6 +599,103 @@
             </div>
         </section>
 
+        <section id="tab-quitacao" class="tab-content hidden space-y-6">
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 space-y-3">
+                <div class="flex justify-between items-start flex-wrap gap-3">
+                    <div>
+                        <h2 class="font-bold text-slate-700 text-lg">🧮 Quitação de Compras Parceladas</h2>
+                        <p class="text-sm text-slate-500 mt-1">Simule se um investimento cobre as parcelas restantes de uma compra (com correção do indexador, ex.: INCC) e qual aporte mensal fecharia a conta. Nada é gravado até você clicar em <b>Efetivar</b> — aí as parcelas vão para a 📅 Previsão e os resgates/aportes para o 📈 investimento escolhido.</p>
+                    </div>
+                    <button onclick="novaCompraParcelada()" class="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-indigo-700 transition whitespace-nowrap">➕ Nova Compra</button>
+                </div>
+                <div id="lista-compras-parceladas" class="flex flex-wrap gap-2"></div>
+            </div>
+
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                <h3 class="font-bold text-slate-700 text-sm mb-3" id="form-compra-titulo">Dados da compra (a simulação recalcula automaticamente)</h3>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div class="col-span-2">
+                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Nome da compra</label>
+                        <input type="text" id="qp-nome" placeholder="Ex.: Apartamento" oninput="debouncedSimularQuitacao()" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Próxima parcela (R$)</label>
+                        <input type="number" step="0.01" id="qp-parcela" oninput="debouncedSimularQuitacao()" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Indexador (% a.a.)</label>
+                        <input type="number" step="0.01" id="qp-indexador" value="7" oninput="debouncedSimularQuitacao()" title="Correção estimada das parcelas (INCC, IPCA, IGP-M...). Use 0 para parcelas fixas." class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Parcelas totais</label>
+                        <input type="number" min="1" id="qp-total" oninput="debouncedSimularQuitacao()" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Já pagas</label>
+                        <input type="number" min="0" id="qp-pagas" value="0" oninput="debouncedSimularQuitacao()" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Mês da próx. parcela</label>
+                        <input type="month" id="qp-mes-primeira" onchange="debouncedSimularQuitacao()" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Dia do vencimento</label>
+                        <input type="number" min="1" max="31" id="qp-dia" value="10" oninput="debouncedSimularQuitacao()" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
+                    </div>
+                    <div class="col-span-2 md:col-span-4 border border-indigo-100 bg-indigo-50/40 rounded-lg p-3">
+                        <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+                            <div>
+                                <label class="block text-xs font-semibold text-indigo-600 uppercase">📈 Fontes de recursos — usadas na ordem abaixo</label>
+                                <p class="text-[11px] text-slate-400">O 1º investimento paga as parcelas até esgotar, depois o 2º, e assim por diante. Saldo e rendimento vêm da tabela de Investimentos (última taxa lançada) e podem ser ajustados. Use ↑↓ para mudar a ordem.</p>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <select id="qp-add-investimento" class="text-sm border border-indigo-200 rounded-md p-1.5 outline-none bg-white"></select>
+                                <button onclick="adicionarFonteQuitacao()" class="bg-indigo-600 text-white px-3 py-1.5 rounded-md text-xs font-bold hover:bg-indigo-700 whitespace-nowrap">➕ Adicionar</button>
+                            </div>
+                        </div>
+                        <div id="qp-fontes" class="space-y-2"></div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Aporte mensal (R$)</label>
+                        <div class="flex gap-1">
+                            <input type="number" step="0.01" id="qp-aporte" value="0" oninput="debouncedSimularQuitacao()" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
+                            <button onclick="usarAporteMinimo()" title="Preencher com o menor aporte que quita todas as parcelas" class="bg-emerald-600 text-white px-2 rounded-md text-xs font-bold hover:bg-emerald-700 whitespace-nowrap">mín.</button>
+                        </div>
+                    </div>
+                    <div class="col-span-2">
+                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Categoria da parcela (Previsão)</label>
+                        <select id="qp-categoria" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500"></select>
+                    </div>
+                    <div class="col-span-2 md:col-span-4 flex gap-2 justify-end flex-wrap">
+                        <button onclick="salvarCompraParcelada()" class="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-indigo-700 transition">💾 Salvar compra</button>
+                        <button id="btn-efetivar-compra" onclick="efetivarCompraParcelada()" class="bg-emerald-600 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-emerald-700 transition">✅ Efetivar no sistema</button>
+                        <button id="btn-desfazer-compra" onclick="desfazerEfetivacaoCompra()" class="hidden bg-amber-500 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-amber-600 transition">↩️ Desfazer efetivação</button>
+                        <button id="btn-excluir-compra" onclick="excluirCompraParcelada()" class="hidden bg-rose-600 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-rose-700 transition">🗑️ Excluir compra</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="quitacao-resultado" class="hidden space-y-6">
+                <div id="quitacao-veredicto" class="p-5 rounded-xl border text-base font-bold"></div>
+                <div id="quitacao-cards" class="grid grid-cols-2 lg:grid-cols-4 gap-4"></div>
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+                    <h3 class="text-sm font-bold text-slate-500 mb-4">Saldo projetado do investimento × parcelas</h3>
+                    <div class="relative w-full" style="height:260px"><canvas id="chartQuitacao"></canvas></div>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+                    <h3 class="text-base font-bold text-slate-700 border-b pb-2 mb-3">Projeção mês a mês</h3>
+                    <div class="overflow-x-auto rounded-lg border border-slate-100">
+                        <table class="w-full text-left text-sm text-slate-600">
+                            <thead class="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
+                                <tr id="quitacao-tabela-head"></tr>
+                            </thead>
+                            <tbody id="quitacao-tabela" class="divide-y divide-slate-100 bg-white"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
         <section id="tab-config" class="tab-content hidden space-y-6">
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100 space-y-2">
@@ -655,6 +761,10 @@
     </main>
 
     <script>
+        // ==========================================================================
+        // MÓDULO 1: CONFIGURAÇÃO INICIAL E ESTADO GLOBAL
+        // ==========================================================================
+
         // Registo do Service Worker para PWA
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
@@ -683,6 +793,7 @@
             investimentos: [],
             categories: { despesas: [], receitas: [] },
             orcamentos: {},
+            comprasParceladas: [],
             ultimoBackup: null,
             backupAdiadoAte: null
         };
@@ -698,6 +809,10 @@
         let editingLinhaMensalId = null;
         let contaSelecionadaId = null;
 
+        // ==========================================================================
+        // MÓDULO 2: UTILITÁRIOS E AUXILIARES (DATAS, MOEDAS, DEBOUNCE, DB)
+        // ==========================================================================
+
         function debounce(key, fn, delay = 300) {
             if (debounceTimers[key]) clearTimeout(debounceTimers[key]);
             debounceTimers[key] = setTimeout(() => {
@@ -712,6 +827,7 @@
         function debouncedCalcularSaldoAlvo() { debounce('calcularSaldoAlvo', () => calcularSaldoAlvo(), 100); }
         function debouncedCalcularSomaCategoriaFuturo() { debounce('calcularSomaCategoriaFuturo', () => calcularSomaCategoriaFuturo(), 100); }
         function debouncedBuscaGlobal() { debounce('buscaGlobal', () => executarBuscaGlobal(), 200); }
+        function debouncedSimularQuitacao() { debounce('simularQuitacao', () => renderSimulacaoQuitacao(), 250); }
 
         function safeRun(fn) { try { fn(); } catch(e) { console.error("Erro protegido em", fn.name, e); } }
 
@@ -737,6 +853,7 @@
                     appState.saldoInicial = Number(confObj.saldoInicial) || 0;
                     appState.categories = confObj.categories || { despesas: [], receitas: [] };
                     appState.orcamentos = confObj.orcamentos || {};
+                    appState.comprasParceladas = confObj.comprasParceladas || [];
                     appState.ultimoBackup = confObj.ultimoBackup || null;
                     appState.backupAdiadoAte = confObj.backupAdiadoAte || null;
                     appState.contas = confObj.contas || [];
@@ -752,7 +869,7 @@
         async function saveToDB() {
             try {
                 await db.transaction('rw', db.transacoes, db.cartao, db.previsoes, db.investimentos, db.config, async () => {
-                    await db.config.put({ id: 'global', saldoInicial: appState.saldoInicial, categories: appState.categories, orcamentos: appState.orcamentos, contas: appState.contas, ultimoBackup: appState.ultimoBackup, backupAdiadoAte: appState.backupAdiadoAte });
+                    await db.config.put({ id: 'global', saldoInicial: appState.saldoInicial, categories: appState.categories, orcamentos: appState.orcamentos, comprasParceladas: appState.comprasParceladas, contas: appState.contas, ultimoBackup: appState.ultimoBackup, backupAdiadoAte: appState.backupAdiadoAte });
                     await db.transacoes.clear(); if(appState.transactions.length > 0) await db.transacoes.bulkPut(appState.transactions);
                     await db.cartao.clear(); if(appState.ccTransactions.length > 0) await db.cartao.bulkPut(appState.ccTransactions);
                     await db.previsoes.clear(); if(appState.futureTransactions.length > 0) await db.previsoes.bulkPut(appState.futureTransactions);
@@ -817,14 +934,13 @@
                 else if (activeTab === 'tab-extrato') renderTransactionsBanco();
                 else if (activeTab === 'tab-cartao') renderTransactionsCartao();
                 else if (activeTab === 'tab-investimentos') renderInvestimentos();
+                else if (activeTab === 'tab-quitacao') renderQuitacao();
                 else if (activeTab === 'tab-config') renderCategoriesTab();
                 safeRun(atualizarLembreteBackup);
                 safeRun(atualizarInfoUltimoBackup);
             }).catch(e => alert("Erro ao salvar no banco de dados."));
         }
 
-        // Preenche um <select> de filtro com os meses (MM/AAAA) presentes na lista, do mais
-        // recente para o mais antigo, preservando a seleção atual quando ainda existir
         function preencherFiltroMeses(selectId, transacoes) {
             const select = document.getElementById(selectId);
             if (!select) return;
@@ -863,6 +979,7 @@
                 if (tabId === 'extrato') { renderContasUI(); preencherFormConta(); renderTransactionsBanco(); }
                 if (tabId === 'cartao') renderTransactionsCartao();
                 if (tabId === 'investimentos') renderInvestimentos();
+                if (tabId === 'quitacao') renderQuitacao();
                 if (tabId === 'config') { renderCategoriesTab(); safeRun(atualizarInfoUltimoBackup); }
             } catch(err) {}
         }
@@ -879,12 +996,10 @@
             }
         }
 
-        // Retorna uma cópia da lista de categorias em ordem alfabética (pt-BR, ignora acentos/maiúsculas)
         function sortedCats(arr) {
             return [...(arr || [])].sort((a, b) => String(a).localeCompare(String(b), 'pt-BR', { sensitivity: 'base' }));
         }
 
-        // Normaliza descrição para comparação: minúsculas, sem acentos, sem números/pontuação
         function normalizeDesc(s) {
             return String(s || '').toLowerCase()
                 .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -893,12 +1008,16 @@
                 .replace(/\s+/g, ' ').trim();
         }
 
+        // ==========================================================================
+        // MÓDULO 3: ENGENHARIA DE IMPORTAÇÃO E CATEGORIZAÇÃO AUTOMÁTICA
+        // ==========================================================================
+
         function findBestCategoryMatch(descricao, isDebito) {
             if(!descricao) return '';
             const desc = String(descricao).toLowerCase();
             const cats = (isDebito ? appState.categories.despesas : appState.categories.receitas) || [];
 
-            // 1) Aprende com o histórico: reutiliza a categoria mais frequente de descrições parecidas já categorizadas
+            // 1) Aprende com o histórico
             const alvo = normalizeDesc(descricao);
             if (alvo.length >= 4) {
                 const contagem = {};
@@ -918,7 +1037,7 @@
                 if (melhor) return melhor;
             }
 
-            // 2) Palavras-chave comuns na descrição
+            // 2) Palavras-chave comuns
             const commonKeywords = {
                 'mercado': 'Supermercado', 'atakadao': 'Supermercado', 'hiperideal': 'Supermercado', 'assai': 'Supermercado',
                 'drogaria': 'Farmácia', 'drogasil': 'Farmácia', 'pague menos': 'Farmácia', 'farmacia': 'Farmácia', 'farmácia': 'Farmácia',
@@ -960,7 +1079,6 @@
             } else { alert(`Nenhum lançamento encontrado em ${mes}/${ano}.`); }
         }
 
-        // ===== Rotina de importacao do Cartao (mesma logica original, agora reutilizavel) =====
         function processarConteudoCartao(content, e, dataVencimentoFatura, anoFaturaCartao) {
             try {
                 const lines = content.split(/\r?\n/);
@@ -1048,12 +1166,6 @@
             } catch (err) { alert("Erro ao processar o arquivo: " + err.message); e.target.value = ''; }
         }
 
-        // ===== Importacao de Fatura em PDF (Cartao) =====
-        // Le o PDF no navegador (pdf.js), extrai as secoes "Despesas",
-        // "Parcelamentos" e "Pagamento e Demais Creditos", converte para o
-        // formato Tipo,Data,Descricao,Parcela,Valor e entrega a MESMA rotina
-        // de importacao acima. Nos parcelamentos, o numero da parcela (ex.
-        // 12/12) vai no campo Parcela e a rotina o anexa a descricao.
         async function importarPdfFaturaCartao(file, e, dataVencimentoFatura, anoFaturaCartao) {
             try {
                 if (typeof pdfjsLib === 'undefined') {
@@ -1076,7 +1188,6 @@
             }
         }
 
-        // Extrai o texto do PDF linha a linha, respeitando o layout de 2 colunas
         async function extrairLinhasPdf(file) {
             const buf = await file.arrayBuffer();
             const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
@@ -1090,7 +1201,6 @@
                     .filter(it => it.str && it.str.trim() !== '')
                     .map(it => ({ str: it.str, x: it.transform[4], y: it.transform[5], w: it.width || 0 }));
 
-                // separa em coluna esquerda e direita (layout da fatura)
                 const colunas = [itens.filter(it => it.x < midX), itens.filter(it => it.x >= midX)];
                 for (const col of colunas) {
                     col.sort((a, b) => (b.y - a.y) || (a.x - b.x));
@@ -1122,20 +1232,16 @@
         }
 
         function valorPdfParaDecimal(v) {
-            // "1.344,76" -> "1344.76"
             const n = parseFloat(String(v).replace(/\./g, '').replace(',', '.'));
             return isNaN(n) ? null : n.toFixed(2);
         }
 
-        // Converte as linhas extraidas do PDF para o formato da rotina existente
         function converterPdfFaturaParaCsv(linhas) {
-            // Despesa avulsa: (opcional indicador "1 "/"2 "/"3 ") + data DD/MM + descricao + valor R$ (+ valor US$ opcional)
             const RE_TRANSACAO = /^(?:\d\s+)?(\d{2}\/\d{2})\s+(.+?)\s+(-?\d{1,3}(?:\.\d{3})*,\d{2})(?:\s+-?\d{1,3}(?:\.\d{3})*,\d{2})?$/;
-            // Parcelamento: idem, porem com o campo Parcela (NN/NN) entre a descricao e o valor
             const RE_PARCELAMENTO = /^(?:\d\s+)?(\d{2}\/\d{2})\s+(.+?)\s+(\d{2}\/\d{2})\s+(-?\d{1,3}(?:\.\d{3})*,\d{2})$/;
             const RE_IOF = /^(?:\d\s+)?IOF DESPESA NO EXTERIOR\s+(-?\d{1,3}(?:\.\d{3})*,\d{2})$/;
 
-            let modo = 'skip'; // 'despesa' | 'credito' | 'parcelamento' | 'skip'
+            let modo = 'skip'; 
             let ultimaData = null;
             let total = 0;
             const saida = ['Tipo,Data,Descricao,Parcela,Valor'];
@@ -1144,17 +1250,15 @@
                 const linhaLimpa = bruta.replace(/\s+/g, ' ').trim();
                 const norm = normalizarTextoPdf(linhaLimpa);
 
-                // Cabecalhos de secao
                 if (norm === 'PAGAMENTO E DEMAIS CREDITOS') { modo = 'credito'; continue; }
                 if (norm === 'PARCELAMENTOS') { modo = 'parcelamento'; continue; }
                 if (norm === 'DESPESAS') { modo = 'despesa'; continue; }
                 if (norm.startsWith('RESUMO DA FATURA') || norm.startsWith('SALDO TOTAL CONSOLIDADO') || norm.startsWith('JUROS E CUSTO EFETIVO')) { modo = 'skip'; continue; }
-                if (norm.indexOf('XXXX XXXX') !== -1) { modo = 'skip'; continue; } // cabecalho de portador: aguarda proxima secao
+                if (norm.indexOf('XXXX XXXX') !== -1) { modo = 'skip'; continue; }
                 if (modo === 'skip') continue;
                 if (norm.startsWith('VALOR TOTAL')) { modo = 'skip'; continue; }
                 if (norm.startsWith('COTACAO DOLAR')) continue;
 
-                // Parcelamentos: parcela (NN/NN) vai no campo Parcela; sao lancados como Despesa
                 if (modo === 'parcelamento') {
                     const mp = linhaLimpa.match(RE_PARCELAMENTO);
                     if (!mp) continue;
@@ -1170,7 +1274,6 @@
                     continue;
                 }
 
-                // IOF de despesa no exterior: linha sem data propria -> usa a data da compra anterior
                 const mIof = norm.match(RE_IOF);
                 if (mIof && modo === 'despesa' && ultimaData) {
                     const vIof = valorPdfParaDecimal(mIof[1]);
@@ -1193,7 +1296,6 @@
 
                 if (modo === 'credito') {
                     const descNorm = normalizarTextoPdf(descricao);
-                    // pagamento da fatura anterior nao e importado como lancamento
                     if (descNorm.indexOf('DEB AUTOM') !== -1 || descNorm.indexOf('PAGAMENTO') !== -1) { continue; }
                     saida.push(['Credito', data, descricao, '-', Math.abs(valorNum).toFixed(2)].join(','));
                     total++;
@@ -1304,7 +1406,6 @@
                                 dataStr = dataStr.replace(/-/g, '/');
                             }
 
-                            // Só importa linhas cujo campo de data contenha uma data válida (ignora saldo, totais, rodapé)
                             const mData = dataStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/);
                             if (!mData) continue;
                             const diaD = parseInt(mData[1], 10), mesD = parseInt(mData[2], 10);
@@ -1403,38 +1504,28 @@
             }
         }
 
+        // ==========================================================================
+        // MÓDULO 4: FUNÇÕES DE FORMATAÇÃO E CÁLCULO DE DATA
+        // ==========================================================================
+
         function formatCurrency(v) { return isNaN(Number(v)) ? "R$ 0,00" : Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
         function formatCurrencyNumber(v) { return isNaN(Number(v)) ? "0,00" : Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
         function converterDataBRParaDate(dataBR) { if(!dataBR) return new Date(); const p = dataBR.split('/'); return new Date(p[2], p[1]-1, p[0]); }
-
-        // Converte "YYYY-MM" para "YYYY-MM-DD" usando o último dia daquele mês
         function ultimoDiaMes(mesAno) {
             if(!mesAno) return mesAno;
             const [y, m] = mesAno.split('-').map(Number);
             const last = new Date(y, m, 0).getDate();
             return `${y}-${String(m).padStart(2,'0')}-${String(last).padStart(2,'0')}`;
         }
-
-        // Extrai "YYYY-MM" de uma string "YYYY-MM-DD" (ou já "YYYY-MM")
         function paraMesAno(dataStr) { return dataStr ? dataStr.substring(0,7) : dataStr; }
-
-        // Converte "DD/MM/YYYY" para "YYYY-MM"
         function dataBRParaMesAno(dataBR) { const p = dataBR.split('/'); return `${p[2]}-${p[1]}`; }
-
-        // Converte "DD/MM/YYYY" para "YYYY-MM-DD"
         function dataBRParaISO(dataBR) { const p = dataBR.split('/'); return `${p[2]}-${p[1]}-${p[0]}`; }
-
-        // Garante uma data completa "YYYY-MM-DD" (compatibilidade com registros antigos "YYYY-MM")
         function dataCompleta(d) { return (d && d.length === 7) ? ultimoDiaMes(d) : d; }
-
-        // Diferença em dias entre duas datas "YYYY-MM-DD" (d2 - d1)
         function diffDias(d1, d2) {
             const a = new Date(dataCompleta(d1) + 'T00:00:00');
             const b = new Date(dataCompleta(d2) + 'T00:00:00');
             return Math.round((b - a) / 86400000);
         }
-        // Número sequencial do mês (ano*12 + mês) de uma data em qualquer formato usado no app
-        // ("DD/MM/YYYY", "MM/YYYY", "YYYY-MM-DD", "YYYY-MM" ou "DD-MM-YYYY"); null se inválida
         function mesAnoNum(dataStr) {
             if (!dataStr) return null;
             let m, y;
@@ -1457,6 +1548,10 @@
             return parts.length !== 3 ? dataStrISO : `${parts[2]}/${parts[1]}/${parts[0]}`;
         }
 
+        // ==========================================================================
+        // MÓDULO 5: MOTOR DE DASHBOARD E RELATÓRIOS GERAIS
+        // ==========================================================================
+
         function updateSaldoDisplay() {
             const saldo = getSaldoAtualReal();
             const el = document.getElementById('card-saldo-real');
@@ -1466,7 +1561,6 @@
         function getSaldoAtualReal() {
             if (cachedSaldoAtual !== null) return cachedSaldoAtual;
             let total = 0;
-            // Soma o saldo inicial de cada conta marcada para refletir + suas transações
             for (let c of (appState.contas || [])) {
                 if (c.incluirDashboard === false) continue;
                 total += Number(c.saldoInicial) || 0;
@@ -1479,7 +1573,6 @@
             return cachedSaldoAtual;
         }
 
-        // MOTOR DE FILTRAGEM DO DASHBOARD ATUALIZADO (Robusto para todos os formatos de data)
         function renderRelatorio() {
             const filterEl = document.getElementById('dash-month-filter');
             let filterVal = filterEl ? filterEl.value : '';
@@ -1588,9 +1681,6 @@
             safeRun(() => renderEvolucaoMensal(endNum));
         }
 
-        // Gráfico de barras Entradas x Saídas (+ linha de balanço) dos 12 meses que
-        // terminam no mês de referência do Dashboard. Usa as mesmas fontes do relatório:
-        // contas correntes marcadas para refletir + cartão de crédito.
         function renderEvolucaoMensal(endNum) {
             const ctx = document.getElementById('chartEvolucao');
             if (!ctx) return;
@@ -1642,8 +1732,6 @@
             });
         }
 
-        // Painel de orçamento do Dashboard: compara o gasto de cada categoria no período
-        // filtrado com o limite mensal (multiplicado pelo nº de meses do período)
         function renderOrcamento(desMap, range) {
             const cont = document.getElementById('lista-orcamento');
             const resumo = document.getElementById('orcamento-resumo');
@@ -1693,6 +1781,10 @@
                 resumo.className = 'text-sm font-semibold whitespace-nowrap ' + (pctTotal > 100 ? 'text-rose-600' : (pctTotal >= 80 ? 'text-amber-600' : 'text-emerald-600'));
             }
         }
+
+        // ==========================================================================
+        // MÓDULO 6: SISTEMA DE PREVISÃO DE FUTURO, CRONOGRAMAS E REALIZADO
+        // ==========================================================================
 
         function updatePrevSumDropdown() {
             const dropdown = document.getElementById('prev-sum-categoria');
@@ -1756,6 +1848,21 @@
                 }
                 tbody.innerHTML = html;
             }
+            const selLimpa = document.getElementById('prev-limpar-categoria');
+            if (selLimpa) {
+                const contagem = {};
+                for (const f of appState.futureTransactions) {
+                    if (f.conciliado) continue;
+                    const c = f.categoria || 'Não Categorizado';
+                    contagem[c] = (contagem[c] || 0) + 1;
+                }
+                const atual = selLimpa.value;
+                selLimpa.innerHTML = '<option value="">-- Categoria --</option>' +
+                    Object.keys(contagem).sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }))
+                        .map(c => `<option value="${c.replace(/"/g, '&quot;')}">${escapeHtml(c)} (${contagem[c]})</option>`).join('');
+                if ([...selLimpa.options].some(o => o.value === atual)) selLimpa.value = atual;
+            }
+
             calcularSaldoAlvo(); calcularSomaCategoriaFuturo();
             safeRun(renderParcelamentosFuturos); safeRun(renderPrevistoRealizado);
         }
@@ -1877,10 +1984,6 @@
             }
         }
 
-        // ===== Previsto × Realizado =====
-
-        // Efetiva (concilia) uma previsão: registra o valor que realmente caiu no banco.
-        // A previsão sai do cronograma/simulador e passa a aparecer no painel Previsto × Realizado.
         function efetivarPrevisao(id) {
             const item = appState.futureTransactions.find(f => f.id === id); if(!item) return;
             const resp = prompt(`Valor realmente ${item.tipo === 'debito' ? 'pago' : 'recebido'} de "${item.descricao}"\n(previsto: ${formatCurrency(item.valor)}):`, Number(item.valor).toFixed(2));
@@ -1903,8 +2006,6 @@
             saveData();
         }
 
-        // Diferença normalizada: positiva = melhor que o previsto
-        // (despesa: gastou menos; receita: recebeu mais)
         function diferencaConciliacao(f) {
             const prev = Number(f.valor) || 0, real = Number(f.realizado) || 0;
             return f.tipo === 'debito' ? prev - real : real - prev;
@@ -2000,12 +2101,6 @@
             }
         }
 
-        // ===== Parcelamentos futuros do cartão =====
-
-        // Varre as faturas importadas em busca de lançamentos parcelados ("Parc. N/M") e
-        // projeta as parcelas restantes. Compras repetidas em faturas consecutivas
-        // (ex.: 3/12 em junho e 4/12 em julho) são deduplicadas pela descrição + total
-        // de parcelas + valor, mantendo a ocorrência mais recente.
         function calcularParcelamentosFuturos() {
             const RE_PARC = /parc\w*\.?\s*(\d{1,3})\s*\/\s*(\d{1,3})/i;
             const compras = {};
@@ -2079,15 +2174,570 @@
             if (totalEl) totalEl.innerText = formatCurrency(totalGeral);
         }
 
+        // ==========================================================================
+        // MÓDULO 7: QUITAÇÃO E SIMULADORES DE COMPRAS PARCELADAS
+        // ==========================================================================
+
+        let compraQuitacaoId = null;
+        let quitacaoChartInstance = null;
+
+        function taxaMensalEquivalente(taxaAA) { return Math.pow(1 + (Number(taxaAA) || 0) / 100, 1 / 12) - 1; }
+
+        function saldoAtualInvestimento(inv) {
+            if (inv && inv.historico && inv.historico.length) return inv.historico[inv.historico.length - 1].saldoFinal || 0;
+            return inv ? (inv.valorInicial || inv.valor || 0) : 0;
+        }
+
+        function taxaInvestimentoAtual(inv) {
+            if (inv && inv.historico && inv.historico.length) return Number(inv.historico[inv.historico.length - 1].taxaAnual) || 0;
+            return 0;
+        }
+
+        function normalizarFontesCompra(c) {
+            if (!c.fontes) {
+                c.fontes = c.investimentoId
+                    ? [{ investimentoId: c.investimentoId, taxa: Number(c.taxaRendimento) || 0, saldo: Number(c.saldoInicial) || 0 }]
+                    : [];
+            }
+            return c.fontes;
+        }
+
+        function simularQuitacao(p) {
+            const g = taxaMensalEquivalente(p.taxaIndexador);
+            const fontes = p.fontes || [];
+            const taxas = fontes.map(f => taxaMensalEquivalente(f.taxa));
+            const saldos = fontes.map(f => Number(f.saldo) || 0);
+            const linhas = [];
+            let quita = true, quebraEm = null, totalParcelas = 0;
+            for (let k = 0; k < p.restantes; k++) {
+                const parcela = p.valorParcela * Math.pow(1 + g, k);
+                let rendimento = 0;
+                for (let fi = 0; fi < saldos.length; fi++) {
+                    if (saldos[fi] > 0) { const r = saldos[fi] * taxas[fi]; saldos[fi] += r; rendimento += r; }
+                }
+                let aporteFonte = saldos.findIndex(s => s > 0);
+                if (aporteFonte === -1) aporteFonte = saldos.length - 1;
+                if (p.aporte > 0 && saldos.length) saldos[aporteFonte] += p.aporte;
+
+                let restante = parcela;
+                const resgates = [];
+                for (let fi = 0; fi < saldos.length && restante > 0.004; fi++) {
+                    if (saldos[fi] <= 0) continue;
+                    const usa = Math.min(saldos[fi], restante);
+                    saldos[fi] -= usa; restante -= usa;
+                    resgates.push({ fi, valor: usa });
+                }
+                let falta = 0;
+                if (restante > 0.004) {
+                    falta = restante;
+                    if (quita) { quita = false; quebraEm = k; }
+                    if (saldos.length) saldos[saldos.length - 1] -= restante;
+                }
+                totalParcelas += parcela;
+                linhas.push({ k, parcela, rendimento, aporte: p.aporte, aporteFonte, resgates, falta, saldos: saldos.slice(), saldoTotal: saldos.reduce((a, b) => a + b, 0) });
+            }
+            return { linhas, quita, quebraEm, sobraFinal: linhas.length ? linhas[linhas.length - 1].saldoTotal : saldos.reduce((a, b) => a + b, 0), totalParcelas };
+        }
+
+        function aporteMinimoQuitacao(p) {
+            if (!(p.fontes || []).length) return 0;
+            if (simularQuitacao({ ...p, aporte: 0 }).quita) return 0;
+            const somaInicial = p.fontes.reduce((a, f) => a + (Number(f.saldo) || 0), 0);
+            let lo = 0;
+            let hi = p.valorParcela * Math.pow(1 + taxaMensalEquivalente(p.taxaIndexador), p.restantes) + Math.max(0, -somaInicial);
+            for (let it = 0; it < 60; it++) {
+                const mid = (lo + hi) / 2;
+                if (simularQuitacao({ ...p, aporte: mid }).quita) hi = mid; else lo = mid;
+            }
+            return Math.ceil(hi * 100) / 100;
+        }
+
+        let fontesQuitacao = [];
+
+        function adicionarFonteQuitacao() {
+            const sel = document.getElementById('qp-add-investimento');
+            const inv = appState.investimentos.find(i => i.id === sel.value);
+            if (!inv) { alert("Cadastre/selecione um investimento primeiro."); return; }
+            if (fontesQuitacao.some(f => f.investimentoId === inv.id)) return;
+            fontesQuitacao.push({
+                investimentoId: inv.id,
+                taxa: taxaInvestimentoAtual(inv),
+                saldo: Math.round(saldoAtualInvestimento(inv) * 100) / 100
+            });
+            renderFontesQuitacao(); renderSimulacaoQuitacao();
+        }
+
+        function removerFonteQuitacao(i) { fontesQuitacao.splice(i, 1); renderFontesQuitacao(); renderSimulacaoQuitacao(); }
+
+        function moverFonteQuitacao(i, delta) {
+            const j = i + delta;
+            if (j < 0 || j >= fontesQuitacao.length) return;
+            [fontesQuitacao[i], fontesQuitacao[j]] = [fontesQuitacao[j], fontesQuitacao[i]];
+            renderFontesQuitacao(); renderSimulacaoQuitacao();
+        }
+
+        function atualizarFonteQuitacao(i, campo, valor) {
+            if (!fontesQuitacao[i]) return;
+            fontesQuitacao[i][campo] = parseFloat(valor) || 0;
+            debouncedSimularQuitacao();
+        }
+
+        function renderFontesQuitacao() {
+            const cont = document.getElementById('qp-fontes');
+            const selAdd = document.getElementById('qp-add-investimento');
+            if (!cont || !selAdd) return;
+            selAdd.innerHTML = '';
+            const disponiveis = (appState.investimentos || []).filter(inv => !fontesQuitacao.some(f => f.investimentoId === inv.id));
+            if (!disponiveis.length) {
+                selAdd.innerHTML = '<option value="">-- sem investimentos disponíveis --</option>';
+            } else {
+                for (const inv of disponiveis) {
+                    const opt = document.createElement('option');
+                    opt.value = inv.id;
+                    opt.innerText = `${inv.nome} (${inv.banco}) — ${formatCurrency(saldoAtualInvestimento(inv))}`;
+                    selAdd.appendChild(opt);
+                }
+            }
+            if (!fontesQuitacao.length) {
+                cont.innerHTML = '<p class="text-xs text-slate-400">Nenhuma fonte adicionada. Escolha um investimento acima e clique em ➕ Adicionar.</p>';
+                return;
+            }
+            let html = '';
+            for (let i = 0; i < fontesQuitacao.length; i++) {
+                const f = fontesQuitacao[i];
+                const inv = appState.investimentos.find(x => x.id === f.investimentoId);
+                const nome = inv ? `${inv.nome} (${inv.banco})` : '(investimento removido)';
+                html += `
+                    <div class="flex flex-wrap items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-2">
+                        <span class="w-6 h-6 flex items-center justify-center bg-indigo-600 text-white rounded-full text-xs font-bold shrink-0">${i + 1}º</span>
+                        <span class="font-medium text-sm text-slate-700 flex-1 min-w-[130px] truncate">${escapeHtml(nome)}</span>
+                        <label class="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">Saldo (R$)
+                            <input type="number" step="0.01" value="${f.saldo}" onchange="atualizarFonteQuitacao(${i}, 'saldo', this.value)" class="w-28 text-sm font-normal border border-slate-200 rounded-md p-1.5 text-right outline-none focus:ring-1 focus:ring-indigo-500">
+                        </label>
+                        <label class="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">Rend. % a.a.
+                            <input type="number" step="0.01" value="${f.taxa}" onchange="atualizarFonteQuitacao(${i}, 'taxa', this.value)" class="w-20 text-sm font-normal border border-slate-200 rounded-md p-1.5 text-right outline-none focus:ring-1 focus:ring-indigo-500">
+                        </label>
+                        <div class="flex gap-1">
+                            <button onclick="moverFonteQuitacao(${i}, -1)" title="Usar antes" class="text-indigo-500 hover:bg-indigo-50 bg-white border p-1 rounded transition text-xs font-bold ${i === 0 ? 'opacity-30' : ''}">↑</button>
+                            <button onclick="moverFonteQuitacao(${i}, 1)" title="Usar depois" class="text-indigo-500 hover:bg-indigo-50 bg-white border p-1 rounded transition text-xs font-bold ${i === fontesQuitacao.length - 1 ? 'opacity-30' : ''}">↓</button>
+                            <button onclick="removerFonteQuitacao(${i})" title="Remover fonte" class="text-rose-500 hover:bg-rose-50 bg-white border p-1 rounded transition text-xs font-bold">✕</button>
+                        </div>
+                    </div>`;
+            }
+            cont.innerHTML = html;
+        }
+
+        function lerFormCompra() {
+            const total = parseInt(document.getElementById('qp-total').value) || 0;
+            const pagas = parseInt(document.getElementById('qp-pagas').value) || 0;
+            return {
+                nome: document.getElementById('qp-nome').value.trim(),
+                valorParcela: parseFloat(document.getElementById('qp-parcela').value) || 0,
+                total, pagas,
+                restantes: Math.max(0, total - pagas),
+                taxaIndexador: parseFloat(document.getElementById('qp-indexador').value) || 0,
+                mesPrimeira: document.getElementById('qp-mes-primeira').value,
+                dia: Math.min(31, Math.max(1, parseInt(document.getElementById('qp-dia').value) || 10)),
+                fontes: fontesQuitacao.map(f => ({ ...f })),
+                aporte: parseFloat(document.getElementById('qp-aporte').value) || 0,
+                categoria: document.getElementById('qp-categoria').value
+            };
+        }
+
+        function dataParcelaQuitacao(mesPrimeira, dia, k) {
+            const [y, m] = mesPrimeira.split('-').map(Number);
+            const alvoMes = m - 1 + k;
+            const ultimo = new Date(y, alvoMes + 1, 0).getDate();
+            const d = new Date(y, alvoMes, Math.min(dia, ultimo));
+            return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+        }
+
+        function nomeCurtoInvestimento(investimentoId) {
+            const inv = appState.investimentos.find(x => x.id === investimentoId);
+            return inv ? inv.nome : '(removido)';
+        }
+
+        function renderSimulacaoQuitacao() {
+            const res = document.getElementById('quitacao-resultado');
+            if (!res) return;
+            const p = lerFormCompra();
+            
+            // Modificado: Deixou de exigir p.fontes.length > 0 para desenhar a simulação
+            if (!p.valorParcela || !p.restantes || !p.mesPrimeira) { res.classList.add('hidden'); return; }
+            res.classList.remove('hidden');
+
+            const sim = simularQuitacao(p);
+            const temFontes = p.fontes && p.fontes.length > 0;
+            const aporteMin = temFontes ? aporteMinimoQuitacao(p) : 0;
+            const nomesOrdem = temFontes ? p.fontes.map((f, i) => `${i + 1}º ${escapeHtml(nomeCurtoInvestimento(f.investimentoId))}`).join(' → ') : '';
+
+            const ver = document.getElementById('quitacao-veredicto');
+            if (!temFontes) {
+                ver.className = "p-5 rounded-xl border text-base font-bold bg-slate-50 border-slate-200 text-slate-800";
+                ver.innerHTML = `ℹ️ Nenhum investimento atrelado. As <b>${p.restantes} parcelas</b> serão apenas agendadas na Previsão.`;
+            } else if (sim.quita) {
+                ver.className = "p-5 rounded-xl border text-base font-bold bg-emerald-50 border-emerald-200 text-emerald-800";
+                ver.innerHTML = `✅ As fontes (${nomesOrdem}) ${p.aporte > 0 ? `com aporte de ${formatCurrency(p.aporte)}/mês ` : ''}cobrem as <b>${p.restantes} parcelas restantes</b> — sobra projetada de <b>${formatCurrency(sim.sobraFinal)}</b> ao final.`;
+            } else {
+                ver.className = "p-5 rounded-xl border text-base font-bold bg-rose-50 border-rose-200 text-rose-800";
+                ver.innerHTML = `⚠️ As fontes (${nomesOrdem}) esgotam na <b>parcela ${p.pagas + sim.quebraEm + 1} de ${p.total}</b>. Aporte mensal necessário para quitar tudo: <b>${formatCurrency(aporteMin)}</b>.`;
+            }
+
+            const cards = document.getElementById('quitacao-cards');
+            const somaSaldos = temFontes ? p.fontes.reduce((a, f) => a + (Number(f.saldo) || 0), 0) : 0;
+            const taxaMedia = somaSaldos > 0 ? p.fontes.reduce((a, f) => a + (Number(f.taxa) || 0) * (Number(f.saldo) || 0), 0) / somaSaldos : 0;
+            const rotuloComparativo = !temFontes 
+                ? `Sem um investimento vinculado, as parcelas serão pagas pelo saldo geral da sua conta corrente.`
+                : (taxaMedia > p.taxaIndexador
+                    ? `Rendimento médio das fontes (${taxaMedia.toFixed(1)}% a.a.) supera o indexador (${p.taxaIndexador}% a.a.): manter aplicado e pagar mês a mês tende a ser melhor que quitar à vista.`
+                    : `O indexador (${p.taxaIndexador}% a.a.) corre acima do rendimento médio das fontes (${taxaMedia.toFixed(1)}% a.a.): avalie antecipar/quitar as parcelas.`);
+            
+            cards.innerHTML = `
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+                    <p class="text-xs font-semibold text-slate-500 uppercase">Parcelas restantes</p>
+                    <p class="text-2xl font-bold text-slate-700 mt-1">${p.restantes}</p>
+                    <p class="text-[10px] text-slate-400 mt-1">de ${p.total} (${p.pagas} pagas)</p>
+                </div>
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+                    <p class="text-xs font-semibold text-rose-500 uppercase">Total corrigido a pagar</p>
+                    <p class="text-2xl font-bold text-rose-600 mt-1">${formatCurrency(sim.totalParcelas)}</p>
+                    <p class="text-[10px] text-slate-400 mt-1">soma das parcelas com ${p.taxaIndexador}% a.a.</p>
+                </div>
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+                    <p class="text-xs font-semibold text-emerald-600 uppercase">Aporte mínimo</p>
+                    <p class="text-2xl font-bold text-emerald-600 mt-1">${temFontes ? formatCurrency(aporteMin) : '—'}</p>
+                    <p class="text-[10px] text-slate-400 mt-1">por mês, para quitar sem faltar saldo</p>
+                </div>
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+                    <p class="text-xs font-semibold text-indigo-500 uppercase">Quitar × manter aplicado</p>
+                    <p class="text-xs text-slate-600 mt-2">${rotuloComparativo}</p>
+                </div>`;
+
+            const head = document.getElementById('quitacao-tabela-head');
+            head.innerHTML = `
+                <th class="p-3 whitespace-nowrap">Parcela</th>
+                <th class="p-3 whitespace-nowrap">Vencimento</th>
+                <th class="p-3 text-right whitespace-nowrap">Parcela corrigida</th>
+                ${temFontes ? `
+                <th class="p-3 text-right whitespace-nowrap">Rendimento</th>
+                <th class="p-3 text-right whitespace-nowrap">Aporte</th>
+                ${p.fontes.map((f, i) => `<th class="p-3 text-right whitespace-nowrap">${i + 1}º ${escapeHtml(nomeCurtoInvestimento(f.investimentoId))}</th>`).join('')}
+                <th class="p-3 text-right whitespace-nowrap">Saldo total</th>` : ''}`;
+
+            const tbody = document.getElementById('quitacao-tabela');
+            let html = '';
+            for (const l of sim.linhas) {
+                let celulasFontesHTML = '';
+                if (temFontes) {
+                    const corSaldo = l.saldoTotal >= 0 ? 'text-indigo-600' : 'text-rose-600';
+                    const celulasFontes = l.saldos.map((s, fi) => {
+                        const resgate = l.resgates.find(r => r.fi === fi);
+                        return `<td class="p-3 text-right whitespace-nowrap ${s > 0.004 ? 'text-slate-600' : 'text-slate-300'}">
+                            ${formatCurrency(s)}
+                            ${resgate ? `<span class="block text-[10px] text-rose-500">− ${formatCurrency(resgate.valor)}</span>` : ''}
+                        </td>`;
+                    }).join('');
+                    
+                    celulasFontesHTML = `
+                        <td class="p-3 text-right whitespace-nowrap text-emerald-600">${formatCurrency(l.rendimento)}</td>
+                        <td class="p-3 text-right whitespace-nowrap text-slate-500">${l.aporte > 0 ? formatCurrency(l.aporte) : '—'}</td>
+                        ${celulasFontes}
+                        <td class="p-3 text-right whitespace-nowrap font-bold ${corSaldo}">${formatCurrency(l.saldoTotal)}</td>
+                    `;
+                }
+
+                html += `
+                    <tr class="${l.falta > 0 && temFontes ? 'bg-rose-50' : 'hover:bg-slate-50'}">
+                        <td class="p-3 font-semibold text-slate-600">${p.pagas + l.k + 1}/${p.total}</td>
+                        <td class="p-3 whitespace-nowrap">${dataParcelaQuitacao(p.mesPrimeira, p.dia, l.k)}</td>
+                        <td class="p-3 text-right whitespace-nowrap text-rose-600 font-medium">${formatCurrency(l.parcela)}</td>
+                        ${celulasFontesHTML}
+                    </tr>`;
+            }
+            tbody.innerHTML = html;
+
+            try {
+                const ctx = document.getElementById('chartQuitacao');
+                if (ctx) {
+                    const labels = sim.linhas.map(l => dataParcelaQuitacao(p.mesPrimeira, p.dia, l.k).substring(3));
+                    let datasets = [
+                        { label: 'Parcela corrigida', data: sim.linhas.map(l => l.parcela), backgroundColor: 'rgba(244, 63, 94, 0.6)', borderRadius: 3, order: 2 }
+                    ];
+
+                    if (temFontes) {
+                        const coresFontes = ['#0ea5e9', '#10b981', '#f59e0b', '#8b5cf6', '#64748b'];
+                        const datasetsFontes = p.fontes.map((f, fi) => ({
+                            label: `${fi + 1}º ${nomeCurtoInvestimento(f.investimentoId)}`,
+                            data: sim.linhas.map(l => Math.max(0, l.saldos[fi])),
+                            type: 'line', borderColor: coresFontes[fi % coresFontes.length], backgroundColor: coresFontes[fi % coresFontes.length],
+                            borderWidth: 1.5, borderDash: [5, 3], pointRadius: 0, tension: 0.3, order: 1
+                        }));
+                        datasets.push({ label: 'Saldo total', data: sim.linhas.map(l => l.saldoTotal), type: 'line', borderColor: '#4f46e5', backgroundColor: '#4f46e5', borderWidth: 2, pointRadius: 3, tension: 0.3, order: 1 });
+                        datasets.push(...datasetsFontes);
+                    }
+
+                    if (quitacaoChartInstance) quitacaoChartInstance.destroy();
+                    quitacaoChartInstance = new Chart(ctx.getContext('2d'), {
+                        type: 'bar',
+                        data: {
+                            labels,
+                            datasets: datasets
+                        },
+                        options: {
+                            responsive: true, maintainAspectRatio: false,
+                            interaction: { mode: 'index', intersect: false },
+                            plugins: {
+                                legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } },
+                                tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${formatCurrency(c.parsed.y)}` } }
+                            },
+                            scales: {
+                                x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+                                y: { ticks: { font: { size: 10 }, callback: (v) => formatCurrencyNumber(v) } }
+                            }
+                        }
+                    });
+                }
+            } catch (e) {}
+        }
+
+        function usarAporteMinimo() {
+            const p = lerFormCompra();
+            if (!p.valorParcela || !p.restantes || !p.fontes.length) return;
+            document.getElementById('qp-aporte').value = aporteMinimoQuitacao(p).toFixed(2);
+            renderSimulacaoQuitacao();
+        }
+
+        function renderQuitacao() {
+            if (!document.getElementById('qp-fontes')) return;
+            renderFontesQuitacao();
+
+            const selCat = document.getElementById('qp-categoria');
+            const catAtual = selCat.value;
+            selCat.innerHTML = '<option value="__nova__">➕ Criar categoria com o nome da compra</option>';
+            for (const c of sortedCats(appState.categories.despesas)) {
+                const opt = document.createElement('option'); opt.value = c; opt.innerText = c; selCat.appendChild(opt);
+            }
+            if ([...selCat.options].some(o => o.value === catAtual)) selCat.value = catAtual;
+
+            if (!document.getElementById('qp-mes-primeira').value) {
+                const t = new Date();
+                document.getElementById('qp-mes-primeira').value = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}`;
+            }
+
+            renderListaComprasParceladas();
+            atualizarBotoesCompra();
+            renderSimulacaoQuitacao();
+        }
+
+        function renderListaComprasParceladas() {
+            const cont = document.getElementById('lista-compras-parceladas');
+            if (!cont) return;
+            if (!appState.comprasParceladas.length) {
+                cont.innerHTML = '<p class="text-xs text-slate-400">Nenhuma compra cadastrada ainda. Preencha o formulário abaixo e clique em 💾 Salvar compra.</p>';
+                return;
+            }
+            let html = '';
+            for (const c of appState.comprasParceladas) {
+                const ativa = c.id === compraQuitacaoId;
+                const badge = c.status === 'efetivada'
+                    ? '<span class="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold">EFETIVADA</span>'
+                    : '<span class="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-bold">SIMULAÇÃO</span>';
+                html += `
+                    <button onclick="carregarCompraParcelada('${c.id}')" class="flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition ${ativa ? 'bg-indigo-600 text-white border-indigo-700' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}">
+                        ${escapeHtml(c.nome)} ${badge}
+                        <span class="text-[10px] ${ativa ? 'text-indigo-200' : 'text-slate-400'}">${Math.max(0, c.total - c.pagas)} de ${c.total} restantes</span>
+                    </button>`;
+            }
+            cont.innerHTML = html;
+        }
+
+        function atualizarBotoesCompra() {
+            const compra = appState.comprasParceladas.find(c => c.id === compraQuitacaoId);
+            const efetivada = compra && compra.status === 'efetivada';
+            const btnEf = document.getElementById('btn-efetivar-compra');
+            const btnDes = document.getElementById('btn-desfazer-compra');
+            const btnExc = document.getElementById('btn-excluir-compra');
+            if (btnEf) btnEf.classList.toggle('hidden', !!efetivada);
+            if (btnDes) btnDes.classList.toggle('hidden', !efetivada);
+            if (btnExc) btnExc.classList.toggle('hidden', !compra);
+            document.getElementById('form-compra-titulo').innerText = compra
+                ? `${compra.nome} — ${efetivada ? 'efetivada (desfaça para editar valores e re-efetivar)' : 'em simulação'}`
+                : 'Dados da compra (a simulação recalcula automaticamente)';
+        }
+
+        function novaCompraParcelada() {
+            compraQuitacaoId = null;
+            fontesQuitacao = [];
+            for (const id of ['qp-nome', 'qp-parcela', 'qp-total']) document.getElementById(id).value = '';
+            document.getElementById('qp-pagas').value = '0';
+            document.getElementById('qp-aporte').value = '0';
+            document.getElementById('qp-indexador').value = '7';
+            renderQuitacao();
+        }
+
+        function salvarCompraParcelada(silencioso) {
+            const p = lerFormCompra();
+            if (!p.nome || !p.valorParcela || !p.total || !p.mesPrimeira) { alert("Preencha ao menos: nome, valor da parcela, parcelas totais e mês da próxima parcela."); return null; }
+            let compra = appState.comprasParceladas.find(c => c.id === compraQuitacaoId);
+            if (compra && compra.status === 'efetivada') { alert("Esta compra já foi efetivada. Desfaça a efetivação antes de alterá-la."); return null; }
+            if (!compra) {
+                compra = { id: 'compra_' + Date.now(), status: 'simulacao' };
+                appState.comprasParceladas.push(compra);
+                compraQuitacaoId = compra.id;
+            }
+            Object.assign(compra, p);
+            saveData();
+            if (!silencioso) alert("Compra salva. Use ✅ Efetivar quando quiser lançar as parcelas no sistema.");
+            return compra;
+        }
+
+        function carregarCompraParcelada(id) {
+            const c = appState.comprasParceladas.find(x => x.id === id);
+            if (!c) return;
+            compraQuitacaoId = id;
+            fontesQuitacao = normalizarFontesCompra(c).map(f => ({ ...f }));
+            document.getElementById('qp-nome').value = c.nome;
+            document.getElementById('qp-parcela').value = c.valorParcela;
+            document.getElementById('qp-total').value = c.total;
+            document.getElementById('qp-pagas').value = c.pagas;
+            document.getElementById('qp-indexador').value = c.taxaIndexador;
+            document.getElementById('qp-mes-primeira').value = c.mesPrimeira;
+            document.getElementById('qp-dia').value = c.dia;
+            document.getElementById('qp-aporte').value = c.aporte;
+            renderQuitacao();
+            document.getElementById('qp-categoria').value = c.categoria || '__nova__';
+            renderSimulacaoQuitacao();
+        }
+
+        function garantirCategoria(tipo, nome) {
+            if (!appState.categories[tipo]) appState.categories[tipo] = [];
+            if (!appState.categories[tipo].includes(nome)) appState.categories[tipo].push(nome);
+            return nome;
+        }
+
+function efetivarCompraParcelada() {
+            const compra = salvarCompraParcelada(true);
+            if (!compra) return;
+            
+            const temFontes = (compra.fontes && compra.fontes.length > 0);
+            const sim = simularQuitacao(compra);
+            
+            if (temFontes && !sim.quita) { 
+                alert("A simulação não quita todas as parcelas. Ajuste as fontes antes de efetivar."); 
+                return; 
+            }
+
+            if (!confirm(`Efetivar "${compra.nome}" com conciliação líquida (Aporte - Resgate)?`)) return;
+
+            const catParcela = garantirCategoria('despesas', compra.categoria !== '__nova__' ? compra.categoria : compra.nome);
+            const catResgate = garantirCategoria('receitas', 'Resgate Investimento');
+            const catAporte = garantirCategoria('despesas', 'Aporte Investimento');
+
+            for (const l of sim.linhas) {
+                const dataBR = dataParcelaQuitacao(compra.mesPrimeira, compra.dia, l.k);
+                const nParc = `${compra.pagas + l.k + 1}/${compra.total}`;
+
+                if (temFontes) {
+                    // 1. Dicionário para conciliar (Soma aportes, subtrai resgates)
+                    let saldoLiquidoPorInv = {}; 
+
+                    // Computa todos os resgates do mês
+                    for (const r of l.resgates) {
+                        const fonte = compra.fontes[r.fi];
+                        if (!saldoLiquidoPorInv[fonte.investimentoId]) saldoLiquidoPorInv[fonte.investimentoId] = 0;
+                        saldoLiquidoPorInv[fonte.investimentoId] -= r.valor;
+                    }
+
+                    // Computa o aporte do mês
+                    if (compra.aporte > 0.005) {
+                        const fonteAporte = compra.fontes[l.aporteFonte] || compra.fontes[0];
+                        if (!saldoLiquidoPorInv[fonteAporte.investimentoId]) saldoLiquidoPorInv[fonteAporte.investimentoId] = 0;
+                        saldoLiquidoPorInv[fonteAporte.investimentoId] += compra.aporte;
+                    }
+
+                    // 2. Lança apenas o valor resultante da subtração
+                    for (const invId in saldoLiquidoPorInv) {
+                        const valorConciliado = Math.round(saldoLiquidoPorInv[invId] * 100) / 100;
+
+                        if (valorConciliado < -0.005) { 
+                            // Resultado é negativo: houve mais resgate que aporte (Resgate Líquido)
+                            const futResgate = {
+                                id: `fut_${compra.id}_r${l.k}_${invId}`, data: dataBR, tipo: 'credito', valor: Math.abs(valorConciliado),
+                                descricao: `Resgate Líquido p/ ${compra.nome} (parc. ${nParc}) — ${nomeCurtoInvestimento(invId)}`, categoria: catResgate,
+                                investimentoId: invId, compraId: compra.id
+                            };
+                            aplicarReflexoInvestimento(futResgate);
+                            appState.futureTransactions.push(futResgate);
+                        } else if (valorConciliado > 0.005) { 
+                            // Resultado é positivo: houve mais aporte que resgate (Aporte Líquido)
+                            const futAporte = {
+                                id: `fut_${compra.id}_a${l.k}_${invId}`, data: dataBR, tipo: 'debito', valor: valorConciliado,
+                                descricao: `Aporte Líquido p/ ${compra.nome} — ${nomeCurtoInvestimento(invId)}`, categoria: catAporte,
+                                investimentoId: invId, compraId: compra.id
+                            };
+                            aplicarReflexoInvestimento(futAporte);
+                            appState.futureTransactions.push(futAporte);
+                        }
+                    }
+                }
+
+                // 3. Lança a parcela normal
+                appState.futureTransactions.push({
+                    id: `fut_${compra.id}_p${l.k}`, data: dataBR, tipo: 'debito', valor: Math.round(l.parcela * 100) / 100,
+                    descricao: `${compra.nome} (parcela ${nParc})`, categoria: catParcela,
+                    investimentoId: '', compraId: compra.id
+                });
+            }
+            
+            compra.status = 'efetivada';
+            saveData();
+            alert(`"${compra.nome}" efetivada com sucesso e saldos conciliados!`);
+        }
+
+        function desfazerEfetivacaoCompra() {
+            const compra = appState.comprasParceladas.find(c => c.id === compraQuitacaoId);
+            if (!compra || compra.status !== 'efetivada') return;
+            const gerados = appState.futureTransactions.filter(f => f.compraId === compra.id);
+            if (!confirm(`Desfazer a efetivação de "${compra.nome}"?\n${gerados.length} lançamentos serão removidos da Previsão e os movimentos revertidos no investimento.`)) return;
+            for (const f of gerados) reverterReflexoInvestimento(f);
+            appState.futureTransactions = appState.futureTransactions.filter(f => f.compraId !== compra.id);
+            compra.status = 'simulacao';
+            saveData();
+        }
+
+        function excluirCompraParcelada() {
+            const compra = appState.comprasParceladas.find(c => c.id === compraQuitacaoId);
+            if (!compra) return;
+            if (compra.status === 'efetivada') { alert("Desfaça a efetivação antes de excluir a compra."); return; }
+            if (!confirm(`Excluir a compra "${compra.nome}"? (apenas o cadastro da simulação)`)) return;
+            appState.comprasParceladas = appState.comprasParceladas.filter(c => c.id !== compra.id);
+            compraQuitacaoId = null;
+            saveData();
+        }
+
+        function excluirPrevisoesPorCategoria() {
+            const sel = document.getElementById('prev-limpar-categoria');
+            const cat = sel ? sel.value : '';
+            if (!cat) { alert("Escolha uma categoria."); return; }
+            const alvo = appState.futureTransactions.filter(f => !f.conciliado && (f.categoria || 'Não Categorizado') === cat);
+            if (!alvo.length) { alert("Nenhum agendamento pendente nessa categoria."); return; }
+            if (!confirm(`Excluir ${alvo.length} agendamento(s) pendente(s) da categoria "${cat}"?\n\n• Previsões já efetivadas (Previsto × Realizado) não serão tocadas.\n• Reflexos em investimentos serão revertidos.`)) return;
+            for (const f of alvo) reverterReflexoInvestimento(f);
+            const ids = new Set(alvo.map(f => f.id));
+            appState.futureTransactions = appState.futureTransactions.filter(f => !ids.has(f.id));
+            saveData();
+        }
+
+        // ==========================================================================
+        // MÓDULO 8: CONTAS CORRENTES, TRANSAÇÕES E UI DOS LANÇAMENTOS
+        // ==========================================================================
+
         function assignCategory(transactionId, category, type, selEl) {
             const lista = type === 'banco' ? appState.transactions : (type === 'cartao' ? appState.ccTransactions : null);
             const transaction = lista ? lista.find(t => t.id === transactionId) : null;
             if (!transaction) return;
             transaction.categoria = category;
             cachedSaldoAtual = null;
-            // Com o select em mãos e sem o filtro "pendentes" ativo, atualiza a linha no
-            // lugar e persiste em segundo plano — evita re-renderizar a lista inteira
-            // (que é lento e perde a posição de rolagem) a cada categorização
             const filtroEl = document.getElementById(type === 'banco' ? 'filterSelectBanco' : 'filterSelectCartao');
             if (selEl && (!filtroEl || filtroEl.value !== 'pendentes')) {
                 selEl.dataset.cat = category;
@@ -2100,18 +2750,15 @@
             saveData();
         }
 
-        // ====== CONTAS CORRENTES (múltiplas) ======
         function getContaById(id) { return (appState.contas || []).find(c => c.id === id) || null; }
-
         function contaIncluida(contaId) {
             const c = getContaById(contaId);
-            if (!c) return false; // transação órfã não soma (evita inconsistências)
+            if (!c) return false;
             return c.incluirDashboard !== false;
         }
 
         function garantirContas() {
             if (!Array.isArray(appState.contas)) appState.contas = [];
-            // Cria a conta principal na 1ª execução, herdando o saldo inicial antigo
             if (appState.contas.length === 0) {
                 appState.contas.push({
                     id: 'conta_principal',
@@ -2120,7 +2767,6 @@
                     incluirDashboard: true
                 });
             }
-            // Migra transações antigas sem conta para a primeira conta
             const idsValidos = new Set(appState.contas.map(c => c.id));
             const principalId = appState.contas[0].id;
             for (let t of (appState.transactions || [])) {
@@ -2142,7 +2788,7 @@
         function renderContasUI() {
             const select = document.getElementById('conta-select');
             if (!select) return;
-            const prev = select.value; // preserva o modo "NOVA CONTA" durante a criação
+            const prev = select.value; 
             select.innerHTML = '<option value="nova">-- NOVA CONTA --</option>';
             for (let c of (appState.contas || [])) {
                 const opt = document.createElement('option');
@@ -2255,7 +2901,7 @@
         function toggleContaDashboard(id) {
             const c = getContaById(id);
             if (!c) return;
-            c.incluirDashboard = !(c.incluirDashboard !== false); // alterna inclusão
+            c.incluirDashboard = !(c.incluirDashboard !== false);
             renderContasUI();
             saveData();
         }
@@ -2310,11 +2956,6 @@
             XLSX.writeFile(wb, nomeArq);
         }
 
-        // ===== Selects de categoria "preguiçosos" =====
-        // As listas de Conta Corrente e Cartão podem ter milhares de linhas; repetir as
-        // dezenas de <option> de categorias em cada linha multiplica o HTML por ~20x e
-        // deixa a troca de aba lenta. Cada select nasce só com a opção atual e a lista
-        // completa é montada (com cache) no primeiro clique/foco, por delegação de evento.
         let _optsCache = {};
 
         function optionsCategoria(isDeb, selecionada) {
@@ -2391,7 +3032,6 @@
                 return;
             }
 
-            // Ordena por data desc com chave pré-calculada (evita criar Date a cada comparação)
             const linhas = filtered.map(t => ({ t, k: dataTransacaoISO(t.data) }));
             linhas.sort((a, b) => b.k.localeCompare(a.k));
 
@@ -2440,12 +3080,9 @@
 
             if (filtered.length === 0) { container.innerHTML = `<p class="text-center p-8 text-slate-400">Nenhum registro.</p>`; return; }
 
-            // Ordena por mês de vencimento (fatura) desc e, dentro da fatura, por data da
-            // compra asc — chaves pré-calculadas uma única vez
             const linhas = filtered.map(t => ({ t, venc: mesAnoNum(t.data) || 0, compra: dataTransacaoISO(t.dataCompra || t.data) }));
             linhas.sort((a, b) => (b.venc - a.venc) || a.compra.localeCompare(b.compra));
 
-            // Subtotais por fatura para os cabeçalhos de grupo
             const grupos = {};
             for (let { t, venc } of linhas) {
                 if (!grupos[venc]) grupos[venc] = { qtd: 0, liquido: 0 };
@@ -2474,8 +3111,12 @@
         }
 
         function apagarLinhaCartao(id) { if(confirm("Tem certeza que deseja apagar esta transação do cartão?")) { appState.ccTransactions = appState.ccTransactions.filter(t => t.id !== id); saveData(); } }
+        function apagarLinhaBanco(id) { if(confirm("Tem certeza que deseja apagar esta transação?")) { appState.transactions = appState.transactions.filter(t => t.id !== id); saveData(); } }
 
-        // ========== INVESTIMENTOS COM CAMPO DE APORTE ==========
+        // ==========================================================================
+        // MÓDULO 9: CARTEIRA E ATIVOS (AÇÕES E HISTÓRICO DE RENDIMENTOS)
+        // ==========================================================================
+
         function recalcularCascata(investimento, inicio) {
             const DIAS_ANO = 365;
             for (let i = inicio; i < investimento.historico.length; i++) {
@@ -2502,16 +3143,13 @@
             if (investimento.historico.length) investimento.valor = investimento.historico[investimento.historico.length-1].saldoFinal;
         }
 
-        // ====== REFLEXO: Previsão -> Investimento ======
-        // Saída (debito) na previsão  = Aporte no investimento
-        // Entrada (credito) na previsão = Resgate no investimento
         function aplicarReflexoInvestimento(fut) {
             if (!fut || !fut.investimentoId) return;
             const inv = appState.investimentos.find(i => i.id === fut.investimentoId);
             if (!inv) return;
             if (!inv.historico) inv.historico = [];
 
-            const dataAlvo = dataBRParaISO(fut.data);       // "YYYY-MM-DD" (mesmo dia da previsão)
+            const dataAlvo = dataBRParaISO(fut.data); 
             const tipo = fut.tipo === 'debito' ? 'aporte' : 'resgate';
             const valor = Number(fut.valor) || 0;
 
@@ -2519,7 +3157,6 @@
             let linhaCriada = false;
 
             if (!linha) {
-                // Última linha existente ANTES da data alvo: define saldo anterior e taxa anual herdada
                 const anteriores = inv.historico
                     .filter(h => h.data < dataAlvo)
                     .sort((a,b) => a.data.localeCompare(b.data));
@@ -2772,7 +3409,7 @@
             
             const dataInformada = document.getElementById('modalData').value;
             if (!dataInformada) { alert("Informe a data!"); return; }
-            const data = dataCompleta(dataInformada); // já vem "YYYY-MM-DD"; converte registros antigos "YYYY-MM"
+            const data = dataCompleta(dataInformada); 
 
             const saldoAnterior = parseFloat(document.getElementById('modalSaldoAnterior').value) || 0;
             const aporte = parseFloat(document.getElementById('modalAporte').value) || 0;
@@ -2791,8 +3428,6 @@
                 const newId = 'linha_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
                 inv.historico.push({ id: newId, data, saldoAnterior, aporte, taxaAnual, resgate, rendimento, saldoFinal });
             }
-            // Reordena por data (a data pode ter mudado na edição) e recalcula toda a cascata:
-            // saldo anterior herdado do mês anterior e saldo final propagado para os posteriores.
             inv.historico.sort((a,b) => a.data.localeCompare(b.data));
             recalcularCascata(inv, 0);
             saveData();
@@ -2826,17 +3461,15 @@
             if (!original) return;
             const qtd = parseInt(prompt("Gerar lançamentos repetindo Aporte, Taxa e Resgate por quantos meses?", "1"));
             if (isNaN(qtd) || qtd <= 0) return;
-            // Continua a série a partir do ÚLTIMO mês já existente, replicando o lançamento
-            // clicado (aporte/taxa/resgate). Meses que já existirem são pulados, sem abortar.
             const ultimaLinha = [...inv.historico].sort((a,b) => a.data.localeCompare(b.data)).slice(-1)[0];
             let [ano, mes] = paraMesAno(ultimaLinha.data).split('-');
             let a = parseInt(ano), m = parseInt(mes);
             let geradas = 0;
             for (let i = 0; geradas < qtd; i++) {
-                if (i > 600) break; // trava de segurança
+                if (i > 600) break; 
                 m++; if (m > 12) { m = 1; a++; }
                 const novoMesAno = `${a}-${String(m).padStart(2,'0')}`;
-                if (inv.historico.some(h => paraMesAno(h.data) === novoMesAno)) continue; // já existe, pula
+                if (inv.historico.some(h => paraMesAno(h.data) === novoMesAno)) continue; 
                 inv.historico.push({
                     id: 'linha_' + Date.now() + '_' + i,
                     data: ultimoDiaMes(novoMesAno),
@@ -2935,7 +3568,10 @@
 
         function salvarSaldoInicial() { const el = document.getElementById('input-saldo-inicial'); if (!el) return; appState.saldoInicial = parseFloat(el.value) || 0; saveData(); alert("Saldo inicial salvo!"); }
 
-        // ===== Backup: helpers de compressão (gzip) e criptografia (AES-GCM + PBKDF2) =====
+        // ==========================================================================
+        // MÓDULO 10: MANIPULAÇÃO DE BACKUP (CRIPTOGRAFIA AES E ZIPPING)
+        // ==========================================================================
+
         function _baixarBackup(blob, nome) {
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a'); a.href = url; a.download = nome;
@@ -2958,7 +3594,6 @@
             saveData();
         }
 
-        // Exportar protegido (.pib): magic "FIN1" + flag(1) + salt(16) + iv(12) + ciphertext
         async function exportDataProtegido() {
             if (!window.crypto || !crypto.subtle) { alert("Criptografia indisponível neste navegador. Use o backup .json simples."); return; }
             const senha = prompt("Defina uma senha para o backup:");
@@ -2982,8 +3617,6 @@
                 saveData();
             } catch (err) { alert("Falha ao gerar o backup protegido."); }
         }
-
-        // ===== Lembrete de backup =====
 
         const DIAS_LEMBRETE_BACKUP = 30;
 
@@ -3013,7 +3646,8 @@
             saveData();
         }
 
-        function atualizarInfoUltimoBackup() {
+
+function atualizarInfoUltimoBackup() {
             const el = document.getElementById('info-ultimo-backup'); if (!el) return;
             if (!appState.ultimoBackup) {
                 el.innerText = "Nenhum backup salvo até agora.";
@@ -3040,7 +3674,6 @@
             if (modal) modal.classList.add('hidden');
         }
 
-        // Normaliza texto para busca: minúsculas e sem acentos (mantém números)
         function normalizarTextoBusca(s) {
             return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
         }
@@ -3115,6 +3748,7 @@
             if (!appState.investimentos) appState.investimentos = [];
             if (!appState.categories) appState.categories = { despesas: [], receitas: [] };
             if (!appState.orcamentos) appState.orcamentos = {};
+            if (!appState.comprasParceladas) appState.comprasParceladas = [];
             if (!appState.contas) appState.contas = [];
             garantirContas();
             const elSi = document.getElementById('input-saldo-inicial');
@@ -3123,7 +3757,6 @@
             saveData();
         }
 
-        // Importar — detecta automaticamente .json simples ou .pib protegido
         async function importData(e) {
             const file = e.target.files[0]; if (!file) return;
             try {
@@ -3185,7 +3818,6 @@
             updateFutureCategoriesDropdown(); updatePrevSumDropdown(); saveData();
         }
 
-        // Define/remove o limite mensal de orçamento de uma categoria de despesa
         function salvarOrcamento(cat, valor) {
             if (!appState.orcamentos) appState.orcamentos = {};
             const v = parseFloat(valor);
@@ -3208,7 +3840,7 @@
         function resetarBancoDeDados() {
             if (confirm("ATENÇÃO: Tem certeza que deseja apagar TODOS os dados do IndexedDB? Esta ação não pode ser desfeita!")) {
                 if (confirm("Você tem certeza ABSOLUTA? Todo o seu histórico financeiro será perdido.")) {
-                    appState = { saldoInicial: 0, contas: [], transactions: [], ccTransactions: [], futureTransactions: [], investimentos: [], categories: { despesas: ["Outros"], receitas: ["Outros"] }, orcamentos: {} };
+                    appState = { saldoInicial: 0, contas: [], transactions: [], ccTransactions: [], futureTransactions: [], investimentos: [], categories: { despesas: ["Outros"], receitas: ["Outros"] }, orcamentos: {}, comprasParceladas: [] };
                     garantirContas(); renderContasUI(); preencherFormConta();
                     saveData(); alert("O banco de dados foi completamente zerado.");
                 }
