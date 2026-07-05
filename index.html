@@ -642,17 +642,18 @@
                         <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Dia do vencimento</label>
                         <input type="number" min="1" max="31" id="qp-dia" value="10" oninput="debouncedSimularQuitacao()" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
                     </div>
-                    <div class="col-span-2">
-                        <label class="block text-xs font-semibold text-indigo-600 uppercase mb-1">📈 Investimento de origem</label>
-                        <select id="qp-investimento" onchange="aoTrocarInvestimentoQuitacao()" class="w-full text-sm border border-indigo-200 bg-indigo-50/50 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500"></select>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Rendimento (% a.a.)</label>
-                        <input type="number" step="0.01" id="qp-taxa" value="10" oninput="debouncedSimularQuitacao()" title="Use a taxa LÍQUIDA de imposto de renda para um resultado realista" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Saldo considerado (R$)</label>
-                        <input type="number" step="0.01" id="qp-saldo" oninput="debouncedSimularQuitacao()" title="Preenchido com o saldo atual do investimento; pode ajustar" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
+                    <div class="col-span-2 md:col-span-4 border border-indigo-100 bg-indigo-50/40 rounded-lg p-3">
+                        <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+                            <div>
+                                <label class="block text-xs font-semibold text-indigo-600 uppercase">📈 Fontes de recursos — usadas na ordem abaixo</label>
+                                <p class="text-[11px] text-slate-400">O 1º investimento paga as parcelas até esgotar, depois o 2º, e assim por diante. Saldo e rendimento vêm da tabela de Investimentos (última taxa lançada) e podem ser ajustados. Use ↑↓ para mudar a ordem.</p>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <select id="qp-add-investimento" class="text-sm border border-indigo-200 rounded-md p-1.5 outline-none bg-white"></select>
+                                <button onclick="adicionarFonteQuitacao()" class="bg-indigo-600 text-white px-3 py-1.5 rounded-md text-xs font-bold hover:bg-indigo-700 whitespace-nowrap">➕ Adicionar</button>
+                            </div>
+                        </div>
+                        <div id="qp-fontes" class="space-y-2"></div>
                     </div>
                     <div>
                         <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Aporte mensal (R$)</label>
@@ -686,14 +687,7 @@
                     <div class="overflow-x-auto rounded-lg border border-slate-100">
                         <table class="w-full text-left text-sm text-slate-600">
                             <thead class="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
-                                <tr>
-                                    <th class="p-3 whitespace-nowrap">Parcela</th>
-                                    <th class="p-3 whitespace-nowrap">Vencimento</th>
-                                    <th class="p-3 text-right whitespace-nowrap">Parcela corrigida</th>
-                                    <th class="p-3 text-right whitespace-nowrap">Rendimento</th>
-                                    <th class="p-3 text-right whitespace-nowrap">Aporte</th>
-                                    <th class="p-3 text-right whitespace-nowrap">Saldo do investimento</th>
-                                </tr>
+                                <tr id="quitacao-tabela-head"></tr>
                             </thead>
                             <tbody id="quitacao-tabela" class="divide-y divide-slate-100 bg-white"></tbody>
                         </table>
@@ -2224,34 +2218,152 @@
             return inv ? (inv.valorInicial || inv.valor || 0) : 0;
         }
 
-        // Projeção mês a mês: o investimento rende, recebe o aporte e paga a parcela
-        // corrigida pelo indexador. Retorna as linhas e se o saldo aguenta até o fim.
-        function simularQuitacao(p) {
-            const g = taxaMensalEquivalente(p.taxaIndexador);
-            const i = taxaMensalEquivalente(p.taxaRendimento);
-            const linhas = [];
-            let saldo = p.saldoInicial, quita = true, quebraEm = null, totalParcelas = 0;
-            for (let k = 0; k < p.restantes; k++) {
-                const parcela = p.valorParcela * Math.pow(1 + g, k);
-                const rendimento = saldo * i;
-                saldo = saldo + rendimento + p.aporte - parcela;
-                totalParcelas += parcela;
-                linhas.push({ k, parcela, rendimento, aporte: p.aporte, saldo });
-                if (quita && saldo < -0.005) { quita = false; quebraEm = k; }
-            }
-            return { linhas, quita, quebraEm, sobraFinal: saldo, totalParcelas };
+        // Última taxa anual lançada no histórico do investimento (tabela de Investimentos)
+        function taxaInvestimentoAtual(inv) {
+            if (inv && inv.historico && inv.historico.length) return Number(inv.historico[inv.historico.length - 1].taxaAnual) || 0;
+            return 0;
         }
 
-        // Menor aporte mensal que mantém o saldo do investimento ≥ 0 até a última parcela
+        // Compatibilidade: compras antigas tinham um único investimentoId/taxa/saldo
+        function normalizarFontesCompra(c) {
+            if (!c.fontes) {
+                c.fontes = c.investimentoId
+                    ? [{ investimentoId: c.investimentoId, taxa: Number(c.taxaRendimento) || 0, saldo: Number(c.saldoInicial) || 0 }]
+                    : [];
+            }
+            return c.fontes;
+        }
+
+        // Projeção mês a mês com MÚLTIPLAS fontes na ordem definida: cada investimento
+        // rende à sua própria taxa; a parcela corrigida é resgatada do 1º com saldo e,
+        // se ele esgotar no meio do mês, o restante vem do seguinte (registrando o
+        // resgate por fonte, usado depois na efetivação). O aporte entra na fonte ativa.
+        function simularQuitacao(p) {
+            const g = taxaMensalEquivalente(p.taxaIndexador);
+            const fontes = p.fontes || [];
+            const taxas = fontes.map(f => taxaMensalEquivalente(f.taxa));
+            const saldos = fontes.map(f => Number(f.saldo) || 0);
+            const linhas = [];
+            let quita = true, quebraEm = null, totalParcelas = 0;
+            for (let k = 0; k < p.restantes; k++) {
+                const parcela = p.valorParcela * Math.pow(1 + g, k);
+                let rendimento = 0;
+                for (let fi = 0; fi < saldos.length; fi++) {
+                    if (saldos[fi] > 0) { const r = saldos[fi] * taxas[fi]; saldos[fi] += r; rendimento += r; }
+                }
+                let aporteFonte = saldos.findIndex(s => s > 0);
+                if (aporteFonte === -1) aporteFonte = saldos.length - 1;
+                if (p.aporte > 0 && saldos.length) saldos[aporteFonte] += p.aporte;
+
+                let restante = parcela;
+                const resgates = [];
+                for (let fi = 0; fi < saldos.length && restante > 0.004; fi++) {
+                    if (saldos[fi] <= 0) continue;
+                    const usa = Math.min(saldos[fi], restante);
+                    saldos[fi] -= usa; restante -= usa;
+                    resgates.push({ fi, valor: usa });
+                }
+                let falta = 0;
+                if (restante > 0.004) {
+                    falta = restante;
+                    if (quita) { quita = false; quebraEm = k; }
+                    if (saldos.length) saldos[saldos.length - 1] -= restante;
+                }
+                totalParcelas += parcela;
+                linhas.push({ k, parcela, rendimento, aporte: p.aporte, aporteFonte, resgates, falta, saldos: saldos.slice(), saldoTotal: saldos.reduce((a, b) => a + b, 0) });
+            }
+            return { linhas, quita, quebraEm, sobraFinal: linhas.length ? linhas[linhas.length - 1].saldoTotal : saldos.reduce((a, b) => a + b, 0), totalParcelas };
+        }
+
+        // Menor aporte mensal que mantém as fontes ≥ 0 até a última parcela
         function aporteMinimoQuitacao(p) {
+            if (!(p.fontes || []).length) return 0;
             if (simularQuitacao({ ...p, aporte: 0 }).quita) return 0;
+            const somaInicial = p.fontes.reduce((a, f) => a + (Number(f.saldo) || 0), 0);
             let lo = 0;
-            let hi = p.valorParcela * Math.pow(1 + taxaMensalEquivalente(p.taxaIndexador), p.restantes) + Math.max(0, -p.saldoInicial);
+            let hi = p.valorParcela * Math.pow(1 + taxaMensalEquivalente(p.taxaIndexador), p.restantes) + Math.max(0, -somaInicial);
             for (let it = 0; it < 60; it++) {
                 const mid = (lo + hi) / 2;
                 if (simularQuitacao({ ...p, aporte: mid }).quita) hi = mid; else lo = mid;
             }
             return Math.ceil(hi * 100) / 100;
+        }
+
+        // ----- Gerenciamento das fontes no formulário -----
+        let fontesQuitacao = [];
+
+        function adicionarFonteQuitacao() {
+            const sel = document.getElementById('qp-add-investimento');
+            const inv = appState.investimentos.find(i => i.id === sel.value);
+            if (!inv) { alert("Cadastre/selecione um investimento primeiro."); return; }
+            if (fontesQuitacao.some(f => f.investimentoId === inv.id)) return;
+            fontesQuitacao.push({
+                investimentoId: inv.id,
+                taxa: taxaInvestimentoAtual(inv),
+                saldo: Math.round(saldoAtualInvestimento(inv) * 100) / 100
+            });
+            renderFontesQuitacao(); renderSimulacaoQuitacao();
+        }
+
+        function removerFonteQuitacao(i) { fontesQuitacao.splice(i, 1); renderFontesQuitacao(); renderSimulacaoQuitacao(); }
+
+        function moverFonteQuitacao(i, delta) {
+            const j = i + delta;
+            if (j < 0 || j >= fontesQuitacao.length) return;
+            [fontesQuitacao[i], fontesQuitacao[j]] = [fontesQuitacao[j], fontesQuitacao[i]];
+            renderFontesQuitacao(); renderSimulacaoQuitacao();
+        }
+
+        function atualizarFonteQuitacao(i, campo, valor) {
+            if (!fontesQuitacao[i]) return;
+            fontesQuitacao[i][campo] = parseFloat(valor) || 0;
+            debouncedSimularQuitacao();
+        }
+
+        function renderFontesQuitacao() {
+            const cont = document.getElementById('qp-fontes');
+            const selAdd = document.getElementById('qp-add-investimento');
+            if (!cont || !selAdd) return;
+            // dropdown só com investimentos ainda não usados
+            selAdd.innerHTML = '';
+            const disponiveis = (appState.investimentos || []).filter(inv => !fontesQuitacao.some(f => f.investimentoId === inv.id));
+            if (!disponiveis.length) {
+                selAdd.innerHTML = '<option value="">-- sem investimentos disponíveis --</option>';
+            } else {
+                for (const inv of disponiveis) {
+                    const opt = document.createElement('option');
+                    opt.value = inv.id;
+                    opt.innerText = `${inv.nome} (${inv.banco}) — ${formatCurrency(saldoAtualInvestimento(inv))}`;
+                    selAdd.appendChild(opt);
+                }
+            }
+            if (!fontesQuitacao.length) {
+                cont.innerHTML = '<p class="text-xs text-slate-400">Nenhuma fonte adicionada. Escolha um investimento acima e clique em ➕ Adicionar.</p>';
+                return;
+            }
+            let html = '';
+            for (let i = 0; i < fontesQuitacao.length; i++) {
+                const f = fontesQuitacao[i];
+                const inv = appState.investimentos.find(x => x.id === f.investimentoId);
+                const nome = inv ? `${inv.nome} (${inv.banco})` : '(investimento removido)';
+                html += `
+                    <div class="flex flex-wrap items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-2">
+                        <span class="w-6 h-6 flex items-center justify-center bg-indigo-600 text-white rounded-full text-xs font-bold shrink-0">${i + 1}º</span>
+                        <span class="font-medium text-sm text-slate-700 flex-1 min-w-[130px] truncate">${escapeHtml(nome)}</span>
+                        <label class="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">Saldo (R$)
+                            <input type="number" step="0.01" value="${f.saldo}" onchange="atualizarFonteQuitacao(${i}, 'saldo', this.value)" class="w-28 text-sm font-normal border border-slate-200 rounded-md p-1.5 text-right outline-none focus:ring-1 focus:ring-indigo-500">
+                        </label>
+                        <label class="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">Rend. % a.a.
+                            <input type="number" step="0.01" value="${f.taxa}" onchange="atualizarFonteQuitacao(${i}, 'taxa', this.value)" class="w-20 text-sm font-normal border border-slate-200 rounded-md p-1.5 text-right outline-none focus:ring-1 focus:ring-indigo-500">
+                        </label>
+                        <div class="flex gap-1">
+                            <button onclick="moverFonteQuitacao(${i}, -1)" title="Usar antes" class="text-indigo-500 hover:bg-indigo-50 bg-white border p-1 rounded transition text-xs font-bold ${i === 0 ? 'opacity-30' : ''}">↑</button>
+                            <button onclick="moverFonteQuitacao(${i}, 1)" title="Usar depois" class="text-indigo-500 hover:bg-indigo-50 bg-white border p-1 rounded transition text-xs font-bold ${i === fontesQuitacao.length - 1 ? 'opacity-30' : ''}">↓</button>
+                            <button onclick="removerFonteQuitacao(${i})" title="Remover fonte" class="text-rose-500 hover:bg-rose-50 bg-white border p-1 rounded transition text-xs font-bold">✕</button>
+                        </div>
+                    </div>`;
+            }
+            cont.innerHTML = html;
         }
 
         function lerFormCompra() {
@@ -2265,9 +2377,7 @@
                 taxaIndexador: parseFloat(document.getElementById('qp-indexador').value) || 0,
                 mesPrimeira: document.getElementById('qp-mes-primeira').value,
                 dia: Math.min(31, Math.max(1, parseInt(document.getElementById('qp-dia').value) || 10)),
-                investimentoId: document.getElementById('qp-investimento').value,
-                taxaRendimento: parseFloat(document.getElementById('qp-taxa').value) || 0,
-                saldoInicial: parseFloat(document.getElementById('qp-saldo').value) || 0,
+                fontes: fontesQuitacao.map(f => ({ ...f })),
                 aporte: parseFloat(document.getElementById('qp-aporte').value) || 0,
                 categoria: document.getElementById('qp-categoria').value
             };
@@ -2282,29 +2392,37 @@
             return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
         }
 
+        function nomeCurtoInvestimento(investimentoId) {
+            const inv = appState.investimentos.find(x => x.id === investimentoId);
+            return inv ? inv.nome : '(removido)';
+        }
+
         function renderSimulacaoQuitacao() {
             const res = document.getElementById('quitacao-resultado');
             if (!res) return;
             const p = lerFormCompra();
-            if (!p.valorParcela || !p.restantes || !p.mesPrimeira) { res.classList.add('hidden'); return; }
+            if (!p.valorParcela || !p.restantes || !p.mesPrimeira || !p.fontes.length) { res.classList.add('hidden'); return; }
             res.classList.remove('hidden');
 
             const sim = simularQuitacao(p);
             const aporteMin = aporteMinimoQuitacao(p);
+            const nomesOrdem = p.fontes.map((f, i) => `${i + 1}º ${escapeHtml(nomeCurtoInvestimento(f.investimentoId))}`).join(' → ');
 
             const ver = document.getElementById('quitacao-veredicto');
             if (sim.quita) {
                 ver.className = "p-5 rounded-xl border text-base font-bold bg-emerald-50 border-emerald-200 text-emerald-800";
-                ver.innerHTML = `✅ O investimento ${p.aporte > 0 ? `com aporte de ${formatCurrency(p.aporte)}/mês ` : ''}cobre as <b>${p.restantes} parcelas restantes</b> — sobra projetada de <b>${formatCurrency(sim.sobraFinal)}</b> ao final.`;
+                ver.innerHTML = `✅ As fontes (${nomesOrdem}) ${p.aporte > 0 ? `com aporte de ${formatCurrency(p.aporte)}/mês ` : ''}cobrem as <b>${p.restantes} parcelas restantes</b> — sobra projetada de <b>${formatCurrency(sim.sobraFinal)}</b> ao final.`;
             } else {
                 ver.className = "p-5 rounded-xl border text-base font-bold bg-rose-50 border-rose-200 text-rose-800";
-                ver.innerHTML = `⚠️ O saldo do investimento acaba na <b>parcela ${p.pagas + sim.quebraEm + 1} de ${p.total}</b>. Aporte mensal necessário para quitar tudo: <b>${formatCurrency(aporteMin)}</b>.`;
+                ver.innerHTML = `⚠️ As fontes (${nomesOrdem}) esgotam na <b>parcela ${p.pagas + sim.quebraEm + 1} de ${p.total}</b>. Aporte mensal necessário para quitar tudo: <b>${formatCurrency(aporteMin)}</b>.`;
             }
 
             const cards = document.getElementById('quitacao-cards');
-            const rotuloComparativo = p.taxaRendimento > p.taxaIndexador
-                ? `Rendimento (${p.taxaRendimento}% a.a.) supera o indexador (${p.taxaIndexador}% a.a.): manter aplicado e pagar mês a mês tende a ser melhor que quitar à vista.`
-                : `O indexador (${p.taxaIndexador}% a.a.) corre acima do rendimento (${p.taxaRendimento}% a.a.): avalie antecipar/quitar as parcelas.`;
+            const somaSaldos = p.fontes.reduce((a, f) => a + (Number(f.saldo) || 0), 0);
+            const taxaMedia = somaSaldos > 0 ? p.fontes.reduce((a, f) => a + (Number(f.taxa) || 0) * (Number(f.saldo) || 0), 0) / somaSaldos : 0;
+            const rotuloComparativo = taxaMedia > p.taxaIndexador
+                ? `Rendimento médio das fontes (${taxaMedia.toFixed(1)}% a.a.) supera o indexador (${p.taxaIndexador}% a.a.): manter aplicado e pagar mês a mês tende a ser melhor que quitar à vista.`
+                : `O indexador (${p.taxaIndexador}% a.a.) corre acima do rendimento médio das fontes (${taxaMedia.toFixed(1)}% a.a.): avalie antecipar/quitar as parcelas.`;
             cards.innerHTML = `
                 <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
                     <p class="text-xs font-semibold text-slate-500 uppercase">Parcelas restantes</p>
@@ -2326,18 +2444,37 @@
                     <p class="text-xs text-slate-600 mt-2">${rotuloComparativo}</p>
                 </div>`;
 
+            // Cabeçalho dinâmico: uma coluna de saldo por fonte, na ordem de uso
+            const head = document.getElementById('quitacao-tabela-head');
+            head.innerHTML = `
+                <th class="p-3 whitespace-nowrap">Parcela</th>
+                <th class="p-3 whitespace-nowrap">Vencimento</th>
+                <th class="p-3 text-right whitespace-nowrap">Parcela corrigida</th>
+                <th class="p-3 text-right whitespace-nowrap">Rendimento</th>
+                <th class="p-3 text-right whitespace-nowrap">Aporte</th>
+                ${p.fontes.map((f, i) => `<th class="p-3 text-right whitespace-nowrap">${i + 1}º ${escapeHtml(nomeCurtoInvestimento(f.investimentoId))}</th>`).join('')}
+                <th class="p-3 text-right whitespace-nowrap">Saldo total</th>`;
+
             const tbody = document.getElementById('quitacao-tabela');
             let html = '';
             for (const l of sim.linhas) {
-                const corSaldo = l.saldo >= 0 ? 'text-indigo-600' : 'text-rose-600';
+                const corSaldo = l.saldoTotal >= 0 ? 'text-indigo-600' : 'text-rose-600';
+                const celulasFontes = l.saldos.map((s, fi) => {
+                    const resgate = l.resgates.find(r => r.fi === fi);
+                    return `<td class="p-3 text-right whitespace-nowrap ${s > 0.004 ? 'text-slate-600' : 'text-slate-300'}">
+                        ${formatCurrency(s)}
+                        ${resgate ? `<span class="block text-[10px] text-rose-500">− ${formatCurrency(resgate.valor)}</span>` : ''}
+                    </td>`;
+                }).join('');
                 html += `
-                    <tr class="${l.saldo < 0 ? 'bg-rose-50' : 'hover:bg-slate-50'}">
+                    <tr class="${l.falta > 0 ? 'bg-rose-50' : 'hover:bg-slate-50'}">
                         <td class="p-3 font-semibold text-slate-600">${p.pagas + l.k + 1}/${p.total}</td>
                         <td class="p-3 whitespace-nowrap">${dataParcelaQuitacao(p.mesPrimeira, p.dia, l.k)}</td>
                         <td class="p-3 text-right whitespace-nowrap text-rose-600 font-medium">${formatCurrency(l.parcela)}</td>
                         <td class="p-3 text-right whitespace-nowrap text-emerald-600">${formatCurrency(l.rendimento)}</td>
                         <td class="p-3 text-right whitespace-nowrap text-slate-500">${l.aporte > 0 ? formatCurrency(l.aporte) : '—'}</td>
-                        <td class="p-3 text-right whitespace-nowrap font-bold ${corSaldo}">${formatCurrency(l.saldo)}</td>
+                        ${celulasFontes}
+                        <td class="p-3 text-right whitespace-nowrap font-bold ${corSaldo}">${formatCurrency(l.saldoTotal)}</td>
                     </tr>`;
             }
             tbody.innerHTML = html;
@@ -2346,6 +2483,13 @@
                 const ctx = document.getElementById('chartQuitacao');
                 if (ctx) {
                     const labels = sim.linhas.map(l => dataParcelaQuitacao(p.mesPrimeira, p.dia, l.k).substring(3));
+                    const coresFontes = ['#0ea5e9', '#10b981', '#f59e0b', '#8b5cf6', '#64748b'];
+                    const datasetsFontes = p.fontes.map((f, fi) => ({
+                        label: `${fi + 1}º ${nomeCurtoInvestimento(f.investimentoId)}`,
+                        data: sim.linhas.map(l => Math.max(0, l.saldos[fi])),
+                        type: 'line', borderColor: coresFontes[fi % coresFontes.length], backgroundColor: coresFontes[fi % coresFontes.length],
+                        borderWidth: 1.5, borderDash: [5, 3], pointRadius: 0, tension: 0.3, order: 1
+                    }));
                     if (quitacaoChartInstance) quitacaoChartInstance.destroy();
                     quitacaoChartInstance = new Chart(ctx.getContext('2d'), {
                         type: 'bar',
@@ -2353,7 +2497,8 @@
                             labels,
                             datasets: [
                                 { label: 'Parcela corrigida', data: sim.linhas.map(l => l.parcela), backgroundColor: 'rgba(244, 63, 94, 0.6)', borderRadius: 3, order: 2 },
-                                { label: 'Saldo do investimento', data: sim.linhas.map(l => l.saldo), type: 'line', borderColor: '#4f46e5', backgroundColor: '#4f46e5', borderWidth: 2, pointRadius: 3, tension: 0.3, order: 1 }
+                                { label: 'Saldo total', data: sim.linhas.map(l => l.saldoTotal), type: 'line', borderColor: '#4f46e5', backgroundColor: '#4f46e5', borderWidth: 2, pointRadius: 3, tension: 0.3, order: 1 },
+                                ...datasetsFontes
                             ]
                         },
                         options: {
@@ -2375,29 +2520,14 @@
 
         function usarAporteMinimo() {
             const p = lerFormCompra();
-            if (!p.valorParcela || !p.restantes) return;
+            if (!p.valorParcela || !p.restantes || !p.fontes.length) return;
             document.getElementById('qp-aporte').value = aporteMinimoQuitacao(p).toFixed(2);
             renderSimulacaoQuitacao();
         }
 
-        function aoTrocarInvestimentoQuitacao() {
-            const inv = appState.investimentos.find(i => i.id === document.getElementById('qp-investimento').value);
-            document.getElementById('qp-saldo').value = saldoAtualInvestimento(inv).toFixed(2);
-            renderSimulacaoQuitacao();
-        }
-
         function renderQuitacao() {
-            const selInv = document.getElementById('qp-investimento');
-            if (!selInv) return;
-            const invAtual = selInv.value;
-            selInv.innerHTML = '<option value="">-- Selecione o investimento --</option>';
-            for (const inv of (appState.investimentos || [])) {
-                const opt = document.createElement('option');
-                opt.value = inv.id;
-                opt.innerText = `${inv.nome} (${inv.banco}) — ${formatCurrency(saldoAtualInvestimento(inv))}`;
-                selInv.appendChild(opt);
-            }
-            if ([...selInv.options].some(o => o.value === invAtual)) selInv.value = invAtual;
+            if (!document.getElementById('qp-fontes')) return;
+            renderFontesQuitacao();
 
             const selCat = document.getElementById('qp-categoria');
             const catAtual = selCat.value;
@@ -2455,11 +2585,11 @@
 
         function novaCompraParcelada() {
             compraQuitacaoId = null;
+            fontesQuitacao = [];
             for (const id of ['qp-nome', 'qp-parcela', 'qp-total']) document.getElementById(id).value = '';
             document.getElementById('qp-pagas').value = '0';
             document.getElementById('qp-aporte').value = '0';
             document.getElementById('qp-indexador').value = '7';
-            document.getElementById('qp-taxa').value = '10';
             renderQuitacao();
         }
 
@@ -2483,6 +2613,7 @@
             const c = appState.comprasParceladas.find(x => x.id === id);
             if (!c) return;
             compraQuitacaoId = id;
+            fontesQuitacao = normalizarFontesCompra(c).map(f => ({ ...f }));
             document.getElementById('qp-nome').value = c.nome;
             document.getElementById('qp-parcela').value = c.valorParcela;
             document.getElementById('qp-total').value = c.total;
@@ -2490,11 +2621,8 @@
             document.getElementById('qp-indexador').value = c.taxaIndexador;
             document.getElementById('qp-mes-primeira').value = c.mesPrimeira;
             document.getElementById('qp-dia').value = c.dia;
-            document.getElementById('qp-taxa').value = c.taxaRendimento;
-            document.getElementById('qp-saldo').value = c.saldoInicial;
             document.getElementById('qp-aporte').value = c.aporte;
             renderQuitacao();
-            document.getElementById('qp-investimento').value = c.investimentoId || '';
             document.getElementById('qp-categoria').value = c.categoria || '__nova__';
             renderSimulacaoQuitacao();
         }
@@ -2513,12 +2641,13 @@
         function efetivarCompraParcelada() {
             const compra = salvarCompraParcelada(true);
             if (!compra) return;
-            if (!compra.investimentoId) { alert("Selecione o investimento de origem antes de efetivar."); return; }
-            const inv = appState.investimentos.find(i => i.id === compra.investimentoId);
-            if (!inv) { alert("Investimento não encontrado."); return; }
+            if (!(compra.fontes || []).length) { alert("Adicione ao menos um investimento como fonte de recursos antes de efetivar."); return; }
             const sim = simularQuitacao(compra);
+            if (!sim.quita) { alert("A simulação não quita todas as parcelas — as fontes esgotam antes do fim.\nAjuste o aporte mensal (botão \"mín.\") ou as fontes antes de efetivar."); return; }
             const nAportes = compra.aporte > 0.005 ? compra.restantes : 0;
-            if (!confirm(`Efetivar "${compra.nome}"?\n\nSerão criados na Previsão:\n• ${compra.restantes} parcelas (Saída) com o resgate correspondente em "${inv.nome}"\n${nAportes ? `• ${nAportes} aportes de ${formatCurrency(compra.aporte)} em "${inv.nome}"\n` : ''}\nTotal corrigido: ${formatCurrency(sim.totalParcelas)}. Você poderá desfazer tudo com um clique.`)) return;
+            const nResgates = sim.linhas.reduce((a, l) => a + l.resgates.length, 0);
+            const nomesFontes = compra.fontes.map((f, i) => `${i + 1}º ${nomeCurtoInvestimento(f.investimentoId)}`).join(', ');
+            if (!confirm(`Efetivar "${compra.nome}"?\n\nSerão criados na Previsão:\n• ${compra.restantes} parcelas (Saída)\n• ${nResgates} resgates nos investimentos (${nomesFontes})\n${nAportes ? `• ${nAportes} aportes de ${formatCurrency(compra.aporte)}\n` : ''}\nTotal corrigido: ${formatCurrency(sim.totalParcelas)}. Você poderá desfazer tudo com um clique.`)) return;
 
             const catParcela = compra.categoria && compra.categoria !== '__nova__'
                 ? garantirCategoria('despesas', compra.categoria)
@@ -2532,13 +2661,17 @@
                 const vParc = Math.round(l.parcela * 100) / 100;
                 const nParc = `${compra.pagas + l.k + 1}/${compra.total}`;
 
-                const futResgate = {
-                    id: `fut_${compra.id}_r${l.k}`, data: dataBR, tipo: 'credito', valor: vParc,
-                    descricao: `Resgate p/ ${compra.nome} (parc. ${nParc})`, categoria: catResgate,
-                    investimentoId: compra.investimentoId, compraId: compra.id
-                };
-                aplicarReflexoInvestimento(futResgate);
-                appState.futureTransactions.push(futResgate);
+                // Um resgate por fonte usada no mês (o mês de transição divide entre duas)
+                for (const r of l.resgates) {
+                    const fonte = compra.fontes[r.fi];
+                    const futResgate = {
+                        id: `fut_${compra.id}_r${l.k}_${r.fi}`, data: dataBR, tipo: 'credito', valor: Math.round(r.valor * 100) / 100,
+                        descricao: `Resgate p/ ${compra.nome} (parc. ${nParc}) — ${nomeCurtoInvestimento(fonte.investimentoId)}`, categoria: catResgate,
+                        investimentoId: fonte.investimentoId, compraId: compra.id
+                    };
+                    aplicarReflexoInvestimento(futResgate);
+                    appState.futureTransactions.push(futResgate);
+                }
 
                 appState.futureTransactions.push({
                     id: `fut_${compra.id}_p${l.k}`, data: dataBR, tipo: 'debito', valor: vParc,
@@ -2547,10 +2680,11 @@
                 });
 
                 if (compra.aporte > 0.005) {
+                    const fonteAporte = compra.fontes[l.aporteFonte] || compra.fontes[0];
                     const futAporte = {
                         id: `fut_${compra.id}_a${l.k}`, data: dataBR, tipo: 'debito', valor: Math.round(compra.aporte * 100) / 100,
-                        descricao: `Aporte p/ ${compra.nome}`, categoria: catAporte,
-                        investimentoId: compra.investimentoId, compraId: compra.id
+                        descricao: `Aporte p/ ${compra.nome} — ${nomeCurtoInvestimento(fonteAporte.investimentoId)}`, categoria: catAporte,
+                        investimentoId: fonteAporte.investimentoId, compraId: compra.id
                     };
                     aplicarReflexoInvestimento(futAporte);
                     appState.futureTransactions.push(futAporte);
@@ -2559,7 +2693,7 @@
             compra.status = 'efetivada';
             updateFutureCategoriesDropdown(); updatePrevSumDropdown();
             saveData();
-            alert(`"${compra.nome}" efetivada!\n• ${compra.restantes * 2 + nAportes} lançamentos criados na 📅 Previsão\n• ${compra.restantes + nAportes} movimentos no investimento "${inv.nome}"`);
+            alert(`"${compra.nome}" efetivada!\n• ${compra.restantes + nResgates + nAportes} lançamentos criados na 📅 Previsão\n• ${nResgates} resgates e ${nAportes} aportes distribuídos nos investimentos (${nomesFontes})`);
         }
 
         function desfazerEfetivacaoCompra() {

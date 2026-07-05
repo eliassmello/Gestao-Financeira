@@ -65,10 +65,11 @@ Aplicativo de orçamento pessoal em **um único arquivo HTML**, que roda direto 
 - Botão **🔁 Repetir** projeta vários meses de uma vez (repetindo aporte, taxa e resgate), continuando a partir do último mês.
 
 ### 🧮 Quitação (Compras Parceladas)
-- Cadastre uma compra parcelada (ex.: imóvel em 22×) com **indexador estimado** (INCC/IPCA/IGP-M, % a.a.), vincule um **investimento de origem** (com **rendimento % a.a.** — use a taxa líquida de IR) e o app simula mês a mês se o investimento **quita as parcelas restantes**.
-- Resultado na tela: veredicto (✅ cobre / ⚠️ saldo acaba na parcela N), **aporte mensal mínimo** para fechar a conta (botão "mín." preenche), total corrigido a pagar, análise **quitar × manter aplicado**, tabela mês a mês e gráfico do saldo projetado × parcelas.
-- **Tudo é só simulação** até clicar em **✅ Efetivar**: aí cada parcela vira um par na 📅 Previsão (Entrada "Resgate p/ ..." refletida como **saque no investimento** + Saída da parcela) e os aportes viram Saídas refletidas como **aporte** — com recálculo em cascata no histórico do investimento. **↩️ Desfazer efetivação** remove tudo com um clique.
-- Suporta **várias compras** simultâneas, cada uma com seu indexador e investimento.
+- Cadastre uma compra parcelada (ex.: imóvel em 22×) com **indexador estimado** (INCC/IPCA/IGP-M, % a.a.) e monte a lista de **fontes de recursos**: vários investimentos, **na ordem em que devem ser usados** (↑↓ para reordenar). Saldo e **rendimento % a.a.** de cada fonte vêm automaticamente da tabela de Investimentos (última taxa lançada) e podem ser ajustados — use a taxa líquida de IR.
+- A simulação mês a mês esgota o 1º investimento, passa ao 2º e assim por diante — cada um rendendo à **sua própria taxa**; o mês de transição divide o resgate entre as duas fontes. A tabela mostra uma **coluna de saldo por investimento** (com o resgate do mês) e o gráfico traz o saldo total + uma linha por fonte.
+- Resultado na tela: veredicto (✅ cobre / ⚠️ fontes esgotam na parcela N), **aporte mensal mínimo** para fechar a conta (botão "mín." preenche), total corrigido a pagar e análise **quitar × manter aplicado** (rendimento médio ponderado das fontes × indexador).
+- **Tudo é só simulação** até clicar em **✅ Efetivar**: cada parcela vira um par na 📅 Previsão (Entrada "Resgate p/ ..." refletida como **saque no investimento correto daquele mês** + Saída da parcela) e os aportes viram Saídas refletidas como **aporte na fonte ativa** — com recálculo em cascata no histórico de cada investimento. **↩️ Desfazer efetivação** remove tudo com um clique.
+- Suporta **várias compras** simultâneas, cada uma com seu indexador e suas fontes.
 
 ### 🔍 Busca Global
 - Botão **🔍 Buscar** no topo: encontre lançamentos por **descrição, categoria ou valor** (ex.: `mercado`, `1.500,00`) em **todas as contas correntes, cartão e previsões**, em todos os meses, ordenados do mais recente para o mais antigo.
