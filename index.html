@@ -807,6 +807,7 @@
         }
         
         function saveData() {
+            _optsCache = {};
             saveToDB().then(() => {
                 cachedSaldoAtual = null;
                 updateSaldoDisplay();
@@ -822,61 +823,24 @@
             }).catch(e => alert("Erro ao salvar no banco de dados."));
         }
 
-        function updateFilterMesBancoLight() {
-            const select = document.getElementById('filterMesBanco');
+        // Preenche um <select> de filtro com os meses (MM/AAAA) presentes na lista, do mais
+        // recente para o mais antigo, preservando a seleção atual quando ainda existir
+        function preencherFiltroMeses(selectId, transacoes) {
+            const select = document.getElementById(selectId);
             if (!select) return;
+            const atual = select.value;
             const meses = new Set();
-            for (let t of appState.transactions.filter(x => x.contaId === contaSelecionadaId)) {
-                if(t.data) {
-                    let parts;
-                    if (t.data.includes('/')) parts = t.data.split('/');
-                    else if (t.data.includes('-')) parts = t.data.split('-');
-                    if(parts && parts.length >= 2) {
-                        let mes, ano;
-                        if (t.data.includes('/')) { mes = parts[1]; ano = parts[2]; }
-                        else { mes = parts[1]; ano = parts[0]; }
-                        meses.add(`${mes}/${ano}`);
-                    }
-                }
+            for (let t of transacoes) {
+                const n = mesAnoNum(t.data);
+                if (n !== null) meses.add(`${String(((n - 1) % 12) + 1).padStart(2, '0')}/${Math.floor((n - 1) / 12)}`);
             }
-            let html = `<option value="todos">Todos os Meses</option>`;
-            const mesesArray = Array.from(meses);
-            mesesArray.sort((a,b) => {
-                const [ma, aa] = a.split('/');
-                const [mb, ab] = b.split('/');
-                return new Date(ab, ma-1) - new Date(aa, mb-1);
-            });
-            for (let m of mesesArray) { html += `<option value="${m}">${m}</option>`; }
-            select.innerHTML = html;
+            const arr = [...meses].sort((a, b) => mesAnoNum(b) - mesAnoNum(a));
+            select.innerHTML = `<option value="todos">Todos os Meses</option>` + arr.map(m => `<option value="${m}">${m}</option>`).join('');
+            if (arr.includes(atual)) select.value = atual;
         }
 
-        function updateFilterMesCartaoLight() {
-            const select = document.getElementById('filterMesCartao');
-            if (!select) return;
-            const meses = new Set();
-            for (let t of appState.ccTransactions) {
-                if(t.data) {
-                    let parts;
-                    if (t.data.includes('/')) parts = t.data.split('/');
-                    else if (t.data.includes('-')) parts = t.data.split('-');
-                    if(parts && parts.length >= 2) {
-                        let mes, ano;
-                        if (t.data.includes('/')) { mes = parts[1]; ano = parts[2]; }
-                        else { mes = parts[1]; ano = parts[0]; }
-                        meses.add(`${mes}/${ano}`);
-                    }
-                }
-            }
-            let html = `<option value="todos">Todos os Meses</option>`;
-            const mesesArray = Array.from(meses);
-            mesesArray.sort((a,b) => {
-                const [ma, aa] = a.split('/');
-                const [mb, ab] = b.split('/');
-                return new Date(ab, ma-1) - new Date(aa, mb-1);
-            });
-            for (let m of mesesArray) { html += `<option value="${m}">${m}</option>`; }
-            select.innerHTML = html;
-        }
+        function updateFilterMesBancoLight() { preencherFiltroMeses('filterMesBanco', appState.transactions.filter(x => x.contaId === contaSelecionadaId)); }
+        function updateFilterMesCartaoLight() { preencherFiltroMeses('filterMesCartao', appState.ccTransactions); }
 
         function switchTab(tabId) {
             try {
@@ -2115,12 +2079,25 @@
             if (totalEl) totalEl.innerText = formatCurrency(totalGeral);
         }
 
-        function assignCategory(transactionId, category, type) {
-            let transaction = null;
-            if (type === 'banco') transaction = appState.transactions.find(t => t.id === transactionId);
-            else if (type === 'cartao') transaction = appState.ccTransactions.find(t => t.id === transactionId);
+        function assignCategory(transactionId, category, type, selEl) {
+            const lista = type === 'banco' ? appState.transactions : (type === 'cartao' ? appState.ccTransactions : null);
+            const transaction = lista ? lista.find(t => t.id === transactionId) : null;
             if (!transaction) return;
-            transaction.categoria = category; saveData(); 
+            transaction.categoria = category;
+            cachedSaldoAtual = null;
+            // Com o select em mãos e sem o filtro "pendentes" ativo, atualiza a linha no
+            // lugar e persiste em segundo plano — evita re-renderizar a lista inteira
+            // (que é lento e perde a posição de rolagem) a cada categorização
+            const filtroEl = document.getElementById(type === 'banco' ? 'filterSelectBanco' : 'filterSelectCartao');
+            if (selEl && (!filtroEl || filtroEl.value !== 'pendentes')) {
+                selEl.dataset.cat = category;
+                selEl.classList.toggle('border-amber-400', !category);
+                selEl.classList.toggle('bg-amber-50', !category);
+                selEl.classList.toggle('border-slate-200', !!category);
+                saveToDB();
+                return;
+            }
+            saveData();
         }
 
         // ====== CONTAS CORRENTES (múltiplas) ======
@@ -2333,141 +2310,167 @@
             XLSX.writeFile(wb, nomeArq);
         }
 
+        // ===== Selects de categoria "preguiçosos" =====
+        // As listas de Conta Corrente e Cartão podem ter milhares de linhas; repetir as
+        // dezenas de <option> de categorias em cada linha multiplica o HTML por ~20x e
+        // deixa a troca de aba lenta. Cada select nasce só com a opção atual e a lista
+        // completa é montada (com cache) no primeiro clique/foco, por delegação de evento.
+        let _optsCache = {};
+
+        function optionsCategoria(isDeb, selecionada) {
+            const key = (isDeb ? 'd|' : 'r|') + (selecionada || '');
+            if (_optsCache[key]) return _optsCache[key];
+            const cats = sortedCats(isDeb ? appState.categories.despesas : appState.categories.receitas);
+            let opts = `<option value="">-- Selecione --</option>`;
+            for (let c of cats) opts += `<option value="${c.replace(/"/g, '&quot;')}"${selecionada === c ? ' selected' : ''}>${escapeHtml(c)}</option>`;
+            return _optsCache[key] = opts;
+        }
+
+        function prepararSelectCategoria(sel) {
+            if (!sel || !sel.classList || !sel.classList.contains('cat-select') || sel.dataset.pronto === '1') return;
+            sel.dataset.pronto = '1';
+            sel.innerHTML = optionsCategoria(sel.dataset.deb === '1', sel.dataset.cat || '');
+        }
+
+        function selectCategoriaHtml(t, tipo) {
+            const isDeb = t.debito > 0;
+            const catAttr = (t.categoria || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+            const optAtual = t.categoria
+                ? `<option value="${catAttr}" selected>${escapeHtml(t.categoria)}</option>`
+                : `<option value="">-- Selecione --</option>`;
+            return `<select data-id="${t.id}" data-tipo="${tipo}" data-deb="${isDeb ? 1 : 0}" data-cat="${catAttr}" class="cat-select w-full md:w-64 text-xs border rounded-md p-2 mt-2 md:mt-0 ${t.categoria ? 'border-slate-200' : 'border-amber-400 bg-amber-50'}">${optAtual}</select>`;
+        }
+
+        function ativarSelectsPreguicosos(containerId) {
+            const cont = document.getElementById(containerId);
+            if (!cont || cont.dataset.lazyOk === '1') return;
+            cont.dataset.lazyOk = '1';
+            cont.addEventListener('mousedown', e => prepararSelectCategoria(e.target));
+            cont.addEventListener('focusin', e => prepararSelectCategoria(e.target));
+            cont.addEventListener('change', e => {
+                const s = e.target;
+                if (s && s.classList && s.classList.contains('cat-select')) assignCategory(s.dataset.id, s.value, s.dataset.tipo, s);
+            });
+        }
+
+        function linhaTransacaoHtml(t, dataHtml, corValor, tipo, fnApagar) {
+            const isDeb = t.debito > 0; const val = isDeb ? t.debito : t.credito;
+            return `
+                <div class="flex flex-col md:flex-row justify-between p-4 border-b ${t.isDuplicate ? 'bg-yellow-100 hover:bg-yellow-200 border-yellow-300' : 'hover:bg-slate-50'}">
+                    <div class="flex-1 grid grid-cols-3 md:grid-cols-4 gap-2 items-center">
+                        ${dataHtml}
+                        <span class="text-sm text-slate-700 truncate col-span-2" title="${escapeHtml(t.descricao)}">${escapeHtml(t.descricao)}</span>
+                        <div class="flex items-center justify-end gap-2">
+                            <span class="${corValor} font-semibold">${isDeb ? '-' : '+'} ${formatCurrency(val)}</span>
+                            <button onclick="${fnApagar}('${t.id}')" class="text-rose-400 hover:text-rose-600 font-bold ml-2 text-xl" title="Apagar transação">&times;</button>
+                        </div>
+                    </div>
+                    ${selectCategoriaHtml(t, tipo)}
+                </div>`;
+        }
+
         function renderTransactionsBanco() {
             const container = document.getElementById('transactionsContainerBanco');
             renderContasUI();
+            ativarSelectsPreguicosos('transactionsContainerBanco');
             const filter = document.getElementById('filterSelectBanco').value;
-            const filterMes = document.getElementById('filterMesBanco') ? document.getElementById('filterMesBanco').value : 'todos';
+            const filterMesEl = document.getElementById('filterMesBanco');
+            const filterMes = filterMesEl ? filterMesEl.value : 'todos';
 
             let filtered = appState.transactions.filter(t => t.contaId === contaSelecionadaId);
-            
             if (filterMes !== 'todos') {
-                filtered = filtered.filter(t => {
-                    if(!t.data) return false;
-                    let mes, ano;
-                    if (t.data.includes('/')) { const p = t.data.split('/'); mes = p[1]; ano = p[2]; }
-                    else if (t.data.includes('-')) { const p = t.data.split('-'); mes = p[1]; ano = p[0]; }
-                    return `${mes}/${ano}` === filterMes;
-                });
+                const alvo = mesAnoNum(filterMes);
+                filtered = filtered.filter(t => mesAnoNum(t.data) === alvo);
             }
-
             if (filter === 'pendentes') filtered = filtered.filter(t => !t.categoria);
             if (filter === 'debito') filtered = filtered.filter(t => t.debito > 0);
             if (filter === 'credito') filtered = filtered.filter(t => t.credito > 0);
 
-            filtered.sort((a, b) => {
-                const parseDate = (dateStr) => {
-                    if (!dateStr) return 0;
-                    if (dateStr.includes('/')) {
-                        const [dd, mm, yyyy] = dateStr.split('/');
-                        return new Date(yyyy, mm - 1, dd).getTime();
-                    } else if (dateStr.includes('-')) {
-                        const [yyyy, mm, dd] = dateStr.split('-');
-                        return new Date(yyyy, mm - 1, dd).getTime();
-                    }
-                    return 0;
-                };
-                return parseDate(b.data) - parseDate(a.data);
-            });
-
-            if (filtered.length === 0) { 
-                container.innerHTML = `<p class="text-center p-8 text-slate-400 text-sm">Nenhum registro.</p>`; 
-                return; 
+            if (filtered.length === 0) {
+                container.innerHTML = `<p class="text-center p-8 text-slate-400 text-sm">Nenhum registro.</p>`;
+                return;
             }
 
-            let html = '';
-            for (let t of filtered) {
-                const isDeb = t.debito > 0; const val = isDeb ? t.debito : t.credito;
-                const cor = isDeb ? 'text-rose-600' : 'text-emerald-600';
-                const cats = sortedCats(isDeb ? appState.categories.despesas : appState.categories.receitas);
-                let opts = `<option value="">-- Selecione --</option>`;
-                for (let c of cats) { opts += `<option value="${c.replace(/"/g, '&quot;')}" ${t.categoria === c ? 'selected' : ''}>${c}</option>`; }
+            // Ordena por data desc com chave pré-calculada (evita criar Date a cada comparação)
+            const linhas = filtered.map(t => ({ t, k: dataTransacaoISO(t.data) }));
+            linhas.sort((a, b) => b.k.localeCompare(a.k));
 
-                html += `
-                    <div class="flex flex-col md:flex-row justify-between p-4 border-b ${t.isDuplicate ? 'bg-yellow-100 hover:bg-yellow-200 border-yellow-300' : 'hover:bg-slate-50'}">
-                        <div class="flex-1 grid grid-cols-3 md:grid-cols-4 gap-2 items-center">
-                            <span class="text-sm text-slate-400 font-medium">${t.data || ''}</span>
-                            <span class="text-sm text-slate-700 truncate col-span-2" title="${escapeHtml(t.descricao)}">${escapeHtml(t.descricao)}</span>
-                            <div class="flex items-center justify-end gap-2">
-                                <span class="${cor} font-semibold">${isDeb?'-':'+'} ${formatCurrency(val)}</span> 
-                                <button onclick="apagarLinhaBanco('${t.id}')" class="text-rose-400 hover:text-rose-600 font-bold ml-2 text-xl" title="Apagar transação">&times;</button>
-                            </div>
-                        </div>
-                        <select onchange="assignCategory('${t.id}', this.value, 'banco')" class="w-full md:w-64 text-xs border rounded-md p-2 mt-2 md:mt-0 ${t.categoria ? 'border-slate-200' : 'border-amber-400 bg-amber-50'}">
-                            ${opts}
-                        </select>
-                    </div>`;
+            const html = [];
+            for (let { t } of linhas) {
+                const isDeb = t.debito > 0;
+                html.push(linhaTransacaoHtml(t,
+                    `<span class="text-sm text-slate-400 font-medium">${t.data || ''}</span>`,
+                    isDeb ? 'text-rose-600' : 'text-emerald-600', 'banco', 'apagarLinhaBanco'));
             }
-            container.innerHTML = html;
+            container.innerHTML = html.join('');
         }
 
         function renderTransactionsCartao() {
             const container = document.getElementById('transactionsContainerCartao');
+            ativarSelectsPreguicosos('transactionsContainerCartao');
             const filter = document.getElementById('filterSelectCartao') ? document.getElementById('filterSelectCartao').value : 'todos';
-            const filterMes = document.getElementById('filterMesCartao') ? document.getElementById('filterMesCartao').value : 'todos';
-            
-            const totalContainer = document.getElementById('totalizadorCartaoContainer'); 
+            const filterMesEl = document.getElementById('filterMesCartao');
+            const filterMes = filterMesEl ? filterMesEl.value : 'todos';
+
+            const totalContainer = document.getElementById('totalizadorCartaoContainer');
             const totalValor = document.getElementById('totalizadorCartaoValor');
             const totalBruto = document.getElementById('totalizadorCartaoBruto');
 
             let filtered = appState.ccTransactions;
             if (filter === 'pendentes') filtered = filtered.filter(t => !t.categoria);
             if (filterMes !== 'todos') {
-                filtered = filtered.filter(t => {
-                    if(!t.data) return false; let mes, ano;
-                    if (t.data.includes('/')) { const p = t.data.split('/'); mes = p[1]; ano = p[2]; }
-                    else if (t.data.includes('-')) { const p = t.data.split('-'); mes = p[1]; ano = p[0]; }
-                    return `${mes}/${ano}` === filterMes;
-                });
+                const alvo = mesAnoNum(filterMes);
+                filtered = filtered.filter(t => mesAnoNum(t.data) === alvo);
             }
 
             if (totalContainer && totalValor && totalBruto) {
                 if (filterMes !== 'todos') {
-                    let calcLiquido = 0; 
-                    let calcBruto = 0;
-                    for (let t of filtered) { 
-                        let d = Number(t.debito) || 0;
-                        let c = Number(t.credito) || 0;
-                        calcLiquido += (d - c);
-                        calcBruto += (d + c); 
+                    let calcLiquido = 0, calcBruto = 0;
+                    for (let t of filtered) {
+                        const d = Number(t.debito) || 0, c = Number(t.credito) || 0;
+                        calcLiquido += d - c; calcBruto += d + c;
                     }
-                    totalValor.innerText = formatCurrency(calcLiquido); 
+                    totalValor.innerText = formatCurrency(calcLiquido);
                     totalBruto.innerText = formatCurrency(calcBruto);
                     totalContainer.classList.remove('hidden');
-                } else { 
-                    totalContainer.classList.add('hidden'); 
+                } else {
+                    totalContainer.classList.add('hidden');
                 }
             }
 
             if (filtered.length === 0) { container.innerHTML = `<p class="text-center p-8 text-slate-400">Nenhum registro.</p>`; return; }
 
-            let html = '';
-            for (let t of filtered) {
-                const isDeb = t.debito > 0; const val = isDeb ? t.debito : t.credito;
-                const cor = isDeb ? 'text-amber-600' : 'text-emerald-600';
-                const cats = sortedCats(isDeb ? appState.categories.despesas : appState.categories.receitas);
-                let opts = `<option value="">-- Selecione --</option>`;
-                for (let c of cats) { opts += `<option value="${c.replace(/"/g, '&quot;')}" ${t.categoria === c ? 'selected' : ''}>${c}</option>`; }
+            // Ordena por mês de vencimento (fatura) desc e, dentro da fatura, por data da
+            // compra asc — chaves pré-calculadas uma única vez
+            const linhas = filtered.map(t => ({ t, venc: mesAnoNum(t.data) || 0, compra: dataTransacaoISO(t.dataCompra || t.data) }));
+            linhas.sort((a, b) => (b.venc - a.venc) || a.compra.localeCompare(b.compra));
 
-                let dtHtml = `<span class="text-sm text-slate-600">Venc: ${t.data || ''}</span>`;
-                if (t.dataCompra) dtHtml += `<br><span class="text-[10px] text-slate-400">Compra: ${t.dataCompra}</span>`;
-
-                html += `
-                    <div class="flex flex-col md:flex-row justify-between p-4 border-b ${t.isDuplicate ? 'bg-yellow-100 hover:bg-yellow-200 border-yellow-300' : 'hover:bg-slate-50'}">
-                        <div class="flex-1 grid grid-cols-3 md:grid-cols-4 gap-2 items-center">
-                            <div class="text-sm">${dtHtml}</div>
-                            <span class="text-sm text-slate-700 truncate col-span-2" title="${escapeHtml(t.descricao)}">${escapeHtml(t.descricao)}</span>
-                            <div class="flex items-center justify-end gap-2">
-                                <span class="${cor} font-semibold">${isDeb?'-':'+'} ${formatCurrency(val)}</span>
-                                <button onclick="apagarLinhaCartao('${t.id}')" class="text-rose-400 hover:text-rose-600 font-bold ml-2 text-xl" title="Apagar transação">&times;</button>
-                            </div>
-                        </div>
-                        <select onchange="assignCategory('${t.id}', this.value, 'cartao')" class="w-full md:w-64 text-xs border rounded-md p-2 mt-2 md:mt-0 ${t.categoria ? 'border-slate-200' : 'border-amber-400 bg-amber-50'}">
-                            ${opts}
-                        </select>
-                    </div>`;
+            // Subtotais por fatura para os cabeçalhos de grupo
+            const grupos = {};
+            for (let { t, venc } of linhas) {
+                if (!grupos[venc]) grupos[venc] = { qtd: 0, liquido: 0 };
+                grupos[venc].qtd++;
+                grupos[venc].liquido += (Number(t.debito) || 0) - (Number(t.credito) || 0);
             }
-            container.innerHTML = html;
+
+            const html = [];
+            let grupoAtual = null;
+            for (let { t, venc } of linhas) {
+                if (venc !== grupoAtual) {
+                    grupoAtual = venc;
+                    const g = grupos[venc];
+                    const rotulo = venc ? `Fatura ${String(((venc - 1) % 12) + 1).padStart(2, '0')}/${Math.floor((venc - 1) / 12)}` : 'Sem vencimento';
+                    html.push(`
+                        <div class="flex justify-between items-center bg-slate-100 border-y border-slate-200 px-4 py-2">
+                            <span class="text-xs font-bold text-slate-600 uppercase">💳 ${rotulo}</span>
+                            <span class="text-xs font-bold text-slate-500">${g.qtd} lançamento${g.qtd > 1 ? 's' : ''} &bull; líquido <span class="text-amber-700">${formatCurrency(g.liquido)}</span></span>
+                        </div>`);
+                }
+                const dtHtml = `<div class="text-sm"><span class="text-sm text-slate-600">${t.dataCompra || t.data || ''}</span>${t.dataCompra ? `<br><span class="text-[10px] text-slate-400">Venc: ${t.data || ''}</span>` : ''}</div>`;
+                const isDeb = t.debito > 0;
+                html.push(linhaTransacaoHtml(t, dtHtml, isDeb ? 'text-amber-600' : 'text-emerald-600', 'cartao', 'apagarLinhaCartao'));
+            }
+            container.innerHTML = html.join('');
         }
 
         function apagarLinhaCartao(id) { if(confirm("Tem certeza que deseja apagar esta transação do cartão?")) { appState.ccTransactions = appState.ccTransactions.filter(t => t.id !== id); saveData(); } }

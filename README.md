@@ -48,6 +48,7 @@ Aplicativo de orçamento pessoal em **um único arquivo HTML**, que roda direto 
 
 ### 💳 Cartão de Crédito
 - **Importação de fatura** (**.txt, .csv**), informando o **mês da fatura** e o **dia de vencimento**.
+- Lançamentos **agrupados por fatura (mês de vencimento)**, da mais recente para a mais antiga, com **cabeçalho por fatura** (nº de lançamentos e total líquido); dentro de cada fatura, ordenados pela **data da compra**.
 - **Totalizador da fatura**: valor líquido e soma bruta de todos os lançamentos.
 - Filtros por mês e por lançamentos sem categoria; exclusão de uma **fatura inteira** por mês.
 
