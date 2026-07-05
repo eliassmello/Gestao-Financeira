@@ -2234,19 +2234,27 @@
             return c.fontes;
         }
 
-        // Projeção mês a mês com MÚLTIPLAS fontes na ordem definida: cada investimento
-        // rende à sua própria taxa; a parcela corrigida é resgatada do 1º com saldo e,
-        // se ele esgotar no meio do mês, o restante vem do seguinte (registrando o
-        // resgate por fonte, usado depois na efetivação). O aporte entra na fonte ativa.
+        // Projeção mês a mês com MÚLTIPLAS fontes na ordem definida (opcionais): cada
+        // investimento rende à sua própria taxa; a parcela corrigida é resgatada do 1º
+        // com saldo e, se ele esgotar no meio do mês, o restante vem do seguinte
+        // (registrando o resgate por fonte, usado depois na efetivação). O aporte entra
+        // na fonte ativa. O indexador padrão pode ser sobrescrito mês a mês em
+        // p.taxasMes (chaveado pelo nº absoluto da parcela): a correção daquele mês usa
+        // a taxa informada e os meses seguintes voltam ao padrão.
         function simularQuitacao(p) {
-            const g = taxaMensalEquivalente(p.taxaIndexador);
             const fontes = p.fontes || [];
             const taxas = fontes.map(f => taxaMensalEquivalente(f.taxa));
             const saldos = fontes.map(f => Number(f.saldo) || 0);
             const linhas = [];
             let quita = true, quebraEm = null, totalParcelas = 0;
+            let parcela = Number(p.valorParcela) || 0;
             for (let k = 0; k < p.restantes; k++) {
-                const parcela = p.valorParcela * Math.pow(1 + g, k);
+                let taxaCorrecao = p.taxaIndexador;
+                if (k > 0) {
+                    const nAbs = (p.pagas || 0) + k + 1;
+                    if (p.taxasMes && p.taxasMes[nAbs] !== undefined) taxaCorrecao = p.taxasMes[nAbs];
+                    parcela = parcela * (1 + taxaMensalEquivalente(taxaCorrecao));
+                }
                 let rendimento = 0;
                 for (let fi = 0; fi < saldos.length; fi++) {
                     if (saldos[fi] > 0) { const r = saldos[fi] * taxas[fi]; saldos[fi] += r; rendimento += r; }
@@ -2270,7 +2278,7 @@
                     if (saldos.length) saldos[saldos.length - 1] -= restante;
                 }
                 totalParcelas += parcela;
-                linhas.push({ k, parcela, rendimento, aporte: p.aporte, aporteFonte, resgates, falta, saldos: saldos.slice(), saldoTotal: saldos.reduce((a, b) => a + b, 0) });
+                linhas.push({ k, parcela, taxaCorrecao, rendimento, aporte: p.aporte, aporteFonte, resgates, falta, saldos: saldos.slice(), saldoTotal: saldos.reduce((a, b) => a + b, 0) });
             }
             return { linhas, quita, quebraEm, sobraFinal: linhas.length ? linhas[linhas.length - 1].saldoTotal : saldos.reduce((a, b) => a + b, 0), totalParcelas };
         }
@@ -2291,6 +2299,7 @@
 
         // ----- Gerenciamento das fontes no formulário -----
         let fontesQuitacao = [];
+        let taxasMesQuitacao = {};
 
         function adicionarFonteQuitacao() {
             const sel = document.getElementById('qp-add-investimento');
@@ -2338,7 +2347,7 @@
                 }
             }
             if (!fontesQuitacao.length) {
-                cont.innerHTML = '<p class="text-xs text-slate-400">Nenhuma fonte adicionada. Escolha um investimento acima e clique em ➕ Adicionar.</p>';
+                cont.innerHTML = '<p class="text-xs text-slate-400">Nenhuma fonte adicionada (opcional). Sem fontes, a efetivação lança <b>apenas as parcelas</b> na 📅 Previsão, sem resgates de investimento.</p>';
                 return;
             }
             let html = '';
@@ -2378,9 +2387,21 @@
                 mesPrimeira: document.getElementById('qp-mes-primeira').value,
                 dia: Math.min(31, Math.max(1, parseInt(document.getElementById('qp-dia').value) || 10)),
                 fontes: fontesQuitacao.map(f => ({ ...f })),
+                taxasMes: { ...taxasMesQuitacao },
                 aporte: parseFloat(document.getElementById('qp-aporte').value) || 0,
                 categoria: document.getElementById('qp-categoria').value
             };
+        }
+
+        // Sobrescreve (ou limpa) a taxa de correção de um mês específico da compra em
+        // edição. Chaveada pelo nº absoluto da parcela; os meses seguintes continuam
+        // usando o indexador padrão do formulário.
+        function definirTaxaMesQuitacao(nAbs, valor) {
+            const v = parseFloat(valor);
+            const padrao = parseFloat(document.getElementById('qp-indexador').value) || 0;
+            if (isNaN(v) || v === padrao) delete taxasMesQuitacao[nAbs];
+            else taxasMesQuitacao[nAbs] = v;
+            renderSimulacaoQuitacao();
         }
 
         // Data BR do vencimento da k-ésima parcela restante (k = 0 é a próxima)
@@ -2401,15 +2422,19 @@
             const res = document.getElementById('quitacao-resultado');
             if (!res) return;
             const p = lerFormCompra();
-            if (!p.valorParcela || !p.restantes || !p.mesPrimeira || !p.fontes.length) { res.classList.add('hidden'); return; }
+            if (!p.valorParcela || !p.restantes || !p.mesPrimeira) { res.classList.add('hidden'); return; }
             res.classList.remove('hidden');
 
+            const semFontes = !p.fontes.length;
             const sim = simularQuitacao(p);
             const aporteMin = aporteMinimoQuitacao(p);
             const nomesOrdem = p.fontes.map((f, i) => `${i + 1}º ${escapeHtml(nomeCurtoInvestimento(f.investimentoId))}`).join(' → ');
 
             const ver = document.getElementById('quitacao-veredicto');
-            if (sim.quita) {
+            if (semFontes) {
+                ver.className = "p-5 rounded-xl border text-base font-bold bg-indigo-50 border-indigo-200 text-indigo-800";
+                ver.innerHTML = `ℹ️ Compra <b>sem investimento vinculado</b>: ao efetivar, apenas as <b>${p.restantes} parcelas</b> serão lançadas na 📅 Previsão (sem resgates nem aportes). Ajuste a correção mês a mês na tabela abaixo, se precisar.`;
+            } else if (sim.quita) {
                 ver.className = "p-5 rounded-xl border text-base font-bold bg-emerald-50 border-emerald-200 text-emerald-800";
                 ver.innerHTML = `✅ As fontes (${nomesOrdem}) ${p.aporte > 0 ? `com aporte de ${formatCurrency(p.aporte)}/mês ` : ''}cobrem as <b>${p.restantes} parcelas restantes</b> — sobra projetada de <b>${formatCurrency(sim.sobraFinal)}</b> ao final.`;
             } else {
@@ -2432,8 +2457,8 @@
                 <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
                     <p class="text-xs font-semibold text-rose-500 uppercase">Total corrigido a pagar</p>
                     <p class="text-2xl font-bold text-rose-600 mt-1">${formatCurrency(sim.totalParcelas)}</p>
-                    <p class="text-[10px] text-slate-400 mt-1">soma das parcelas com ${p.taxaIndexador}% a.a.</p>
-                </div>
+                    <p class="text-[10px] text-slate-400 mt-1">indexador padrão ${p.taxaIndexador}% a.a.${Object.keys(p.taxasMes).length ? ` + ${Object.keys(p.taxasMes).length} mês(es) com taxa ajustada` : ''}</p>
+                </div>` + (semFontes ? '' : `
                 <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
                     <p class="text-xs font-semibold text-emerald-600 uppercase">Aporte mínimo</p>
                     <p class="text-2xl font-bold text-emerald-600 mt-1">${formatCurrency(aporteMin)}</p>
@@ -2442,24 +2467,34 @@
                 <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
                     <p class="text-xs font-semibold text-indigo-500 uppercase">Quitar × manter aplicado</p>
                     <p class="text-xs text-slate-600 mt-2">${rotuloComparativo}</p>
-                </div>`;
+                </div>`);
 
-            // Cabeçalho dinâmico: uma coluna de saldo por fonte, na ordem de uso
+            // Cabeçalho dinâmico: coluna de correção editável por mês e, se houver
+            // fontes, uma coluna de saldo por investimento na ordem de uso
             const head = document.getElementById('quitacao-tabela-head');
             head.innerHTML = `
                 <th class="p-3 whitespace-nowrap">Parcela</th>
                 <th class="p-3 whitespace-nowrap">Vencimento</th>
+                <th class="p-3 text-right whitespace-nowrap" title="Correção aplicada NA parcela deste mês. O valor padrão vem do Indexador (% a.a.); ajuste aqui quando a taxa real do mês for diferente — os meses seguintes continuam no padrão.">Correção (% a.a.)</th>
                 <th class="p-3 text-right whitespace-nowrap">Parcela corrigida</th>
+                ${semFontes ? '' : `
                 <th class="p-3 text-right whitespace-nowrap">Rendimento</th>
                 <th class="p-3 text-right whitespace-nowrap">Aporte</th>
                 ${p.fontes.map((f, i) => `<th class="p-3 text-right whitespace-nowrap">${i + 1}º ${escapeHtml(nomeCurtoInvestimento(f.investimentoId))}</th>`).join('')}
-                <th class="p-3 text-right whitespace-nowrap">Saldo total</th>`;
+                <th class="p-3 text-right whitespace-nowrap">Saldo total</th>`}`;
 
             const tbody = document.getElementById('quitacao-tabela');
             let html = '';
             for (const l of sim.linhas) {
                 const corSaldo = l.saldoTotal >= 0 ? 'text-indigo-600' : 'text-rose-600';
-                const celulasFontes = l.saldos.map((s, fi) => {
+                const nAbs = p.pagas + l.k + 1;
+                const ajustada = p.taxasMes[nAbs] !== undefined;
+                const celTaxa = l.k === 0
+                    ? `<td class="p-2 text-right text-slate-300" title="A 1ª parcela restante é o valor informado no formulário, sem correção">—</td>`
+                    : `<td class="p-2 text-right whitespace-nowrap">
+                        <input type="number" step="0.01" value="${l.taxaCorrecao}" onchange="definirTaxaMesQuitacao(${nAbs}, this.value)" title="${ajustada ? 'Taxa ajustada deste mês (apague ou iguale ao padrão para voltar)' : 'Padrão do indexador — edite se a taxa real deste mês for diferente'}" class="w-20 text-sm border ${ajustada ? 'border-amber-400 bg-amber-50 font-bold text-amber-700' : 'border-slate-200 text-slate-500'} rounded-md p-1 text-right outline-none focus:ring-1 focus:ring-indigo-500">
+                       </td>`;
+                const celulasFontes = semFontes ? '' : l.saldos.map((s, fi) => {
                     const resgate = l.resgates.find(r => r.fi === fi);
                     return `<td class="p-3 text-right whitespace-nowrap ${s > 0.004 ? 'text-slate-600' : 'text-slate-300'}">
                         ${formatCurrency(s)}
@@ -2467,14 +2502,16 @@
                     </td>`;
                 }).join('');
                 html += `
-                    <tr class="${l.falta > 0 ? 'bg-rose-50' : 'hover:bg-slate-50'}">
-                        <td class="p-3 font-semibold text-slate-600">${p.pagas + l.k + 1}/${p.total}</td>
+                    <tr class="${!semFontes && l.falta > 0 ? 'bg-rose-50' : 'hover:bg-slate-50'}">
+                        <td class="p-3 font-semibold text-slate-600">${nAbs}/${p.total}</td>
                         <td class="p-3 whitespace-nowrap">${dataParcelaQuitacao(p.mesPrimeira, p.dia, l.k)}</td>
+                        ${celTaxa}
                         <td class="p-3 text-right whitespace-nowrap text-rose-600 font-medium">${formatCurrency(l.parcela)}</td>
+                        ${semFontes ? '' : `
                         <td class="p-3 text-right whitespace-nowrap text-emerald-600">${formatCurrency(l.rendimento)}</td>
                         <td class="p-3 text-right whitespace-nowrap text-slate-500">${l.aporte > 0 ? formatCurrency(l.aporte) : '—'}</td>
                         ${celulasFontes}
-                        <td class="p-3 text-right whitespace-nowrap font-bold ${corSaldo}">${formatCurrency(l.saldoTotal)}</td>
+                        <td class="p-3 text-right whitespace-nowrap font-bold ${corSaldo}">${formatCurrency(l.saldoTotal)}</td>`}
                     </tr>`;
             }
             tbody.innerHTML = html;
@@ -2497,7 +2534,7 @@
                             labels,
                             datasets: [
                                 { label: 'Parcela corrigida', data: sim.linhas.map(l => l.parcela), backgroundColor: 'rgba(244, 63, 94, 0.6)', borderRadius: 3, order: 2 },
-                                { label: 'Saldo total', data: sim.linhas.map(l => l.saldoTotal), type: 'line', borderColor: '#4f46e5', backgroundColor: '#4f46e5', borderWidth: 2, pointRadius: 3, tension: 0.3, order: 1 },
+                                ...(semFontes ? [] : [{ label: 'Saldo total', data: sim.linhas.map(l => l.saldoTotal), type: 'line', borderColor: '#4f46e5', backgroundColor: '#4f46e5', borderWidth: 2, pointRadius: 3, tension: 0.3, order: 1 }]),
                                 ...datasetsFontes
                             ]
                         },
@@ -2586,6 +2623,7 @@
         function novaCompraParcelada() {
             compraQuitacaoId = null;
             fontesQuitacao = [];
+            taxasMesQuitacao = {};
             for (const id of ['qp-nome', 'qp-parcela', 'qp-total']) document.getElementById(id).value = '';
             document.getElementById('qp-pagas').value = '0';
             document.getElementById('qp-aporte').value = '0';
@@ -2614,6 +2652,7 @@
             if (!c) return;
             compraQuitacaoId = id;
             fontesQuitacao = normalizarFontesCompra(c).map(f => ({ ...f }));
+            taxasMesQuitacao = { ...(c.taxasMes || {}) };
             document.getElementById('qp-nome').value = c.nome;
             document.getElementById('qp-parcela').value = c.valorParcela;
             document.getElementById('qp-total').value = c.total;
@@ -2638,16 +2677,73 @@
         // e, se houver aporte mensal, uma Saída com reflexo de Aporte. Assim o saldo
         // projetado da conta fica correto (resgate entra, parcela sai) e o histórico do
         // investimento recebe os saques/aportes com recálculo em cascata.
+        // Monta os movimentos LÍQUIDOS de investimento de cada mês: aporte e resgate do
+        // MESMO investimento na MESMA data são compensados entre si e só a diferença é
+        // lançada (um resgate líquido ou um aporte líquido), evitando movimentação
+        // bancária desnecessária. A parcela (Saída da conta) é sempre lançada à parte.
+        function montarMovimentosCompra(compra, sim) {
+            const movimentos = [];
+            for (const l of sim.linhas) {
+                const dataBR = dataParcelaQuitacao(compra.mesPrimeira, compra.dia, l.k);
+                const nParc = `${compra.pagas + l.k + 1}/${compra.total}`;
+
+                const porInv = {};
+                for (const r of l.resgates) {
+                    const invId = compra.fontes[r.fi].investimentoId;
+                    if (!porInv[invId]) porInv[invId] = { resgate: 0, aporte: 0 };
+                    porInv[invId].resgate += r.valor;
+                }
+                if (compra.aporte > 0.005 && compra.fontes.length) {
+                    const invId = (compra.fontes[l.aporteFonte] || compra.fontes[0]).investimentoId;
+                    if (!porInv[invId]) porInv[invId] = { resgate: 0, aporte: 0 };
+                    porInv[invId].aporte += compra.aporte;
+                }
+
+                let seq = 0;
+                for (const invId in porInv) {
+                    const m = porInv[invId];
+                    const liquido = Math.round((m.resgate - m.aporte) * 100) / 100;
+                    seq++;
+                    if (Math.abs(liquido) < 0.005) continue; // aporte e resgate se anulam: nenhum movimento
+                    const compensado = m.resgate > 0.004 && m.aporte > 0.004;
+                    if (liquido > 0) {
+                        movimentos.push({
+                            id: `fut_${compra.id}_r${l.k}_${seq}`, data: dataBR, tipo: 'credito', valor: liquido,
+                            descricao: `Resgate p/ ${compra.nome} (parc. ${nParc})${compensado ? ' (líq. do aporte)' : ''} — ${nomeCurtoInvestimento(invId)}`,
+                            grupo: 'resgate', investimentoId: invId
+                        });
+                    } else {
+                        movimentos.push({
+                            id: `fut_${compra.id}_a${l.k}_${seq}`, data: dataBR, tipo: 'debito', valor: -liquido,
+                            descricao: `Aporte p/ ${compra.nome}${compensado ? ' (líq. do resgate)' : ''} — ${nomeCurtoInvestimento(invId)}`,
+                            grupo: 'aporte', investimentoId: invId
+                        });
+                    }
+                }
+
+                movimentos.push({
+                    id: `fut_${compra.id}_p${l.k}`, data: dataBR, tipo: 'debito', valor: Math.round(l.parcela * 100) / 100,
+                    descricao: `${compra.nome} (parcela ${nParc})`, grupo: 'parcela', investimentoId: ''
+                });
+            }
+            return movimentos;
+        }
+
         function efetivarCompraParcelada() {
             const compra = salvarCompraParcelada(true);
             if (!compra) return;
-            if (!(compra.fontes || []).length) { alert("Adicione ao menos um investimento como fonte de recursos antes de efetivar."); return; }
+            const temFontes = (compra.fontes || []).length > 0;
             const sim = simularQuitacao(compra);
-            if (!sim.quita) { alert("A simulação não quita todas as parcelas — as fontes esgotam antes do fim.\nAjuste o aporte mensal (botão \"mín.\") ou as fontes antes de efetivar."); return; }
-            const nAportes = compra.aporte > 0.005 ? compra.restantes : 0;
-            const nResgates = sim.linhas.reduce((a, l) => a + l.resgates.length, 0);
+            if (temFontes && !sim.quita) { alert("A simulação não quita todas as parcelas — as fontes esgotam antes do fim.\nAjuste o aporte mensal (botão \"mín.\") ou as fontes antes de efetivar."); return; }
+
+            const movimentos = montarMovimentosCompra(compra, sim);
+            const nResgates = movimentos.filter(m => m.grupo === 'resgate').length;
+            const nAportes = movimentos.filter(m => m.grupo === 'aporte').length;
             const nomesFontes = compra.fontes.map((f, i) => `${i + 1}º ${nomeCurtoInvestimento(f.investimentoId)}`).join(', ');
-            if (!confirm(`Efetivar "${compra.nome}"?\n\nSerão criados na Previsão:\n• ${compra.restantes} parcelas (Saída)\n• ${nResgates} resgates nos investimentos (${nomesFontes})\n${nAportes ? `• ${nAportes} aportes de ${formatCurrency(compra.aporte)}\n` : ''}\nTotal corrigido: ${formatCurrency(sim.totalParcelas)}. Você poderá desfazer tudo com um clique.`)) return;
+            const resumoInvestimentos = temFontes
+                ? `• ${nResgates} resgates líquidos${nAportes ? ` e ${nAportes} aportes líquidos` : ''} nos investimentos (${nomesFontes})\n\nAporte e resgate do mesmo investimento na mesma data são compensados entre si — só a diferença é lançada.`
+                : `• Sem investimento vinculado: nenhum resgate/aporte será criado.`;
+            if (!confirm(`Efetivar "${compra.nome}"?\n\nSerão criados na Previsão:\n• ${compra.restantes} parcelas (Saída)\n${resumoInvestimentos}\nTotal corrigido: ${formatCurrency(sim.totalParcelas)}. Você poderá desfazer tudo com um clique.`)) return;
 
             const catParcela = compra.categoria && compra.categoria !== '__nova__'
                 ? garantirCategoria('despesas', compra.categoria)
@@ -2656,44 +2752,19 @@
             const catAporte = garantirCategoria('despesas', 'Aporte Investimento');
             compra.categoria = catParcela;
 
-            for (const l of sim.linhas) {
-                const dataBR = dataParcelaQuitacao(compra.mesPrimeira, compra.dia, l.k);
-                const vParc = Math.round(l.parcela * 100) / 100;
-                const nParc = `${compra.pagas + l.k + 1}/${compra.total}`;
-
-                // Um resgate por fonte usada no mês (o mês de transição divide entre duas)
-                for (const r of l.resgates) {
-                    const fonte = compra.fontes[r.fi];
-                    const futResgate = {
-                        id: `fut_${compra.id}_r${l.k}_${r.fi}`, data: dataBR, tipo: 'credito', valor: Math.round(r.valor * 100) / 100,
-                        descricao: `Resgate p/ ${compra.nome} (parc. ${nParc}) — ${nomeCurtoInvestimento(fonte.investimentoId)}`, categoria: catResgate,
-                        investimentoId: fonte.investimentoId, compraId: compra.id
-                    };
-                    aplicarReflexoInvestimento(futResgate);
-                    appState.futureTransactions.push(futResgate);
-                }
-
-                appState.futureTransactions.push({
-                    id: `fut_${compra.id}_p${l.k}`, data: dataBR, tipo: 'debito', valor: vParc,
-                    descricao: `${compra.nome} (parcela ${nParc})`, categoria: catParcela,
-                    investimentoId: '', compraId: compra.id
-                });
-
-                if (compra.aporte > 0.005) {
-                    const fonteAporte = compra.fontes[l.aporteFonte] || compra.fontes[0];
-                    const futAporte = {
-                        id: `fut_${compra.id}_a${l.k}`, data: dataBR, tipo: 'debito', valor: Math.round(compra.aporte * 100) / 100,
-                        descricao: `Aporte p/ ${compra.nome} — ${nomeCurtoInvestimento(fonteAporte.investimentoId)}`, categoria: catAporte,
-                        investimentoId: fonteAporte.investimentoId, compraId: compra.id
-                    };
-                    aplicarReflexoInvestimento(futAporte);
-                    appState.futureTransactions.push(futAporte);
-                }
+            for (const m of movimentos) {
+                const fut = {
+                    id: m.id, data: m.data, tipo: m.tipo, valor: m.valor, descricao: m.descricao,
+                    categoria: m.grupo === 'parcela' ? catParcela : (m.grupo === 'resgate' ? catResgate : catAporte),
+                    investimentoId: m.investimentoId, compraId: compra.id
+                };
+                if (fut.investimentoId) aplicarReflexoInvestimento(fut);
+                appState.futureTransactions.push(fut);
             }
             compra.status = 'efetivada';
             updateFutureCategoriesDropdown(); updatePrevSumDropdown();
             saveData();
-            alert(`"${compra.nome}" efetivada!\n• ${compra.restantes + nResgates + nAportes} lançamentos criados na 📅 Previsão\n• ${nResgates} resgates e ${nAportes} aportes distribuídos nos investimentos (${nomesFontes})`);
+            alert(`"${compra.nome}" efetivada!\n• ${movimentos.length} lançamentos criados na 📅 Previsão${temFontes ? `\n• ${nResgates} resgates líquidos${nAportes ? ` e ${nAportes} aportes líquidos` : ''} nos investimentos (${nomesFontes})` : ''}`);
         }
 
         function desfazerEfetivacaoCompra() {
