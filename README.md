@@ -34,6 +34,9 @@ Aplicativo de orçamento pessoal em **um único arquivo HTML**, que roda direto 
 - **Agendamento** de lançamentos futuros (entradas e saídas) com data, descrição, categoria e valor.
 - **Cronograma da Conta Corrente** com o **saldo projetado** linha a linha; a **Caixa de Partida** usa o saldo das contas marcadas para refletir.
 - Previsões já vencidas aparecem **destacadas em amarelo** para você conciliar com o banco.
+- **✔ Efetivar previsão (Previsto × Realizado)**: quando o valor real cair no banco, clique em **✔** no cronograma e informe o valor realizado. A previsão sai do cronograma/simulador e vai para o painel **✅ Previsto × Realizado**, que mostra por mês: previsto, realizado e **diferença** (positiva = melhor que o previsto) por lançamento, totais de entradas/saídas e **resumo por categoria**. Dá para **desfazer** (↩️) e a previsão volta ao cronograma.
+- **💳 Parcelamentos Futuros do Cartão**: as parcelas restantes dos lançamentos "Parc. N/M" das faturas importadas são projetadas automaticamente mês a mês, com total comprometido e detalhe por compra. Compras repetidas em faturas consecutivas são deduplicadas (vale a fatura mais recente). Painel informativo — não altera o Saldo Projetado.
+- **🧹 Excluir por categoria**: remova de uma vez todos os agendamentos pendentes de uma categoria (útil para refazer planos gerados em massa). Previsões já efetivadas são preservadas e reflexos em investimentos são revertidos.
 - **Reflexo em Investimento (opcional)**: uma **Saída** vira **Aporte** e uma **Entrada** vira **Resgate** no investimento escolhido, lançado na data e recalculado em cascata.
 
 ### 🏦 Conta Corrente (várias contas)
@@ -46,6 +49,7 @@ Aplicativo de orçamento pessoal em **um único arquivo HTML**, que roda direto 
 
 ### 💳 Cartão de Crédito
 - **Importação de fatura** (**.txt, .csv**), informando o **mês da fatura** e o **dia de vencimento**.
+- Lançamentos **agrupados por fatura (mês de vencimento)**, da mais recente para a mais antiga, com **cabeçalho por fatura** (nº de lançamentos e total líquido); dentro de cada fatura, ordenados pela **data da compra**.
 - **Totalizador da fatura**: valor líquido e soma bruta de todos os lançamentos.
 - Filtros por mês e por lançamentos sem categoria; exclusão de uma **fatura inteira** por mês.
 
@@ -60,6 +64,19 @@ Aplicativo de orçamento pessoal em **um único arquivo HTML**, que roda direto 
   - O **saldo anterior** de cada linha é sempre herdado do saldo final do mês anterior, e qualquer alteração **se propaga** para as linhas posteriores.
 - Botão **🔁 Repetir** projeta vários meses de uma vez (repetindo aporte, taxa e resgate), continuando a partir do último mês.
 
+### 🧮 Quitação (Compras Parceladas)
+- Cadastre uma compra parcelada (ex.: imóvel em 22×) com **indexador estimado** (INCC/IPCA/IGP-M, % a.a.) e monte a lista de **fontes de recursos** (opcional): vários investimentos, **na ordem em que devem ser usados** (↑↓ para reordenar). Saldo e **rendimento % a.a.** de cada fonte vêm automaticamente da tabela de Investimentos (última taxa lançada) e podem ser ajustados — use a taxa líquida de IR.
+- **Compra sem investimento vinculado**: deixe a lista de fontes vazia e a efetivação lança **apenas as parcelas** na 📅 Previsão, sem resgates nem aportes.
+- **Correção mês a mês**: o Indexador (% a.a.) é apenas o **padrão de projeção**. Na tabela, cada mês tem um campo de **taxa de correção editável** (fica destacado em âmbar quando ajustado) — útil quando o INCC real do mês difere do estimado. A parcela daquele mês é recalculada e o saldo segue **em cascata**, mas os meses seguintes voltam à taxa padrão.
+- A simulação mês a mês esgota o 1º investimento, passa ao 2º e assim por diante — cada um rendendo à **sua própria taxa**; o mês de transição divide o resgate entre as duas fontes. A tabela mostra uma **coluna de saldo por investimento** (com o resgate do mês) e o gráfico traz o saldo total + uma linha por fonte.
+- Resultado na tela: veredicto (✅ cobre / ⚠️ fontes esgotam na parcela N), **aporte mensal mínimo** para fechar a conta (botão "mín." preenche), total corrigido a pagar e análise **quitar × manter aplicado** (rendimento médio ponderado das fontes × indexador).
+- **Tudo é só simulação** até clicar em **✅ Efetivar**: cada parcela vira um par na 📅 Previsão (Entrada "Resgate p/ ..." refletida como **saque no investimento correto daquele mês** + Saída da parcela) e os aportes viram Saídas refletidas como **aporte na fonte ativa** — com recálculo em cascata no histórico de cada investimento. **↩️ Desfazer efetivação** remove tudo com um clique.
+- **Compensação automática**: aporte e resgate do **mesmo investimento na mesma data** são abatidos entre si e apenas o **movimento líquido** é lançado (ex.: parcela de R$ 5.000 com aporte de R$ 676 vira um único resgate líquido de R$ 4.324), evitando movimentação bancária desnecessária. Se os dois se anulam, nenhum movimento é criado. Compras efetivadas antes desta versão podem ser desfeitas e re-efetivadas para ganhar a compensação.
+- Suporta **várias compras** simultâneas, cada uma com seu indexador e suas fontes.
+
+### 🔍 Busca Global
+- Botão **🔍 Buscar** no topo: encontre lançamentos por **descrição, categoria ou valor** (ex.: `mercado`, `1.500,00`) em **todas as contas correntes, cartão e previsões**, em todos os meses, ordenados do mais recente para o mais antigo.
+
 ### ⚙️ Configurações
 - **Backup completo** dos dados: **exportar** e **restaurar** em arquivo **.json** (inclui as contas e os orçamentos).
 - Cadastro e exclusão de **categorias** de despesa e de receita.
@@ -73,6 +90,7 @@ Aplicativo de orçamento pessoal em **um único arquivo HTML**, que roda direto 
 
 - Os dados são gravados em **IndexedDB** (banco local do navegador, `AppFinancas_DB`), com migração automática de dados antigos em `localStorage`. Contas correntes antigas (de uma única conta) são migradas automaticamente para uma "Conta Principal".
 - **Faça backup periodicamente** em **Config → Salvar backup (.json)**. Para migrar de máquina ou recuperar, use **Restaurar backup (.json)**.
+- **Lembrete automático**: o app mostra um aviso no topo se você **nunca fez backup** ou se o último foi há **30 dias ou mais** (dá para adiar por 7 dias). A data/hora do último backup aparece em **Config → Backup Completo**.
 - Limpar os dados do navegador, trocar de dispositivo ou usar janela anônima **apaga ou não enxerga** os dados — por isso o backup é essencial.
 
 ---
