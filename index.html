@@ -667,6 +667,7 @@
                         <select id="qp-categoria" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500"></select>
                     </div>
                     <div class="col-span-2 md:col-span-4 flex gap-2 justify-end flex-wrap">
+                        <button id="btn-reprojetar-compra" onclick="reprojetarCompraParcelada()" title="Re-ancora a simulação na realidade: parcelas conciliadas (✔ na Previsão) saem da projeção, a base passa a ser a última parcela realmente paga e os saldos das fontes são atualizados para o saldo de hoje dos investimentos" class="hidden bg-sky-600 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-sky-700 transition">🔄 Reprojetar do ponto atual</button>
                         <button onclick="salvarCompraParcelada()" class="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-indigo-700 transition">💾 Salvar compra</button>
                         <button id="btn-efetivar-compra" onclick="efetivarCompraParcelada()" class="bg-emerald-600 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-emerald-700 transition">✅ Efetivar no sistema</button>
                         <button id="btn-desfazer-compra" onclick="desfazerEfetivacaoCompra()" class="hidden bg-amber-500 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-amber-600 transition">↩️ Desfazer efetivação</button>
@@ -2218,6 +2219,20 @@
             return inv ? (inv.valorInicial || inv.valor || 0) : 0;
         }
 
+        // Saldo do investimento NA DATA DE HOJE (última linha do histórico até hoje).
+        // Diferente de saldoAtualInvestimento: ignora linhas futuras, como os resgates
+        // planejados por uma efetivação — essencial para reprojetar uma compra.
+        function saldoInvestimentoHoje(inv) {
+            if (!inv) return 0;
+            if (inv.historico && inv.historico.length) {
+                const hj = new Date();
+                const iso = `${hj.getFullYear()}-${String(hj.getMonth() + 1).padStart(2, '0')}-${String(hj.getDate()).padStart(2, '0')}`;
+                const passadas = inv.historico.filter(h => h.data <= iso);
+                if (passadas.length) return passadas[passadas.length - 1].saldoFinal || 0;
+            }
+            return inv.valorInicial || inv.valor || 0;
+        }
+
         // Última taxa anual lançada no histórico do investimento (tabela de Investimentos)
         function taxaInvestimentoAtual(inv) {
             if (inv && inv.historico && inv.historico.length) return Number(inv.historico[inv.historico.length - 1].taxaAnual) || 0;
@@ -2612,11 +2627,14 @@
             const btnEf = document.getElementById('btn-efetivar-compra');
             const btnDes = document.getElementById('btn-desfazer-compra');
             const btnExc = document.getElementById('btn-excluir-compra');
+            const btnRep = document.getElementById('btn-reprojetar-compra');
             if (btnEf) btnEf.classList.toggle('hidden', !!efetivada);
             if (btnDes) btnDes.classList.toggle('hidden', !efetivada);
             if (btnExc) btnExc.classList.toggle('hidden', !compra);
+            if (btnRep) btnRep.classList.toggle('hidden', !compra);
+            const reproj = compra && compra.reprojetadoEm ? ` · reprojetada em ${compra.reprojetadoEm}` : '';
             document.getElementById('form-compra-titulo').innerText = compra
-                ? `${compra.nome} — ${efetivada ? 'efetivada (desfaça para editar valores e re-efetivar)' : 'em simulação'}`
+                ? `${compra.nome} — ${efetivada ? 'efetivada (desfaça para editar valores e re-efetivar)' : 'em simulação'}${reproj}`
                 : 'Dados da compra (a simulação recalcula automaticamente)';
         }
 
@@ -2762,6 +2780,7 @@
                 appState.futureTransactions.push(fut);
             }
             compra.status = 'efetivada';
+            compra.pagasEfetivacao = compra.pagas;
             updateFutureCategoriesDropdown(); updatePrevSumDropdown();
             saveData();
             alert(`"${compra.nome}" efetivada!\n• ${movimentos.length} lançamentos criados na 📅 Previsão${temFontes ? `\n• ${nResgates} resgates líquidos${nAportes ? ` e ${nAportes} aportes líquidos` : ''} nos investimentos (${nomesFontes})` : ''}`);
@@ -2786,6 +2805,63 @@
             appState.comprasParceladas = appState.comprasParceladas.filter(c => c.id !== compra.id);
             compraQuitacaoId = null;
             saveData();
+        }
+
+        // 🔄 Reprojetar do ponto atual: re-ancora a simulação na realidade sem tocar nos
+        // lançamentos já efetivados. As parcelas conciliadas com ✔ (que saíram do
+        // cronograma para o Previsto × Realizado) saem da projeção: o nº de pagas é
+        // deduzido delas, a base da parcela passa a ser a última REALMENTE paga
+        // (corrigida 1 mês pelo indexador padrão) e o saldo de cada fonte volta a ser o
+        // saldo de HOJE do investimento. É idempotente: reprojetar de novo sem novas
+        // conciliações não muda nada.
+        function reprojetarCompraParcelada() {
+            const compra = appState.comprasParceladas.find(c => c.id === compraQuitacaoId);
+            if (!compra) { alert("Salve ou selecione uma compra primeiro."); return; }
+            normalizarFontesCompra(compra);
+
+            const parcelasFuts = appState.futureTransactions.filter(f => f.compraId === compra.id && f.tipo === 'debito' && !f.investimentoId);
+            const conciliadas = parcelasFuts.filter(f => f.conciliado).sort((a, b) => converterDataBRParaDate(a.data) - converterDataBRParaDate(b.data));
+            const pendentes = parcelasFuts.filter(f => !f.conciliado).sort((a, b) => converterDataBRParaDate(a.data) - converterDataBRParaDate(b.data));
+
+            const mudancas = [];
+            const numeroParcela = (f) => { const m = String(f.descricao || '').match(/\(parcela\s+(\d+)\s*\//); return m ? parseInt(m[1], 10) : null; };
+
+            if (conciliadas.length) {
+                // Progresso: pagas = maior nº de parcela conciliada (extraído da descrição)
+                const nums = conciliadas.map(numeroParcela).filter(n => n !== null);
+                const novasPagas = nums.length ? Math.max(...nums) : (compra.pagasEfetivacao !== undefined ? compra.pagasEfetivacao : compra.pagas) + conciliadas.length;
+                if (novasPagas !== compra.pagas) { mudancas.push(`Parcelas pagas: ${compra.pagas} → ${novasPagas} (${conciliadas.length} conciliadas no Previsto × Realizado)`); compra.pagas = novasPagas; }
+
+                // Base: última parcela realmente paga, corrigida 1 mês pelo indexador padrão
+                const ultima = conciliadas[conciliadas.length - 1];
+                const valorReal = Number(ultima.realizado) || Number(ultima.valor) || 0;
+                if (valorReal > 0) {
+                    const novaBase = Math.round(valorReal * (1 + taxaMensalEquivalente(compra.taxaIndexador)) * 100) / 100;
+                    if (Math.abs(novaBase - compra.valorParcela) > 0.005) { mudancas.push(`Próxima parcela: ${formatCurrency(compra.valorParcela)} → ${formatCurrency(novaBase)} (última paga: ${formatCurrency(valorReal)} em ${ultima.data})`); compra.valorParcela = novaBase; }
+                }
+
+                // Recomeço da projeção: mês da 1ª parcela ainda pendente
+                if (pendentes.length) {
+                    const novoMes = paraMesAno(dataTransacaoISO(pendentes[0].data));
+                    if (novoMes && novoMes !== compra.mesPrimeira) { mudancas.push(`Mês da próxima parcela: ${compra.mesPrimeira} → ${novoMes}`); compra.mesPrimeira = novoMes; }
+                }
+            }
+
+            // Saldos das fontes: saldo de HOJE de cada investimento (ignora linhas futuras do plano)
+            for (const f of compra.fontes) {
+                const inv = appState.investimentos.find(x => x.id === f.investimentoId);
+                if (!inv) continue;
+                const hoje = Math.round(saldoInvestimentoHoje(inv) * 100) / 100;
+                if (Math.abs(hoje - (Number(f.saldo) || 0)) > 0.005) { mudancas.push(`Saldo de ${inv.nome}: ${formatCurrency(f.saldo)} → ${formatCurrency(hoje)} (hoje)`); f.saldo = hoje; }
+            }
+
+            if (!mudancas.length) { alert("Nada a reprojetar: não há novas parcelas conciliadas e os saldos das fontes já refletem o dia de hoje."); return; }
+            if (!confirm(`Reprojetar "${compra.nome}" do ponto atual?\n\n• ${mudancas.join('\n• ')}\n\nApenas a SIMULAÇÃO é atualizada — os lançamentos já efetivados na Previsão e nos investimentos não são alterados.`)) return;
+
+            const hj = new Date();
+            compra.reprojetadoEm = `${String(hj.getDate()).padStart(2, '0')}/${String(hj.getMonth() + 1).padStart(2, '0')}/${hj.getFullYear()}`;
+            saveData();
+            carregarCompraParcelada(compra.id);
         }
 
         // ===== Limpeza da Previsão por categoria =====
