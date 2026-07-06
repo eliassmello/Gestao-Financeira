@@ -622,7 +622,7 @@
 
             <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
                 <h3 class="font-bold text-slate-700 text-sm mb-3" id="form-compra-titulo">Dados da compra (a simulação recalcula automaticamente)</h3>
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3" id="form-compra-campos">
                     <div class="col-span-2">
                         <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Nome da compra</label>
                         <input type="text" id="qp-nome" placeholder="Ex.: Apartamento" oninput="debouncedSimularQuitacao()" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
@@ -676,7 +676,6 @@
                         <select id="qp-categoria" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500"></select>
                     </div>
                     <div class="col-span-2 md:col-span-4 flex gap-2 justify-end flex-wrap">
-                        <button id="btn-reprojetar-compra" onclick="reprojetarCompraParcelada()" title="Re-ancora a simulação na realidade: parcelas conciliadas (✔ na Previsão) saem da projeção, a base passa a ser a última parcela realmente paga e os saldos das fontes são atualizados para o saldo de hoje dos investimentos" class="hidden bg-sky-600 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-sky-700 transition">🔄 Reprojetar do ponto atual</button>
                         <button onclick="salvarCompraParcelada()" class="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-indigo-700 transition">💾 Salvar compra</button>
                         <button id="btn-efetivar-compra" onclick="efetivarCompraParcelada()" class="bg-emerald-600 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-emerald-700 transition">✅ Efetivar no sistema</button>
                         <button id="btn-desfazer-compra" onclick="desfazerEfetivacaoCompra()" class="hidden bg-amber-500 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-amber-600 transition">↩️ Desfazer efetivação</button>
@@ -693,7 +692,10 @@
                     <div class="relative w-full" style="height:260px"><canvas id="chartQuitacao"></canvas></div>
                 </div>
                 <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-                    <h3 class="text-base font-bold text-slate-700 border-b pb-2 mb-3">Projeção mês a mês</h3>
+                    <div class="border-b pb-2 mb-3">
+                        <h3 class="text-base font-bold text-slate-700">Projeção mês a mês</h3>
+                        <p id="quitacao-tabela-nota" class="text-xs text-slate-400 mt-1">Edite <b>Correção</b> e <b>Aporte</b> de cada mês; a projeção recalcula em cascata.</p>
+                    </div>
                     <div class="overflow-x-auto rounded-lg border border-slate-100">
                         <table class="w-full text-left text-sm text-slate-600">
                             <thead class="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
@@ -1543,8 +1545,6 @@
         // Extrai "YYYY-MM" de uma string "YYYY-MM-DD" (ou já "YYYY-MM")
         function paraMesAno(dataStr) { return dataStr ? dataStr.substring(0,7) : dataStr; }
 
-        // Converte "DD/MM/YYYY" para "YYYY-MM"
-        function dataBRParaMesAno(dataBR) { const p = dataBR.split('/'); return `${p[2]}-${p[1]}`; }
 
         // Converte "DD/MM/YYYY" para "YYYY-MM-DD"
         function dataBRParaISO(dataBR) { const p = dataBR.split('/'); return `${p[2]}-${p[1]}-${p[0]}`; }
@@ -1575,11 +1575,6 @@
                 }
             }
             return (!m || !y) ? null : y * 12 + m;
-        }
-
-        function converterDataBR(dataStrISO) {
-            if(!dataStrISO) return ''; const parts = dataStrISO.split('-');
-            return parts.length !== 3 ? dataStrISO : `${parts[2]}/${parts[1]}/${parts[0]}`;
         }
 
         function updateSaldoDisplay() {
@@ -2089,6 +2084,9 @@
             item.realizado = num;
             const hj = new Date();
             item.dataConciliacao = `${String(hj.getDate()).padStart(2,'0')}/${String(hj.getMonth()+1).padStart(2,'0')}/${hj.getFullYear()}`;
+            // Conversa com a Quitação: trava o mês na Projeção e re-ancora os meses
+            // seguintes (só os ainda não realizados são regenerados na Previsão/Investimento)
+            sincronizarCompraApos(item);
             saveData();
         }
 
@@ -2096,7 +2094,18 @@
             const item = appState.futureTransactions.find(f => f.id === id); if(!item) return;
             if (!confirm(`Desfazer a efetivação de "${item.descricao}"? Ela voltará ao cronograma como pendente.`)) return;
             delete item.conciliado; delete item.realizado; delete item.dataConciliacao;
+            sincronizarCompraApos(item);
             saveData();
+        }
+
+        // Se o lançamento pertence a uma compra parcelada efetivada, regenera os meses
+        // ainda não realizados (a Projeção mês a mês passa a refletir a conciliação).
+        function sincronizarCompraApos(item) {
+            if (!item || !item.compraId) return;
+            const compra = appState.comprasParceladas.find(c => c.id === item.compraId);
+            if (!compra || compra.status !== 'efetivada') return;
+            aplicarLancamentosCompra(compra);
+            updateFutureCategoriesDropdown(); updatePrevSumDropdown();
         }
 
         // Diferença normalizada: positiva = melhor que o previsto
@@ -2287,20 +2296,6 @@
             return inv ? (inv.valorInicial || inv.valor || 0) : 0;
         }
 
-        // Saldo do investimento NA DATA DE HOJE (última linha do histórico até hoje).
-        // Diferente de saldoAtualInvestimento: ignora linhas futuras, como os resgates
-        // planejados por uma efetivação — essencial para reprojetar uma compra.
-        function saldoInvestimentoHoje(inv) {
-            if (!inv) return 0;
-            if (inv.historico && inv.historico.length) {
-                const hj = new Date();
-                const iso = `${hj.getFullYear()}-${String(hj.getMonth() + 1).padStart(2, '0')}-${String(hj.getDate()).padStart(2, '0')}`;
-                const passadas = inv.historico.filter(h => h.data <= iso);
-                if (passadas.length) return passadas[passadas.length - 1].saldoFinal || 0;
-            }
-            return inv.valorInicial || inv.valor || 0;
-        }
-
         // Última taxa anual lançada no histórico do investimento (tabela de Investimentos)
         function taxaInvestimentoAtual(inv) {
             if (inv && inv.historico && inv.historico.length) return Number(inv.historico[inv.historico.length - 1].taxaAnual) || 0;
@@ -2319,32 +2314,38 @@
 
         // Projeção mês a mês com MÚLTIPLAS fontes na ordem definida (opcionais): cada
         // investimento rende à sua própria taxa; a parcela corrigida é resgatada do 1º
-        // com saldo e, se ele esgotar no meio do mês, o restante vem do seguinte
-        // (registrando o resgate por fonte, usado depois na efetivação). O aporte entra
-        // na fonte ativa. O indexador padrão pode ser sobrescrito mês a mês em
-        // p.taxasMes (chaveado pelo nº absoluto da parcela): a correção daquele mês usa
-        // a taxa informada e os meses seguintes voltam ao padrão.
+        // com saldo e, se ele esgotar no meio do mês, o restante vem do seguinte. O
+        // aporte entra na fonte ativa. Correção (p.taxasMes) e aporte (p.aportesMes) são
+        // por mês (chaveados pelo nº absoluto da parcela); na falta, usam o padrão.
+        // p.realizados (k → valor realmente pago) trava o mês: a parcela vira o valor
+        // realizado e os meses seguintes se corrigem a partir dele (linha.locked=true).
         function simularQuitacao(p) {
             const fontes = p.fontes || [];
             const taxas = fontes.map(f => taxaMensalEquivalente(f.taxa));
             const saldos = fontes.map(f => Number(f.saldo) || 0);
+            const realizados = p.realizados || {};
+            const aportesMes = p.aportesMes || {};
             const linhas = [];
             let quita = true, quebraEm = null, totalParcelas = 0;
-            let parcela = Number(p.valorParcela) || 0;
+            let prevParcela = 0;
             for (let k = 0; k < p.restantes; k++) {
+                const nAbs = (p.pagas || 0) + k + 1;
                 let taxaCorrecao = p.taxaIndexador;
-                if (k > 0) {
-                    const nAbs = (p.pagas || 0) + k + 1;
-                    if (p.taxasMes && p.taxasMes[nAbs] !== undefined) taxaCorrecao = p.taxasMes[nAbs];
-                    parcela = parcela * (1 + taxaMensalEquivalente(taxaCorrecao));
-                }
+                if (p.taxasMes && p.taxasMes[nAbs] !== undefined) taxaCorrecao = p.taxasMes[nAbs];
+                const projetada = (k === 0) ? (Number(p.valorParcela) || 0) : prevParcela * (1 + taxaMensalEquivalente(taxaCorrecao));
+                const locked = realizados[k] !== undefined;
+                const parcela = locked ? (Number(realizados[k]) || 0) : projetada;
+                prevParcela = parcela;
+
+                const aporte = (aportesMes[nAbs] !== undefined) ? (Number(aportesMes[nAbs]) || 0) : (Number(p.aporte) || 0);
+
                 let rendimento = 0;
                 for (let fi = 0; fi < saldos.length; fi++) {
                     if (saldos[fi] > 0) { const r = saldos[fi] * taxas[fi]; saldos[fi] += r; rendimento += r; }
                 }
                 let aporteFonte = saldos.findIndex(s => s > 0);
                 if (aporteFonte === -1) aporteFonte = saldos.length - 1;
-                if (p.aporte > 0 && saldos.length) saldos[aporteFonte] += p.aporte;
+                if (aporte > 0 && saldos.length) saldos[aporteFonte] += aporte;
 
                 let restante = parcela;
                 const resgates = [];
@@ -2361,7 +2362,7 @@
                     if (saldos.length) saldos[saldos.length - 1] -= restante;
                 }
                 totalParcelas += parcela;
-                linhas.push({ k, parcela, taxaCorrecao, rendimento, aporte: p.aporte, aporteFonte, resgates, falta, saldos: saldos.slice(), saldoTotal: saldos.reduce((a, b) => a + b, 0) });
+                linhas.push({ k, nAbs, parcela, taxaCorrecao, locked, rendimento, aporte, aporteFonte, resgates, falta, saldos: saldos.slice(), saldoTotal: saldos.reduce((a, b) => a + b, 0) });
             }
             return { linhas, quita, quebraEm, sobraFinal: linhas.length ? linhas[linhas.length - 1].saldoTotal : saldos.reduce((a, b) => a + b, 0), totalParcelas };
         }
@@ -2383,6 +2384,49 @@
         // ----- Gerenciamento das fontes no formulário -----
         let fontesQuitacao = [];
         let taxasMesQuitacao = {};
+        let aportesMesQuitacao = {};
+
+        // Identifica o nº k da parcela e o grupo (parcela/resgate/aporte) de um
+        // lançamento gerado por uma compra — usa os campos gravados ou, para dados
+        // antigos, extrai do id (fut_<compra>_p<k> / _r<k>_<seq> / _a<k>_<seq>).
+        function futParcelaK(f) {
+            if (f.parcelaK !== undefined && f.parcelaK !== null) return f.parcelaK;
+            const m = String(f.id || '').match(/_[pra](\d+)/);
+            return m ? parseInt(m[1], 10) : -1;
+        }
+        function futGrupoCompra(f) {
+            if (f.grupoCompra) return f.grupoCompra;
+            const id = String(f.id || '');
+            if (/_p\d+$/.test(id)) return 'parcela';
+            if (/_r\d+_/.test(id)) return 'resgate';
+            if (/_a\d+_/.test(id)) return 'aporte';
+            return '';
+        }
+        // Meses (k) já conciliados na Previsão → valor realizado da parcela
+        function realizadosDaCompra(compra) {
+            const r = {};
+            for (const f of appState.futureTransactions) {
+                if (f.compraId === compra.id && futGrupoCompra(f) === 'parcela' && f.conciliado) {
+                    const v = Number(f.realizado);
+                    r[futParcelaK(f)] = isNaN(v) ? (Number(f.valor) || 0) : v;
+                }
+            }
+            return r;
+        }
+        // Entrada da simulação a partir da compra salva (usada quando efetivada)
+        function planoDaCompra(compra) {
+            return {
+                nome: compra.nome, valorParcela: Number(compra.valorParcela) || 0,
+                total: compra.total, pagas: compra.pagas,
+                restantes: Math.max(0, (Number(compra.total) || 0) - (Number(compra.pagas) || 0)),
+                taxaIndexador: Number(compra.taxaIndexador) || 0,
+                mesPrimeira: compra.mesPrimeira, dia: compra.dia,
+                fontes: (compra.fontes || []).map(f => ({ ...f })),
+                taxasMes: compra.taxasMes || {}, aportesMes: compra.aportesMes || {},
+                aporte: Number(compra.aporte) || 0, categoria: compra.categoria,
+                realizados: realizadosDaCompra(compra)
+            };
+        }
 
         function adicionarFonteQuitacao() {
             const sel = document.getElementById('qp-add-investimento');
@@ -2471,20 +2515,42 @@
                 dia: Math.min(31, Math.max(1, parseInt(document.getElementById('qp-dia').value) || 10)),
                 fontes: fontesQuitacao.map(f => ({ ...f })),
                 taxasMes: { ...taxasMesQuitacao },
+                aportesMes: { ...aportesMesQuitacao },
                 aporte: parseFloat(document.getElementById('qp-aporte').value) || 0,
                 categoria: document.getElementById('qp-categoria').value
             };
         }
 
-        // Sobrescreve (ou limpa) a taxa de correção de um mês específico da compra em
-        // edição. Chaveada pelo nº absoluto da parcela; os meses seguintes continuam
-        // usando o indexador padrão do formulário.
+        // Sobrescreve (ou limpa, se vazio/igual ao padrão) a correção de um mês.
         function definirTaxaMesQuitacao(nAbs, valor) {
             const v = parseFloat(valor);
             const padrao = parseFloat(document.getElementById('qp-indexador').value) || 0;
             if (isNaN(v) || v === padrao) delete taxasMesQuitacao[nAbs];
             else taxasMesQuitacao[nAbs] = v;
-            renderSimulacaoQuitacao();
+            aplicarEdicaoProjecao();
+        }
+        // Sobrescreve (ou limpa) o aporte de um mês específico.
+        function definirAporteMesQuitacao(nAbs, valor) {
+            const v = parseFloat(valor);
+            const padrao = parseFloat(document.getElementById('qp-aporte').value) || 0;
+            if (valor === '' || isNaN(v) || v === padrao) delete aportesMesQuitacao[nAbs];
+            else aportesMesQuitacao[nAbs] = v;
+            aplicarEdicaoProjecao();
+        }
+        // Após editar correção/aporte de um mês: se a compra já foi efetivada, propaga
+        // para os lançamentos da Previsão/Investimento (meses travados intactos); senão
+        // apenas recalcula a simulação.
+        function aplicarEdicaoProjecao() {
+            const compra = appState.comprasParceladas.find(c => c.id === compraQuitacaoId);
+            if (compra && compra.status === 'efetivada') {
+                compra.taxasMes = { ...taxasMesQuitacao };
+                compra.aportesMes = { ...aportesMesQuitacao };
+                aplicarLancamentosCompra(compra);
+                updateFutureCategoriesDropdown(); updatePrevSumDropdown();
+                saveData();
+            } else {
+                renderSimulacaoQuitacao();
+            }
         }
 
         // Data BR do vencimento da k-ésima parcela restante (k = 0 é a próxima)
@@ -2504,9 +2570,16 @@
         function renderSimulacaoQuitacao() {
             const res = document.getElementById('quitacao-resultado');
             if (!res) return;
-            const p = lerFormCompra();
+            const compraAtual = appState.comprasParceladas.find(c => c.id === compraQuitacaoId);
+            const efetivada = compraAtual && compraAtual.status === 'efetivada';
+            const p = efetivada ? planoDaCompra(compraAtual) : lerFormCompra();
             if (!p.valorParcela || !p.restantes || !p.mesPrimeira) { res.classList.add('hidden'); return; }
             res.classList.remove('hidden');
+
+            const nota = document.getElementById('quitacao-tabela-nota');
+            if (nota) nota.innerHTML = efetivada
+                ? 'Edite <b>Correção</b> e <b>Aporte</b> dos meses ainda não realizados — as mudanças vão para a 📅 Previsão e o 📈 Investimento. Meses conciliados (✔ na Previsão) ficam 🔒 travados com o valor realizado.'
+                : 'Edite <b>Correção</b> e <b>Aporte</b> de cada mês; a projeção recalcula em cascata.';
 
             const semFontes = !p.fontes.length;
             const sim = simularQuitacao(p);
@@ -2570,12 +2643,17 @@
             let html = '';
             for (const l of sim.linhas) {
                 const corSaldo = l.saldoTotal >= 0 ? 'text-indigo-600' : 'text-rose-600';
-                const nAbs = p.pagas + l.k + 1;
-                const ajustada = p.taxasMes[nAbs] !== undefined;
+                const nAbs = l.nAbs;
+                const dis = l.locked ? 'disabled' : '';
+                const ajustadaTx = p.taxasMes[nAbs] !== undefined;
                 const celTaxa = l.k === 0
                     ? `<td class="p-2 text-right text-slate-300" title="A 1ª parcela restante é o valor informado no formulário, sem correção">—</td>`
                     : `<td class="p-2 text-right whitespace-nowrap">
-                        <input type="number" step="0.01" value="${l.taxaCorrecao}" onchange="definirTaxaMesQuitacao(${nAbs}, this.value)" title="${ajustada ? 'Taxa ajustada deste mês (apague ou iguale ao padrão para voltar)' : 'Padrão do indexador — edite se a taxa real deste mês for diferente'}" class="w-20 text-sm border ${ajustada ? 'border-amber-400 bg-amber-50 font-bold text-amber-700' : 'border-slate-200 text-slate-500'} rounded-md p-1 text-right outline-none focus:ring-1 focus:ring-indigo-500">
+                        <input type="number" step="0.01" value="${l.taxaCorrecao}" ${dis} onchange="definirTaxaMesQuitacao(${nAbs}, this.value)" title="${ajustadaTx ? 'Taxa ajustada deste mês (apague ou iguale ao padrão para voltar)' : 'Padrão do indexador — edite se a taxa real deste mês for diferente'}" class="w-20 text-sm border ${l.locked ? 'border-slate-100 bg-slate-50 text-slate-400' : (ajustadaTx ? 'border-amber-400 bg-amber-50 font-bold text-amber-700' : 'border-slate-200 text-slate-500')} rounded-md p-1 text-right outline-none focus:ring-1 focus:ring-indigo-500">
+                       </td>`;
+                const ajustadoAp = p.aportesMes[nAbs] !== undefined;
+                const celAporte = `<td class="p-2 text-right whitespace-nowrap">
+                        <input type="number" step="0.01" min="0" value="${l.aporte ? l.aporte : ''}" placeholder="0" ${dis} onchange="definirAporteMesQuitacao(${nAbs}, this.value)" title="${ajustadoAp ? 'Aporte ajustado deste mês' : 'Aporte padrão — edite para este mês'}" class="w-24 text-sm border ${l.locked ? 'border-slate-100 bg-slate-50 text-slate-400' : (ajustadoAp ? 'border-amber-400 bg-amber-50 font-bold text-amber-700' : 'border-slate-200 text-slate-500')} rounded-md p-1 text-right outline-none focus:ring-1 focus:ring-emerald-500">
                        </td>`;
                 const celulasFontes = semFontes ? '' : l.saldos.map((s, fi) => {
                     const resgate = l.resgates.find(r => r.fi === fi);
@@ -2584,15 +2662,16 @@
                         ${resgate ? `<span class="block text-[10px] text-rose-500">− ${formatCurrency(resgate.valor)}</span>` : ''}
                     </td>`;
                 }).join('');
+                const rowCls = l.locked ? 'bg-emerald-50/70' : (!semFontes && l.falta > 0 ? 'bg-rose-50' : 'hover:bg-slate-50');
                 html += `
-                    <tr class="${!semFontes && l.falta > 0 ? 'bg-rose-50' : 'hover:bg-slate-50'}">
-                        <td class="p-3 font-semibold text-slate-600">${nAbs}/${p.total}</td>
+                    <tr class="${rowCls}">
+                        <td class="p-3 font-semibold text-slate-600 whitespace-nowrap">${l.locked ? '🔒 ' : ''}${nAbs}/${p.total}</td>
                         <td class="p-3 whitespace-nowrap">${dataParcelaQuitacao(p.mesPrimeira, p.dia, l.k)}</td>
                         ${celTaxa}
-                        <td class="p-3 text-right whitespace-nowrap text-rose-600 font-medium">${formatCurrency(l.parcela)}</td>
+                        <td class="p-3 text-right whitespace-nowrap font-medium ${l.locked ? 'text-emerald-700' : 'text-rose-600'}">${formatCurrency(l.parcela)}${l.locked ? '<span class="block text-[10px] text-emerald-600 font-normal">realizada</span>' : ''}</td>
                         ${semFontes ? '' : `
                         <td class="p-3 text-right whitespace-nowrap text-emerald-600">${formatCurrency(l.rendimento)}</td>
-                        <td class="p-3 text-right whitespace-nowrap text-slate-500">${l.aporte > 0 ? formatCurrency(l.aporte) : '—'}</td>
+                        ${celAporte}
                         ${celulasFontes}
                         <td class="p-3 text-right whitespace-nowrap font-bold ${corSaldo}">${formatCurrency(l.saldoTotal)}</td>`}
                     </tr>`;
@@ -2689,27 +2768,38 @@
             cont.innerHTML = html;
         }
 
+        // Habilita/desabilita o formulário de cadastro (topo). Quando a compra está
+        // efetivada, o topo fica travado e a edição acontece só na Projeção mês a mês;
+        // os botões Desfazer/Excluir continuam ativos.
+        function setFormQuitacaoEnabled(enabled) {
+            const box = document.getElementById('form-compra-campos');
+            if (box) box.querySelectorAll('input, select, button').forEach(el => { el.disabled = !enabled; });
+            for (const id of ['btn-desfazer-compra', 'btn-excluir-compra']) {
+                const b = document.getElementById(id); if (b) b.disabled = false;
+            }
+        }
+
         function atualizarBotoesCompra() {
             const compra = appState.comprasParceladas.find(c => c.id === compraQuitacaoId);
             const efetivada = compra && compra.status === 'efetivada';
             const btnEf = document.getElementById('btn-efetivar-compra');
             const btnDes = document.getElementById('btn-desfazer-compra');
             const btnExc = document.getElementById('btn-excluir-compra');
-            const btnRep = document.getElementById('btn-reprojetar-compra');
             if (btnEf) btnEf.classList.toggle('hidden', !!efetivada);
             if (btnDes) btnDes.classList.toggle('hidden', !efetivada);
             if (btnExc) btnExc.classList.toggle('hidden', !compra);
-            if (btnRep) btnRep.classList.toggle('hidden', !compra);
-            const reproj = compra && compra.reprojetadoEm ? ` · reprojetada em ${compra.reprojetadoEm}` : '';
             document.getElementById('form-compra-titulo').innerText = compra
-                ? `${compra.nome} — ${efetivada ? 'efetivada (desfaça para editar valores e re-efetivar)' : 'em simulação'}${reproj}`
+                ? `${compra.nome} — ${efetivada ? 'efetivada · edite Correção/Aporte na Projeção mês a mês abaixo' : 'em simulação'}`
                 : 'Dados da compra (a simulação recalcula automaticamente)';
+            setFormQuitacaoEnabled(!efetivada);
         }
 
         function novaCompraParcelada() {
             compraQuitacaoId = null;
             fontesQuitacao = [];
             taxasMesQuitacao = {};
+            aportesMesQuitacao = {};
+            setFormQuitacaoEnabled(true);
             for (const id of ['qp-nome', 'qp-parcela', 'qp-total']) document.getElementById(id).value = '';
             document.getElementById('qp-pagas').value = '0';
             document.getElementById('qp-aporte').value = '0';
@@ -2739,6 +2829,7 @@
             compraQuitacaoId = id;
             fontesQuitacao = normalizarFontesCompra(c).map(f => ({ ...f }));
             taxasMesQuitacao = { ...(c.taxasMes || {}) };
+            aportesMesQuitacao = { ...(c.aportesMes || {}) };
             document.getElementById('qp-nome').value = c.nome;
             document.getElementById('qp-parcela').value = c.valorParcela;
             document.getElementById('qp-total').value = c.total;
@@ -2779,10 +2870,10 @@
                     if (!porInv[invId]) porInv[invId] = { resgate: 0, aporte: 0 };
                     porInv[invId].resgate += r.valor;
                 }
-                if (compra.aporte > 0.005 && compra.fontes.length) {
+                if (l.aporte > 0.005 && compra.fontes.length) {
                     const invId = (compra.fontes[l.aporteFonte] || compra.fontes[0]).investimentoId;
                     if (!porInv[invId]) porInv[invId] = { resgate: 0, aporte: 0 };
-                    porInv[invId].aporte += compra.aporte;
+                    porInv[invId].aporte += l.aporte;
                 }
 
                 let seq = 0;
@@ -2794,13 +2885,13 @@
                     const compensado = m.resgate > 0.004 && m.aporte > 0.004;
                     if (liquido > 0) {
                         movimentos.push({
-                            id: `fut_${compra.id}_r${l.k}_${seq}`, data: dataBR, tipo: 'credito', valor: liquido,
+                            id: `fut_${compra.id}_r${l.k}_${seq}`, k: l.k, data: dataBR, tipo: 'credito', valor: liquido,
                             descricao: `Resgate p/ ${compra.nome} (parc. ${nParc})${compensado ? ' (líq. do aporte)' : ''} — ${nomeCurtoInvestimento(invId)}`,
                             grupo: 'resgate', investimentoId: invId
                         });
                     } else {
                         movimentos.push({
-                            id: `fut_${compra.id}_a${l.k}_${seq}`, data: dataBR, tipo: 'debito', valor: -liquido,
+                            id: `fut_${compra.id}_a${l.k}_${seq}`, k: l.k, data: dataBR, tipo: 'debito', valor: -liquido,
                             descricao: `Aporte p/ ${compra.nome}${compensado ? ' (líq. do resgate)' : ''} — ${nomeCurtoInvestimento(invId)}`,
                             grupo: 'aporte', investimentoId: invId
                         });
@@ -2808,19 +2899,68 @@
                 }
 
                 movimentos.push({
-                    id: `fut_${compra.id}_p${l.k}`, data: dataBR, tipo: 'debito', valor: Math.round(l.parcela * 100) / 100,
+                    id: `fut_${compra.id}_p${l.k}`, k: l.k, data: dataBR, tipo: 'debito', valor: Math.round(l.parcela * 100) / 100,
                     descricao: `${compra.nome} (parcela ${nParc})`, grupo: 'parcela', investimentoId: ''
                 });
             }
             return movimentos;
         }
 
+        // (Re)gera os lançamentos da compra na Previsão/Investimento a partir da projeção
+        // atual, PRESERVANDO os meses já travados (parcela conciliada com ✔): estes ficam
+        // intactos e os demais são recriados. Usada tanto na efetivação (nada travado →
+        // cria tudo) quanto a cada edição de correção/aporte ou conciliação na Previsão.
+        function aplicarLancamentosCompra(compra) {
+            normalizarFontesCompra(compra);
+            const catParcela = (compra.categoria && compra.categoria !== '__nova__')
+                ? garantirCategoria('despesas', compra.categoria)
+                : garantirCategoria('despesas', compra.nome);
+            const catResgate = garantirCategoria('receitas', 'Resgate Investimento');
+            const catAporte = garantirCategoria('despesas', 'Aporte Investimento');
+            compra.categoria = catParcela;
+
+            // Mês travado = tem qualquer lançamento já conciliado na Previsão (parcela,
+            // resgate ou aporte). O mês inteiro é preservado e não é regenerado.
+            const travados = new Set();
+            for (const f of appState.futureTransactions) {
+                if (f.compraId === compra.id && f.conciliado) travados.add(futParcelaK(f));
+            }
+
+            const sim = simularQuitacao(planoDaCompra(compra));
+            const movimentos = montarMovimentosCompra(compra, sim);
+
+            // remove os lançamentos NÃO travados desta compra (revertendo reflexo)
+            const manter = [];
+            for (const f of appState.futureTransactions) {
+                if (f.compraId === compra.id && !travados.has(futParcelaK(f))) {
+                    if (f.investimentoId) reverterReflexoInvestimento(f);
+                } else {
+                    manter.push(f);
+                }
+            }
+            appState.futureTransactions = manter;
+
+            let criados = 0;
+            for (const m of movimentos) {
+                if (travados.has(m.k)) continue;
+                const fut = {
+                    id: m.id, data: m.data, tipo: m.tipo, valor: m.valor, descricao: m.descricao,
+                    categoria: m.grupo === 'parcela' ? catParcela : (m.grupo === 'resgate' ? catResgate : catAporte),
+                    investimentoId: m.investimentoId, compraId: compra.id, parcelaK: m.k, grupoCompra: m.grupo
+                };
+                if (fut.investimentoId) aplicarReflexoInvestimento(fut);
+                appState.futureTransactions.push(fut);
+                criados++;
+            }
+            return { criados, movimentos, sim, travados: travados.size };
+        }
+
         function efetivarCompraParcelada() {
             const compra = salvarCompraParcelada(true);
             if (!compra) return;
             const temFontes = (compra.fontes || []).length > 0;
-            const sim = simularQuitacao(compra);
-            if (temFontes && !sim.quita) { alert("A simulação não quita todas as parcelas — as fontes esgotam antes do fim.\nAjuste o aporte mensal (botão \"mín.\") ou as fontes antes de efetivar."); return; }
+            const sim = simularQuitacao(planoDaCompra(compra));
+            if (temFontes && !sim.quita) { alert("A simulação não quita todas as parcelas — as fontes esgotam antes do fim.\nAjuste o aporte (por mês ou o padrão, botão \"mín.\") ou as fontes antes de efetivar."); return; }
 
             const movimentos = montarMovimentosCompra(compra, sim);
             const nResgates = movimentos.filter(m => m.grupo === 'resgate').length;
@@ -2829,40 +2969,28 @@
             const resumoInvestimentos = temFontes
                 ? `• ${nResgates} resgates líquidos${nAportes ? ` e ${nAportes} aportes líquidos` : ''} nos investimentos (${nomesFontes})\n\nAporte e resgate do mesmo investimento na mesma data são compensados entre si — só a diferença é lançada.`
                 : `• Sem investimento vinculado: nenhum resgate/aporte será criado.`;
-            if (!confirm(`Efetivar "${compra.nome}"?\n\nSerão criados na Previsão:\n• ${compra.restantes} parcelas (Saída)\n${resumoInvestimentos}\nTotal corrigido: ${formatCurrency(sim.totalParcelas)}. Você poderá desfazer tudo com um clique.`)) return;
+            if (!confirm(`Efetivar "${compra.nome}"?\n\nSerão criados na Previsão:\n• ${compra.restantes} parcelas (Saída)\n${resumoInvestimentos}\nTotal corrigido: ${formatCurrency(sim.totalParcelas)}.\n\nDepois de efetivar você continua ajustando Correção e Aporte de cada mês na Projeção mês a mês — as mudanças fluem para a Previsão e o Investimento. Pode desfazer tudo com um clique.`)) return;
 
-            const catParcela = compra.categoria && compra.categoria !== '__nova__'
-                ? garantirCategoria('despesas', compra.categoria)
-                : garantirCategoria('despesas', compra.nome);
-            const catResgate = garantirCategoria('receitas', 'Resgate Investimento');
-            const catAporte = garantirCategoria('despesas', 'Aporte Investimento');
-            compra.categoria = catParcela;
-
-            for (const m of movimentos) {
-                const fut = {
-                    id: m.id, data: m.data, tipo: m.tipo, valor: m.valor, descricao: m.descricao,
-                    categoria: m.grupo === 'parcela' ? catParcela : (m.grupo === 'resgate' ? catResgate : catAporte),
-                    investimentoId: m.investimentoId, compraId: compra.id
-                };
-                if (fut.investimentoId) aplicarReflexoInvestimento(fut);
-                appState.futureTransactions.push(fut);
-            }
             compra.status = 'efetivada';
-            compra.pagasEfetivacao = compra.pagas;
+            const r = aplicarLancamentosCompra(compra);
             updateFutureCategoriesDropdown(); updatePrevSumDropdown();
             saveData();
-            alert(`"${compra.nome}" efetivada!\n• ${movimentos.length} lançamentos criados na 📅 Previsão${temFontes ? `\n• ${nResgates} resgates líquidos${nAportes ? ` e ${nAportes} aportes líquidos` : ''} nos investimentos (${nomesFontes})` : ''}`);
+            setFormQuitacaoEnabled(false);
+            alert(`"${compra.nome}" efetivada!\n• ${r.criados} lançamentos criados na 📅 Previsão${temFontes ? `\n• ${nResgates} resgates líquidos${nAportes ? ` e ${nAportes} aportes líquidos` : ''} nos investimentos (${nomesFontes})` : ''}\n\nAgora edite Correção/Aporte na tabela; meses conciliados ficam travados.`);
         }
 
         function desfazerEfetivacaoCompra() {
             const compra = appState.comprasParceladas.find(c => c.id === compraQuitacaoId);
             if (!compra || compra.status !== 'efetivada') return;
             const gerados = appState.futureTransactions.filter(f => f.compraId === compra.id);
-            if (!confirm(`Desfazer a efetivação de "${compra.nome}"?\n${gerados.length} lançamentos serão removidos da Previsão e os movimentos revertidos no investimento.`)) return;
+            const conciliados = gerados.filter(f => f.conciliado).length;
+            if (!confirm(`Desfazer a efetivação de "${compra.nome}"?\n${gerados.length} lançamentos serão removidos da Previsão e os movimentos revertidos no investimento.${conciliados ? `\n\nAtenção: ${conciliados} lançamento(s) já conciliado(s) também serão removidos.` : ''}`)) return;
             for (const f of gerados) reverterReflexoInvestimento(f);
             appState.futureTransactions = appState.futureTransactions.filter(f => f.compraId !== compra.id);
             compra.status = 'simulacao';
             saveData();
+            setFormQuitacaoEnabled(true);
+            carregarCompraParcelada(compra.id);
         }
 
         function excluirCompraParcelada() {
@@ -2873,63 +3001,6 @@
             appState.comprasParceladas = appState.comprasParceladas.filter(c => c.id !== compra.id);
             compraQuitacaoId = null;
             saveData();
-        }
-
-        // 🔄 Reprojetar do ponto atual: re-ancora a simulação na realidade sem tocar nos
-        // lançamentos já efetivados. As parcelas conciliadas com ✔ (que saíram do
-        // cronograma para o Previsto × Realizado) saem da projeção: o nº de pagas é
-        // deduzido delas, a base da parcela passa a ser a última REALMENTE paga
-        // (corrigida 1 mês pelo indexador padrão) e o saldo de cada fonte volta a ser o
-        // saldo de HOJE do investimento. É idempotente: reprojetar de novo sem novas
-        // conciliações não muda nada.
-        function reprojetarCompraParcelada() {
-            const compra = appState.comprasParceladas.find(c => c.id === compraQuitacaoId);
-            if (!compra) { alert("Salve ou selecione uma compra primeiro."); return; }
-            normalizarFontesCompra(compra);
-
-            const parcelasFuts = appState.futureTransactions.filter(f => f.compraId === compra.id && f.tipo === 'debito' && !f.investimentoId);
-            const conciliadas = parcelasFuts.filter(f => f.conciliado).sort((a, b) => converterDataBRParaDate(a.data) - converterDataBRParaDate(b.data));
-            const pendentes = parcelasFuts.filter(f => !f.conciliado).sort((a, b) => converterDataBRParaDate(a.data) - converterDataBRParaDate(b.data));
-
-            const mudancas = [];
-            const numeroParcela = (f) => { const m = String(f.descricao || '').match(/\(parcela\s+(\d+)\s*\//); return m ? parseInt(m[1], 10) : null; };
-
-            if (conciliadas.length) {
-                // Progresso: pagas = maior nº de parcela conciliada (extraído da descrição)
-                const nums = conciliadas.map(numeroParcela).filter(n => n !== null);
-                const novasPagas = nums.length ? Math.max(...nums) : (compra.pagasEfetivacao !== undefined ? compra.pagasEfetivacao : compra.pagas) + conciliadas.length;
-                if (novasPagas !== compra.pagas) { mudancas.push(`Parcelas pagas: ${compra.pagas} → ${novasPagas} (${conciliadas.length} conciliadas no Previsto × Realizado)`); compra.pagas = novasPagas; }
-
-                // Base: última parcela realmente paga, corrigida 1 mês pelo indexador padrão
-                const ultima = conciliadas[conciliadas.length - 1];
-                const valorReal = Number(ultima.realizado) || Number(ultima.valor) || 0;
-                if (valorReal > 0) {
-                    const novaBase = Math.round(valorReal * (1 + taxaMensalEquivalente(compra.taxaIndexador)) * 100) / 100;
-                    if (Math.abs(novaBase - compra.valorParcela) > 0.005) { mudancas.push(`Próxima parcela: ${formatCurrency(compra.valorParcela)} → ${formatCurrency(novaBase)} (última paga: ${formatCurrency(valorReal)} em ${ultima.data})`); compra.valorParcela = novaBase; }
-                }
-
-                // Recomeço da projeção: mês da 1ª parcela ainda pendente
-                if (pendentes.length) {
-                    const novoMes = paraMesAno(dataTransacaoISO(pendentes[0].data));
-                    if (novoMes && novoMes !== compra.mesPrimeira) { mudancas.push(`Mês da próxima parcela: ${compra.mesPrimeira} → ${novoMes}`); compra.mesPrimeira = novoMes; }
-                }
-            }
-
-            // Saldos das fontes: saldo de HOJE de cada investimento (ignora linhas futuras do plano)
-            for (const f of compra.fontes) {
-                const inv = appState.investimentos.find(x => x.id === f.investimentoId);
-                if (!inv) continue;
-                const hoje = Math.round(saldoInvestimentoHoje(inv) * 100) / 100;
-                if (Math.abs(hoje - (Number(f.saldo) || 0)) > 0.005) { mudancas.push(`Saldo de ${inv.nome}: ${formatCurrency(f.saldo)} → ${formatCurrency(hoje)} (hoje)`); f.saldo = hoje; }
-            }
-
-            if (!mudancas.length) { alert("Nada a reprojetar: não há novas parcelas conciliadas e os saldos das fontes já refletem o dia de hoje."); return; }
-            if (!confirm(`Reprojetar "${compra.nome}" do ponto atual?\n\n• ${mudancas.join('\n• ')}\n\nApenas a SIMULAÇÃO é atualizada — os lançamentos já efetivados na Previsão e nos investimentos não são alterados.`)) return;
-
-            const hj = new Date();
-            compra.reprojetadoEm = `${String(hj.getDate()).padStart(2, '0')}/${String(hj.getMonth() + 1).padStart(2, '0')}/${hj.getFullYear()}`;
-            saveData();
-            carregarCompraParcelada(compra.id);
         }
 
         // ===== Limpeza da Previsão por categoria =====
@@ -3800,8 +3871,6 @@
                 }
             }
         }
-
-        function salvarSaldoInicial() { const el = document.getElementById('input-saldo-inicial'); if (!el) return; appState.saldoInicial = parseFloat(el.value) || 0; saveData(); alert("Saldo inicial salvo!"); }
 
         // ===== Backup: helpers de compressão (gzip) e criptografia (AES-GCM + PBKDF2) =====
         function _baixarBackup(blob, nome) {
