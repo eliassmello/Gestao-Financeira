@@ -34,6 +34,7 @@ Aplicativo de orçamento pessoal em **um único arquivo HTML**, que roda direto 
 - **Agendamento** de lançamentos futuros (entradas e saídas) com data, descrição, categoria e valor.
 - **Cronograma da Conta Corrente** com o **saldo projetado** linha a linha; a **Caixa de Partida** usa o saldo das contas marcadas para refletir.
 - Previsões já vencidas aparecem **destacadas em amarelo** para você conciliar com o banco.
+- **🚨 Alerta de cheque especial**: a coluna Saldo Projetado é acompanhada dia a dia e a linha fica **vermelha** no dia em que a conta atinge o **limite de dias com saldo negativo dentro de um mesmo mês** (configurável, padrão **10 dias/mês**). Se não houver lançamento no dia exato do estouro, o alerta marca a **linha anterior disponível** informando a data real. Recalcula em tempo real ao alterar qualquer valor.
 - **✔ Efetivar previsão (Previsto × Realizado)**: quando o valor real cair no banco, clique em **✔** no cronograma e informe o valor realizado. A previsão sai do cronograma/simulador e vai para o painel **✅ Previsto × Realizado**, que mostra por mês: previsto, realizado e **diferença** (positiva = melhor que o previsto) por lançamento, totais de entradas/saídas e **resumo por categoria**. Dá para **desfazer** (↩️) e a previsão volta ao cronograma.
 - **💳 Parcelamentos Futuros do Cartão**: as parcelas restantes dos lançamentos "Parc. N/M" das faturas importadas são projetadas automaticamente mês a mês, com total comprometido e detalhe por compra. Compras repetidas em faturas consecutivas são deduplicadas (vale a fatura mais recente). Painel informativo — não altera o Saldo Projetado.
 - **🧹 Excluir por categoria**: remova de uma vez todos os agendamentos pendentes de uma categoria (útil para refazer planos gerados em massa). Previsões já efetivadas são preservadas e reflexos em investimentos são revertidos.
@@ -50,6 +51,7 @@ Aplicativo de orçamento pessoal em **um único arquivo HTML**, que roda direto 
 ### 💳 Cartão de Crédito
 - **Importação de fatura** (**.txt, .csv**), informando o **mês da fatura** e o **dia de vencimento**.
 - Lançamentos **agrupados por fatura (mês de vencimento)**, da mais recente para a mais antiga, com **cabeçalho por fatura** (nº de lançamentos e total líquido); dentro de cada fatura, ordenados pela **data da compra**.
+- **💳 Parcelamentos Futuros do Cartão** fica nesta aba (quadro com rolagem própria, logo acima da Área de Risco): projeção das parcelas restantes ("Parc. N/M") das faturas importadas, mês a mês, com total comprometido.
 - **Totalizador da fatura**: valor líquido e soma bruta de todos os lançamentos.
 - Filtros por mês e por lançamentos sem categoria; exclusão de uma **fatura inteira** por mês.
 
