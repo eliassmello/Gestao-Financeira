@@ -232,9 +232,18 @@
                     </div>
                 </div>
                 
-                <div class="flex gap-2 items-center mb-3">
-                    <div class="w-3 h-3 rounded-full bg-amber-200 border border-amber-400"></div>
+                <div class="flex gap-2 items-center mb-2">
+                    <div class="w-3 h-3 rounded-full bg-amber-200 border border-amber-400 shrink-0"></div>
                     <span class="text-xs font-medium text-slate-500">Linhas amarelas indicam previsões que já venceram hoje ou no passado. Quando o valor real cair no banco, clique em <b class="text-emerald-600">✔ Efetivar</b> para informar o valor realizado — a previsão sai do cronograma e vai para o painel <b>Previsto × Realizado</b>.</span>
+                </div>
+
+                <div class="flex flex-wrap gap-2 items-center mb-3 bg-rose-50 border border-rose-100 rounded-lg p-2">
+                    <div class="w-3 h-3 rounded-full bg-rose-300 border border-rose-500 shrink-0"></div>
+                    <span class="text-xs font-medium text-rose-700 flex-1 min-w-[240px]">Linha vermelha marca o dia em que a conta atinge o <b>limite de dias no saldo negativo</b> (cheque especial) dentro de um mesmo mês. Se o dia exato não tiver lançamento, marca a <b>linha anterior disponível</b>.</span>
+                    <label class="text-xs font-bold text-rose-700 flex items-center gap-1 whitespace-nowrap">Limite:
+                        <input type="number" id="prev-limite-negativo" min="1" max="31" value="10" onchange="salvarLimiteNegativo(this.value)" class="w-16 text-sm border border-rose-200 rounded-md p-1 text-center outline-none focus:ring-1 focus:ring-rose-400">
+                        dias/mês
+                    </label>
                 </div>
 
                 <div class="flex flex-wrap gap-2 items-center justify-end mb-3 bg-slate-50 border border-slate-100 rounded-lg p-2">
@@ -260,20 +269,6 @@
                         <tbody id="lista-previsao-cronologica" class="divide-y divide-slate-100 bg-white"></tbody>
                     </table>
                 </div>
-            </div>
-
-            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-                <div class="flex flex-col md:flex-row justify-between md:items-center gap-4 border-b border-slate-100 pb-4 mb-4">
-                    <div>
-                        <h2 class="font-bold text-slate-700 text-xl">💳 Parcelamentos Futuros do Cartão</h2>
-                        <p class="text-sm text-slate-500 mt-1">Parcelas restantes identificadas automaticamente nas faturas importadas (lançamentos com "Parc. N/M"). Painel informativo: os valores <b>não</b> entram no Saldo Projetado do cronograma.</p>
-                    </div>
-                    <div class="bg-rose-50 px-6 py-3 rounded-xl border border-rose-100 text-right shrink-0">
-                        <span class="block text-xs font-bold text-rose-600 uppercase mb-1">Total Comprometido</span>
-                        <span id="parc-total-futuro" class="font-bold text-rose-600 text-2xl">R$ 0,00</span>
-                    </div>
-                </div>
-                <div id="lista-parcelamentos" class="space-y-3"></div>
             </div>
 
             <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
@@ -395,24 +390,38 @@
         </section>
 
         <section id="tab-cartao" class="tab-content hidden space-y-6">
-            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100 text-center space-y-6">
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-lg mx-auto text-left bg-amber-50 p-4 rounded-lg border border-amber-100">
-                    <div class="col-span-1 sm:col-span-2">
-                        <h3 class="text-sm font-bold text-amber-800">1. Preencha os dados da Fatura a ser importada</h3>
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+                <div class="flex flex-col lg:flex-row gap-4 lg:items-end">
+                    <div class="bg-amber-50 p-3 rounded-lg border border-amber-100 flex flex-wrap items-end gap-3">
+                        <h3 class="w-full text-xs font-bold text-amber-800">1. Dados da fatura a importar</h3>
+                        <div>
+                            <label class="block text-[10px] font-semibold text-slate-500 uppercase mb-1">Mês da Fatura</label>
+                            <input type="month" id="fatura-mes" class="text-sm border border-slate-200 rounded-md p-1.5 outline-none focus:ring-1 focus:ring-amber-500 bg-white">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-semibold text-slate-500 uppercase mb-1">Dia do Venc.</label>
+                            <input type="number" id="fatura-dia" min="1" max="31" placeholder="Ex: 10" class="w-24 text-sm border border-slate-200 rounded-md p-1.5 outline-none focus:ring-1 focus:ring-amber-500 bg-white">
+                        </div>
                     </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Mês da Fatura</label>
-                        <input type="month" id="fatura-mes" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-amber-500 bg-white">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Dia do Vencimento</label>
-                        <input type="number" id="fatura-dia" min="1" max="31" placeholder="Ex: 10" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-amber-500 bg-white">
+                    <div class="flex-1 min-w-0">
+                        <h3 class="text-xs font-bold text-slate-700 mb-1">2. Importar Extrato (<b>.txt</b>, <b>.csv</b>) ou Fatura em <b>.pdf</b> (Santander)</h3>
+                        <input type="file" id="fileInputCartao" accept=".txt, .csv, .pdf" class="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-amber-100 file:text-amber-800 hover:file:bg-amber-200 border border-slate-200 rounded-lg p-2 bg-slate-50 transition cursor-pointer" />
                     </div>
                 </div>
-                <div class="max-w-md mx-auto pt-2 text-left">
-                    <h3 class="text-sm font-bold text-slate-700 mb-2">2. Importar Extrato (<b>.txt</b>, <b>.csv</b>) ou Fatura em <b>.pdf</b> (Santander)</h3>
-                    <input type="file" id="fileInputCartao" accept=".txt, .csv, .pdf" class="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-amber-100 file:text-amber-800 hover:file:bg-amber-200 border border-slate-200 rounded-lg p-2 bg-slate-50 transition cursor-pointer" />
+            </div>
+
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+                <div class="flex justify-between items-center border-b border-slate-100 pb-2 mb-3 gap-3">
+                    <div class="min-w-0">
+                        <h2 class="font-bold text-slate-700 text-base">💳 Parcelamentos Futuros do Cartão</h2>
+                        <p class="text-[11px] text-slate-400">Parcelas restantes das faturas importadas ("Parc. N/M"). Informativo — não entra no Saldo Projetado.</p>
+                    </div>
+                    <div class="bg-rose-50 px-4 py-2 rounded-lg border border-rose-100 text-right shrink-0">
+                        <span class="block text-[10px] font-bold text-rose-600 uppercase">Total Comprometido</span>
+                        <span id="parc-total-futuro" class="font-bold text-rose-600 text-lg">R$ 0,00</span>
+                    </div>
                 </div>
+                <div id="lista-parcelamentos" class="space-y-2 max-h-64 overflow-y-auto pr-2"></div>
             </div>
 
             <div class="bg-rose-50 p-4 rounded-xl shadow-sm border border-rose-100 flex flex-col md:flex-row items-center justify-between gap-4">
@@ -791,6 +800,7 @@
             categories: { despesas: [], receitas: [] },
             orcamentos: {},
             comprasParceladas: [],
+            limiteDiasNegativos: 10,
             ultimoBackup: null,
             backupAdiadoAte: null
         };
@@ -847,6 +857,7 @@
                     appState.categories = confObj.categories || { despesas: [], receitas: [] };
                     appState.orcamentos = confObj.orcamentos || {};
                     appState.comprasParceladas = confObj.comprasParceladas || [];
+                    appState.limiteDiasNegativos = (confObj.limiteDiasNegativos !== undefined && confObj.limiteDiasNegativos !== null) ? confObj.limiteDiasNegativos : 10;
                     appState.ultimoBackup = confObj.ultimoBackup || null;
                     appState.backupAdiadoAte = confObj.backupAdiadoAte || null;
                     appState.contas = confObj.contas || [];
@@ -862,7 +873,7 @@
         async function saveToDB() {
             try {
                 await db.transaction('rw', db.transacoes, db.cartao, db.previsoes, db.investimentos, db.config, async () => {
-                    await db.config.put({ id: 'global', saldoInicial: appState.saldoInicial, categories: appState.categories, orcamentos: appState.orcamentos, comprasParceladas: appState.comprasParceladas, contas: appState.contas, ultimoBackup: appState.ultimoBackup, backupAdiadoAte: appState.backupAdiadoAte });
+                    await db.config.put({ id: 'global', saldoInicial: appState.saldoInicial, categories: appState.categories, orcamentos: appState.orcamentos, comprasParceladas: appState.comprasParceladas, limiteDiasNegativos: appState.limiteDiasNegativos, contas: appState.contas, ultimoBackup: appState.ultimoBackup, backupAdiadoAte: appState.backupAdiadoAte });
                     await db.transacoes.clear(); if(appState.transactions.length > 0) await db.transacoes.bulkPut(appState.transactions);
                     await db.cartao.clear(); if(appState.ccTransactions.length > 0) await db.cartao.bulkPut(appState.ccTransactions);
                     await db.previsoes.clear(); if(appState.futureTransactions.length > 0) await db.previsoes.bulkPut(appState.futureTransactions);
@@ -876,6 +887,8 @@
             
             const inputSaldoIni = document.getElementById('input-saldo-inicial');
             if (inputSaldoIni) inputSaldoIni.value = (appState.saldoInicial || 0).toFixed(2);
+            const inputLimNeg = document.getElementById('prev-limite-negativo');
+            if (inputLimNeg) inputLimNeg.value = appState.limiteDiasNegativos || 10;
 
             const today = new Date();
             const mm = String(today.getMonth() + 1).padStart(2, '0');
@@ -1839,6 +1852,7 @@
             } else {
                 const futs = [...pendentes];
                 futs.sort((a,b) => converterDataBRParaDate(a.data) - converterDataBRParaDate(b.data));
+                const alertasNeg = calcularAlertasChequeEspecial(futs, getSaldoAtualReal());
                 let html = '';
                 for (let f of futs) {
                     const isDeb = f.tipo === 'debito'; const val = Number(f.valor) || 0;
@@ -1846,15 +1860,18 @@
                     const corVal = isDeb ? 'text-rose-600' : 'text-emerald-600';
                     const corSal = saldoMutavel >= 0 ? 'text-indigo-600' : 'text-rose-600';
                     const isVencido = converterDataBRParaDate(f.data) <= today;
-                    const rowClass = isVencido ? 'bg-amber-100 hover:bg-amber-200 border-amber-200' : 'bg-white hover:bg-slate-50 border-slate-100';
+                    const alerta = alertasNeg[f.id];
+                    let rowClass = isVencido ? 'bg-amber-100 hover:bg-amber-200 border-amber-200' : 'bg-white hover:bg-slate-50 border-slate-100';
+                    if (alerta) rowClass = 'bg-rose-200 hover:bg-rose-300 border-rose-400';
 
                     const invNome = f.investimentoId ? (appState.investimentos.find(i => i.id === f.investimentoId)?.nome) : null;
                     const badgeInv = invNome ? `<span class="ml-2 text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded font-bold" title="Reflete em ${escapeHtml(invNome)} (${isDeb?'Aporte':'Resgate'})">📈 ${isDeb?'Aporte':'Resgate'}</span>` : '';
+                    const badgeAlerta = alerta ? `<span class="block text-[10px] font-bold text-rose-700 mt-1">🚨 ${alerta.map(a => `${a.limite}º dia no vermelho em ${a.mes}${a.exato ? '' : ` (atingido em ${a.dia}, sem lançamento nesse dia)`}`).join(' · ')} — ultrapassa o limite do cheque especial</span>` : '';
 
                     html += `
                         <tr class="${rowClass} border-b transition">
-                            <td class="p-4 font-semibold text-slate-600 whitespace-nowrap">${f.data} ${isVencido?'⚠️':''}</td>
-                            <td class="p-4 text-slate-800 font-medium">${escapeHtml(f.descricao)}${badgeInv}</td>
+                            <td class="p-4 font-semibold text-slate-600 whitespace-nowrap">${f.data} ${alerta ? '🚨' : (isVencido?'⚠️':'')}</td>
+                            <td class="p-4 text-slate-800 font-medium">${escapeHtml(f.descricao)}${badgeInv}${badgeAlerta}</td>
                             <td class="p-4"><span class="text-[11px] bg-white border border-slate-200 px-2 py-1 rounded text-slate-600">${escapeHtml(f.categoria)}</span></td>
                             <td class="p-4 font-bold ${corVal} whitespace-nowrap">${isDeb?'-':'+'} ${formatCurrency(val)}</td>
                             <td class="p-4 text-right font-bold ${corSal} whitespace-nowrap">${formatCurrency(saldoMutavel)}</td>
@@ -1885,7 +1902,58 @@
             }
 
             calcularSaldoAlvo(); calcularSomaCategoriaFuturo();
-            safeRun(renderParcelamentosFuturos); safeRun(renderPrevistoRealizado);
+            safeRun(renderPrevistoRealizado);
+        }
+
+        function salvarLimiteNegativo(valor) {
+            const v = parseInt(valor);
+            appState.limiteDiasNegativos = (!isNaN(v) && v >= 1 && v <= 31) ? v : 10;
+            const el = document.getElementById('prev-limite-negativo');
+            if (el) el.value = appState.limiteDiasNegativos;
+            saveData();
+        }
+
+        // Marca, no cronograma, o dia em que a conta atinge o limite de dias com saldo
+        // negativo (cheque especial) DENTRO DE UM MESMO MÊS. Percorre a projeção dia a
+        // dia a partir de hoje (ou da 1ª linha, se anterior): o saldo de cada dia é o
+        // saldo após o último lançamento até aquele dia. Ao completar o limite de dias
+        // negativos num mês, associa o alerta à linha daquele dia; se não houver
+        // lançamento no dia exato, à linha anterior disponível. Retorna { idLinha: [alertas] }.
+        function calcularAlertasChequeEspecial(futs, caixaPartida) {
+            const LIMITE = Math.max(1, parseInt(appState.limiteDiasNegativos) || 10);
+            const marcados = {};
+            if (!futs.length) return marcados;
+            const linhas = [];
+            let saldo = caixaPartida;
+            for (const f of futs) {
+                saldo += (f.tipo === 'debito' ? -1 : 1) * (Number(f.valor) || 0);
+                linhas.push({ id: f.id, date: converterDataBRParaDate(f.data), saldoApos: saldo });
+            }
+            const msDia = 86400000;
+            const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+            const inicio = new Date(Math.min(linhas[0].date.getTime(), hoje.getTime())); inicio.setHours(0, 0, 0, 0);
+            const fim = linhas[linhas.length - 1].date;
+            const contador = {}; const jaMarcado = {};
+            let idx = 0, saldoAtual = caixaPartida;
+            for (let t = inicio.getTime(); t <= fim.getTime(); t += msDia) {
+                while (idx < linhas.length && linhas[idx].date.getTime() <= t) { saldoAtual = linhas[idx].saldoApos; idx++; }
+                if (saldoAtual < -0.005) {
+                    const dia = new Date(t);
+                    const ym = `${dia.getFullYear()}-${dia.getMonth()}`;
+                    contador[ym] = (contador[ym] || 0) + 1;
+                    if (contador[ym] === LIMITE && !jaMarcado[ym]) {
+                        jaMarcado[ym] = true;
+                        let alvo = null;
+                        for (let j = linhas.length - 1; j >= 0; j--) { if (linhas[j].date.getTime() <= t) { alvo = linhas[j]; break; } }
+                        if (alvo) {
+                            const diaStr = `${String(dia.getDate()).padStart(2, '0')}/${String(dia.getMonth() + 1).padStart(2, '0')}/${dia.getFullYear()}`;
+                            const mesStr = `${String(dia.getMonth() + 1).padStart(2, '0')}/${dia.getFullYear()}`;
+                            (marcados[alvo.id] = marcados[alvo.id] || []).push({ dia: diaStr, mes: mesStr, limite: LIMITE, exato: alvo.date.getTime() === dia.getTime() });
+                        }
+                    }
+                }
+            }
+            return marcados;
         }
 
         function escapeHtml(str) {
@@ -3207,6 +3275,7 @@
         function renderTransactionsCartao() {
             const container = document.getElementById('transactionsContainerCartao');
             ativarSelectsPreguicosos('transactionsContainerCartao');
+            safeRun(renderParcelamentosFuturos);
             const filter = document.getElementById('filterSelectCartao') ? document.getElementById('filterSelectCartao').value : 'todos';
             const filterMesEl = document.getElementById('filterMesCartao');
             const filterMes = filterMesEl ? filterMesEl.value : 'todos';
@@ -3915,6 +3984,7 @@
             if (!appState.categories) appState.categories = { despesas: [], receitas: [] };
             if (!appState.orcamentos) appState.orcamentos = {};
             if (!appState.comprasParceladas) appState.comprasParceladas = [];
+            if (appState.limiteDiasNegativos === undefined || appState.limiteDiasNegativos === null) appState.limiteDiasNegativos = 10;
             if (!appState.contas) appState.contas = [];
             garantirContas();
             const elSi = document.getElementById('input-saldo-inicial');
@@ -4008,7 +4078,7 @@
         function resetarBancoDeDados() {
             if (confirm("ATENÇÃO: Tem certeza que deseja apagar TODOS os dados do IndexedDB? Esta ação não pode ser desfeita!")) {
                 if (confirm("Você tem certeza ABSOLUTA? Todo o seu histórico financeiro será perdido.")) {
-                    appState = { saldoInicial: 0, contas: [], transactions: [], ccTransactions: [], futureTransactions: [], investimentos: [], categories: { despesas: ["Outros"], receitas: ["Outros"] }, orcamentos: {}, comprasParceladas: [] };
+                    appState = { saldoInicial: 0, contas: [], transactions: [], ccTransactions: [], futureTransactions: [], investimentos: [], categories: { despesas: ["Outros"], receitas: ["Outros"] }, orcamentos: {}, comprasParceladas: [], limiteDiasNegativos: 10 };
                     garantirContas(); renderContasUI(); preencherFormConta();
                     saveData(); alert("O banco de dados foi completamente zerado.");
                 }
