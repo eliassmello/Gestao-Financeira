@@ -16,6 +16,22 @@
             investimentos: 'id',
             config: 'id'
         });
+        // v2: store "seguro" guarda o estado inteiro cifrado quando a proteção por senha
+        // está ligada (o resto das tabelas fica vazio; nada de texto puro no IndexedDB).
+        db.version(2).stores({
+            transacoes: 'id, data',
+            cartao: 'id, data',
+            previsoes: 'id, data',
+            investimentos: 'id',
+            config: 'id',
+            seguro: 'id'
+        });
+
+        // Criptografia local (opcional): chave derivada da senha, mantida só na memória
+        // desta aba enquanto o app está aberto.
+        let chaveSessao = null;      // CryptoKey da sessão (null = bloqueado/sem proteção)
+        let criptoAtivada = false;   // proteção por senha ligada?
+        let criptoSalt = null;       // salt (array de bytes) do PBKDF2, guardado no meta
 
 
         let appState = {
@@ -66,8 +82,87 @@
         function safeRun(fn) { try { fn(); } catch(e) { console.error("Erro protegido em", fn.name, e); } }
 
 
+        // Garante que todos os campos esperados existam no appState (após decifrar ou restaurar backup)
+        function _defaultsAppState() {
+            if (typeof appState.saldoInicial !== 'number') appState.saldoInicial = Number(appState.saldoInicial) || 0;
+            appState.contas = appState.contas || [];
+            appState.transactions = appState.transactions || [];
+            appState.ccTransactions = appState.ccTransactions || [];
+            appState.futureTransactions = appState.futureTransactions || [];
+            appState.investimentos = appState.investimentos || [];
+            appState.categories = appState.categories || { despesas: [], receitas: [] };
+            appState.orcamentos = appState.orcamentos || {};
+            appState.comprasParceladas = appState.comprasParceladas || [];
+            if (appState.limiteDiasNegativos === undefined || appState.limiteDiasNegativos === null) appState.limiteDiasNegativos = 10;
+            if (appState.ultimoBackup === undefined) appState.ultimoBackup = null;
+            if (appState.backupAdiadoAte === undefined) appState.backupAdiadoAte = null;
+        }
+
+        // Cifra o appState inteiro em um bloco { iv, cipher, flag(gzip) }
+        async function _cifrarEstado(key) {
+            let payload = new TextEncoder().encode(JSON.stringify(appState));
+            const flag = _temGzip ? 1 : 0;
+            if (flag) payload = await _gzip(payload);
+            const iv = crypto.getRandomValues(new Uint8Array(12));
+            const cipher = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, payload));
+            return { iv: Array.from(iv), cipher: Array.from(cipher), flag };
+        }
+        async function _decifrarEstado(key, blob) {
+            let plain = new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv: new Uint8Array(blob.iv) }, key, new Uint8Array(blob.cipher)));
+            if (blob.flag) plain = await _gunzip(plain);
+            return JSON.parse(new TextDecoder().decode(plain));
+        }
+
+        // Tenta desbloquear com a senha: só retorna true se decifrar de verdade
+        // (o próprio AES-GCM valida a senha). Deixa a chave na sessão em caso de sucesso.
+        async function tentarDesbloquear(senha) {
+            try {
+                const meta = await db.config.get('cripto');
+                if (!meta || !meta.enabled) return false;
+                const key = await _deriveKey(senha, new Uint8Array(meta.salt));
+                const blob = await db.seguro.get('blob');
+                if (blob) await _decifrarEstado(key, blob); // lança se a senha estiver errada
+                chaveSessao = key; criptoSalt = meta.salt; criptoAtivada = true;
+                return true;
+            } catch (e) { return false; }
+        }
+
+        // Liga a proteção: cifra o estado atual e apaga o texto puro — tudo numa
+        // transação atômica; só marca a proteção como ativa após gravar com sucesso.
+        async function ativarCripto(senha) {
+            const salt = Array.from(crypto.getRandomValues(new Uint8Array(16)));
+            const key = await _deriveKey(senha, new Uint8Array(salt));
+            const blob = await _cifrarEstado(key);
+            await db.transaction('rw', db.transacoes, db.cartao, db.previsoes, db.investimentos, db.config, db.seguro, async () => {
+                await db.seguro.put({ id: 'blob', ...blob });
+                await db.config.put({ id: 'cripto', enabled: true, salt });
+                await db.config.delete('global');
+                await db.transacoes.clear(); await db.cartao.clear(); await db.previsoes.clear(); await db.investimentos.clear();
+            });
+            chaveSessao = key; criptoSalt = salt; criptoAtivada = true;
+        }
+
+        // Desliga a proteção: grava o estado em texto puro e remove os vestígios cifrados.
+        async function desativarCripto() {
+            criptoAtivada = false;
+            await saveToDB();                       // grava global + tabelas em texto puro
+            await db.seguro.clear().catch(() => {});
+            await db.config.delete('cripto').catch(() => {});
+            chaveSessao = null; criptoSalt = null;
+        }
+
         async function loadDataFromDB() {
             try {
+                const meta = await db.config.get('cripto').catch(() => null);
+                if (meta && meta.enabled) {
+                    criptoAtivada = true; criptoSalt = meta.salt;
+                    if (!chaveSessao) return;       // ainda bloqueado; init() mostra a tela de senha
+                    const blob = await db.seguro.get('blob');
+                    if (blob) { appState = await _decifrarEstado(chaveSessao, blob); }
+                    _defaultsAppState();
+                    garantirContas();
+                    return;
+                }
                 const count = await db.config.count();
                 if (count === 0) {
                     const savedData = localStorage.getItem('controle_financeiro_dados');
@@ -105,6 +200,18 @@
 
         async function saveToDB() {
             try {
+                // Modo protegido: grava só o bloco cifrado e mantém as tabelas vazias
+                if (criptoAtivada && chaveSessao) {
+                    const blob = await _cifrarEstado(chaveSessao);
+                    await db.transaction('rw', db.transacoes, db.cartao, db.previsoes, db.investimentos, db.config, db.seguro, async () => {
+                        await db.seguro.put({ id: 'blob', ...blob });
+                        await db.config.put({ id: 'cripto', enabled: true, salt: criptoSalt });
+                        await db.config.delete('global');
+                        await db.transacoes.clear(); await db.cartao.clear(); await db.previsoes.clear(); await db.investimentos.clear();
+                    });
+                    return;
+                }
+                // Modo padrão (texto puro) — inalterado
                 await db.transaction('rw', db.transacoes, db.cartao, db.previsoes, db.investimentos, db.config, async () => {
                     await db.config.put({ id: 'global', saldoInicial: appState.saldoInicial, categories: appState.categories, orcamentos: appState.orcamentos, comprasParceladas: appState.comprasParceladas, limiteDiasNegativos: appState.limiteDiasNegativos, contas: appState.contas, ultimoBackup: appState.ultimoBackup, backupAdiadoAte: appState.backupAdiadoAte });
                     await db.transacoes.clear(); if(appState.transactions.length > 0) await db.transacoes.bulkPut(appState.transactions);

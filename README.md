@@ -80,6 +80,12 @@ Aplicativo de orçamento pessoal em **um único arquivo HTML**, que roda direto 
 ### 🔍 Busca Global
 - Botão **🔍 Buscar** no topo: encontre lançamentos por **descrição, categoria ou valor** (ex.: `mercado`, `1.500,00`) em **todas as contas correntes, cartão e previsões**, em todos os meses, ordenados do mais recente para o mais antigo.
 
+### 🔒 Proteção por senha (criptografia local, opcional)
+- Em **⚙️ Config → Proteção por Senha**, você pode **cifrar todos os dados** no navegador com uma senha de acesso (usa a mesma criptografia AES-GCM do backup `.pib`).
+- Com a proteção ligada, o app **pede a senha ao abrir** e grava no IndexedDB apenas um bloco embaralhado — quem inspecionar pelo F12 vê `a8f9e23b…`, não "Mercado". A senha (chave) fica só na memória enquanto o app está aberto.
+- **Opcional e reversível**: desligada por padrão; ao desativar (com o app desbloqueado) os dados voltam ao normal. Ao ativar, o app **exige salvar um backup** antes.
+- ⚠️ **Se esquecer a senha, não há recuperação** — por isso guarde o backup e a senha dele em local seguro. Protege contra bisbilhotagem do armazenamento/perfil do navegador; não substitui cuidados com o dispositivo em si.
+
 ### ⚙️ Configurações
 - **Backup completo** dos dados: **exportar** e **restaurar** em arquivo **.json** (inclui as contas e os orçamentos).
 - Cadastro e exclusão de **categorias** de despesa e de receita.
