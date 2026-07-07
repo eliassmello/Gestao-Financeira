@@ -786,6 +786,17 @@
                     <ul id="list-cat-receitas" class="divide-y divide-slate-100 text-sm max-h-[350px] overflow-y-auto pr-2"></ul>
                 </div>
             </div>
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100 mt-6">
+                <h2 class="font-bold text-slate-700 text-lg mb-1">🔒 Proteção por Senha (criptografia local)</h2>
+                <p class="text-sm text-slate-500 mb-3">Cifra seus dados no navegador com uma senha de acesso. Quem inspecionar o armazenamento (F12) vê só código embaralhado; sem a senha, os dados ficam inúteis. <span class="text-rose-600 font-semibold">Se esquecer a senha, não há recuperação</span> — por isso um backup é exigido ao ativar.</p>
+                <p id="cripto-status" class="text-sm mb-3"></p>
+                <div class="flex gap-2 flex-wrap">
+                    <button id="btn-cripto-ativar" onclick="ativarCriptoUI()" class="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-indigo-700 transition">🔒 Proteger com senha</button>
+                    <button id="btn-cripto-senha" onclick="trocarSenhaCripto()" class="hidden bg-slate-700 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-slate-800 transition">Trocar senha</button>
+                    <button id="btn-cripto-desativar" onclick="desativarCriptoUI()" class="hidden bg-amber-500 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-amber-600 transition">Desativar proteção</button>
+                </div>
+            </div>
+
             <div class="mt-8 border-t border-slate-200 pt-6">
                 <h3 class="text-lg font-semibold text-rose-600 mb-2">Zona de Perigo</h3>
                 <p class="text-sm text-slate-500 mb-4">Atenção: Esta ação apagará todo o seu histórico, transações e saldo no IndexedDB.</p>
@@ -807,6 +818,20 @@
             </div>
         </div>
     </main>
+
+    <!-- Tela de bloqueio: exibida quando a proteção por senha está ligada e a sessão
+         ainda não foi desbloqueada. Cobre todo o app até a senha correta ser digitada. -->
+    <div id="tela-bloqueio" class="hidden fixed inset-0 bg-slate-900 z-[100] flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-8 text-center">
+            <div class="text-5xl mb-3">🔒</div>
+            <h2 class="text-xl font-bold text-slate-800">App protegido</h2>
+            <p class="text-sm text-slate-500 mt-1 mb-5">Digite sua senha de acesso para desbloquear seus dados.</p>
+            <input type="password" id="senha-desbloqueio" placeholder="Senha de acesso" onkeydown="if(event.key === 'Enter') submeterDesbloqueio()" class="w-full text-center text-lg border border-slate-300 rounded-lg p-3 outline-none focus:ring-2 focus:ring-indigo-500">
+            <p id="erro-desbloqueio" class="hidden text-sm font-semibold text-rose-600 mt-2">Senha incorreta. Tente novamente.</p>
+            <button onclick="submeterDesbloqueio()" class="w-full mt-4 bg-indigo-600 text-white rounded-lg p-3 font-bold hover:bg-indigo-700 transition">Desbloquear</button>
+            <p class="text-[11px] text-slate-400 mt-4">Esqueceu a senha? Não há recuperação — restaure o backup em outro navegador ou zere os dados.</p>
+        </div>
+    </div>
 
     <script src="./js/services.js"></script>
     <script src="./js/ui.js"></script>
