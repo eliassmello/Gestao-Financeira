@@ -101,6 +101,8 @@ Aplicativo de orçamento pessoal em **um único arquivo HTML**, que roda direto 
 ## 🛠️ Tecnologia
 
 - **PWA** (instalável e com funcionamento **offline** via Service Worker `sw.js`).
+- **Estrutura de arquivos**: `index.html` contém apenas o **markup + Tailwind**; a lógica fica separada em **`js/services.js`** (modelo de dados, IndexedDB, cálculos, importação e backup) e **`js/ui.js`** (renderização, manipuladores de interface e inicialização).
+- **Offline após a primeira visita**: na primeira vez que abre online, o Service Worker guarda em cache o app (`index.html`, `js/services.js`, `js/ui.js`, ícones) **e as bibliotecas** (Tailwind, Chart.js, Dexie, XLSX, pdf.js). Depois disso o app abre e funciona **sem internet** — os dados sempre ficam no IndexedDB local. Ao publicar uma nova versão, basta subir a versão do cache em `sw.js` (`CACHE_NAME`).
 - **IndexedDB** através da biblioteca **Dexie.js** para armazenamento local.
 - **Chart.js** para os gráficos do Dashboard.
 - **Tailwind CSS** para a interface.
