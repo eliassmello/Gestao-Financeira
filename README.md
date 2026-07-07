@@ -105,7 +105,8 @@ Aplicativo de orçamento pessoal em **um único arquivo HTML**, que roda direto 
 - **Offline após a primeira visita**: na primeira vez que abre online, o Service Worker guarda em cache o app (`index.html`, `js/services.js`, `js/ui.js`, ícones) **e as bibliotecas** (Tailwind, Chart.js, Dexie, XLSX, pdf.js). Depois disso o app abre e funciona **sem internet** — os dados sempre ficam no IndexedDB local. Ao publicar uma nova versão, basta subir a versão do cache em `sw.js` (`CACHE_NAME`).
 - **IndexedDB** através da biblioteca **Dexie.js** para armazenamento local.
 - **Chart.js** para os gráficos do Dashboard.
-- **Tailwind CSS** para a interface.
+- **Tailwind CSS** para a interface, com **🌙 modo escuro** (botão no cabeçalho; a preferência é lembrada).
+- **Listas paginadas**: Conta Corrente e Cartão mostram até 300 lançamentos por vez, com botão **"Mostrar mais"** — assim anos de importações não travam o navegador.
 - 100% **client-side**: nenhum dado sai do seu computador.
 
 ---
