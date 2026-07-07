@@ -14,6 +14,41 @@
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
     <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
+
+    <!-- Tema escuro centralizado: remapeia as cores neutras/pastel do Tailwind quando
+         <html> tem a classe .dark. As cores semânticas (verde/vermelho/indigo dos
+         valores) permanecem, apenas mais legíveis sobre o fundo escuro. -->
+    <style>
+        .dark body { background-color: #0f172a; color: #e2e8f0; }
+        .dark .bg-white { background-color: #1e293b !important; }
+        .dark .bg-slate-50 { background-color: #0f172a !important; }
+        .dark .bg-slate-100 { background-color: #334155 !important; }
+        .dark .bg-slate-200 { background-color: #475569 !important; }
+        .dark .hover\:bg-slate-50:hover { background-color: #334155 !important; }
+        .dark .hover\:bg-slate-100:hover { background-color: #3f4c5f !important; }
+        .dark .text-slate-800 { color: #e2e8f0 !important; }
+        .dark .text-slate-700 { color: #e2e8f0 !important; }
+        .dark .text-slate-600 { color: #cbd5e1 !important; }
+        .dark .text-slate-500 { color: #94a3b8 !important; }
+        .dark .border-slate-100 { border-color: #334155 !important; }
+        .dark .border-slate-200 { border-color: #334155 !important; }
+        .dark .border-slate-300 { border-color: #475569 !important; }
+        .dark .divide-slate-100 > * + * { border-color: #334155 !important; }
+        .dark .divide-slate-50 > * + * { border-color: #263241 !important; }
+        /* superfícies pastel → tons escuros com um toque da cor original */
+        .dark .bg-indigo-50 { background-color: #1e1b4b !important; }
+        .dark .bg-emerald-50 { background-color: #064e3b !important; }
+        .dark .bg-rose-50 { background-color: #4c0519 !important; }
+        .dark .bg-amber-50 { background-color: #422006 !important; }
+        .dark .bg-sky-50 { background-color: #082f49 !important; }
+        .dark .bg-yellow-100 { background-color: #422006 !important; }
+        .dark .bg-emerald-100 { background-color: #065f46 !important; }
+        .dark .bg-rose-100 { background-color: #641220 !important; }
+        .dark .bg-slate-800 { background-color: #0b1220 !important; }
+        /* inputs e selects mantêm contraste */
+        .dark input, .dark select, .dark textarea { background-color: #1e293b; color: #e2e8f0; }
+        .dark input::placeholder { color: #64748b; }
+    </style>
 </head>
 <body class="bg-slate-50 text-slate-800 font-sans antialiased">
 
@@ -29,6 +64,7 @@
                 <button onclick="switchTab('quitacao')" id="btn-quitacao" class="tab-btn px-3 py-2 rounded-lg text-indigo-100 hover:bg-indigo-500 font-medium text-sm transition">🧮 Quitação</button>
                 <button onclick="switchTab('config')" id="btn-config" class="tab-btn px-3 py-2 rounded-lg text-indigo-100 hover:bg-indigo-500 font-medium text-sm transition">⚙️ Config</button>
                 <button onclick="abrirBuscaGlobal()" title="Busca global: encontre lançamentos em todas as contas, cartão e previsões" class="px-3 py-2 rounded-lg text-indigo-100 hover:bg-indigo-500 font-medium text-sm transition border border-indigo-400/50">🔍 Buscar</button>
+                <button onclick="toggleTema()" id="btn-tema" title="Alternar modo claro/escuro" class="px-3 py-2 rounded-lg text-indigo-100 hover:bg-indigo-500 font-medium text-sm transition border border-indigo-400/50">🌙</button>
             </nav>
         </div>
     </header>

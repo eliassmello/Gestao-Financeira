@@ -13,6 +13,20 @@
             });
         }
 
+        // ===== Tema claro/escuro (persistido em localStorage) =====
+        function aplicarTema(tema) {
+            const escuro = tema === 'dark';
+            document.documentElement.classList.toggle('dark', escuro);
+            const btn = document.getElementById('btn-tema');
+            if (btn) { btn.innerText = escuro ? '☀️' : '🌙'; btn.title = escuro ? 'Mudar para modo claro' : 'Mudar para modo escuro'; }
+            try { localStorage.setItem('tema', escuro ? 'dark' : 'light'); } catch (e) {}
+        }
+        function toggleTema() {
+            aplicarTema(document.documentElement.classList.contains('dark') ? 'light' : 'dark');
+        }
+        // Aplica o tema salvo o quanto antes (ui.js roda no fim do body)
+        aplicarTema((() => { try { return localStorage.getItem('tema'); } catch (e) { return null; } })() || 'light');
+
 
         function debouncedRenderRelatorio() { debounce('renderRelatorio', () => renderRelatorio(), 100); }
 
@@ -1652,6 +1666,22 @@
         }
 
 
+        // ===== Paginação simples das listas grandes =====
+        // Renderiza no máximo LIMITE_LISTA linhas por vez; acima disso mostra um rodapé
+        // "Mostrar mais" que amplia o limite. Evita travar o navegador com anos de
+        // lançamentos. O limite volta ao padrão sempre que o filtro/conta muda.
+        const LIMITE_LISTA = 300;
+        let _bancoAte = LIMITE_LISTA, _bancoSig = null;
+        let _cartaoAte = LIMITE_LISTA, _cartaoSig = null;
+        function mostrarMaisBanco() { _bancoAte += LIMITE_LISTA; renderTransactionsBanco(); }
+        function mostrarMaisCartao() { _cartaoAte += LIMITE_LISTA; renderTransactionsCartao(); }
+        function rodapePaginacao(mostrando, total, fn) {
+            return `<div class="p-3 text-center text-xs text-slate-500 bg-slate-50 border-t border-slate-100">
+                Mostrando <b>${mostrando}</b> de <b>${total}</b> lançamentos
+                <button onclick="${fn}()" class="ml-2 bg-indigo-600 text-white px-3 py-1 rounded-md font-bold hover:bg-indigo-700">Mostrar mais ${Math.min(LIMITE_LISTA, total - mostrando)}</button>
+            </div>`;
+        }
+
         function renderTransactionsBanco() {
             const container = document.getElementById('transactionsContainerBanco');
             renderContasUI();
@@ -1659,6 +1689,9 @@
             const filter = document.getElementById('filterSelectBanco').value;
             const filterMesEl = document.getElementById('filterMesBanco');
             const filterMes = filterMesEl ? filterMesEl.value : 'todos';
+
+            const sig = contaSelecionadaId + '|' + filterMes + '|' + filter;
+            if (sig !== _bancoSig) { _bancoSig = sig; _bancoAte = LIMITE_LISTA; }
 
             let filtered = appState.transactions.filter(t => t.contaId === contaSelecionadaId);
             if (filterMes !== 'todos') {
@@ -1678,13 +1711,15 @@
             const linhas = filtered.map(t => ({ t, k: dataTransacaoISO(t.data) }));
             linhas.sort((a, b) => b.k.localeCompare(a.k));
 
+            const total = linhas.length;
             const html = [];
-            for (let { t } of linhas) {
+            for (let { t } of linhas.slice(0, _bancoAte)) {
                 const isDeb = t.debito > 0;
                 html.push(linhaTransacaoHtml(t,
                     `<span class="text-sm text-slate-400 font-medium">${t.data || ''}</span>`,
                     isDeb ? 'text-rose-600' : 'text-emerald-600', 'banco', 'apagarLinhaBanco'));
             }
+            if (total > _bancoAte) html.push(rodapePaginacao(_bancoAte, total, 'mostrarMaisBanco'));
             container.innerHTML = html.join('');
         }
 
@@ -1696,6 +1731,9 @@
             const filter = document.getElementById('filterSelectCartao') ? document.getElementById('filterSelectCartao').value : 'todos';
             const filterMesEl = document.getElementById('filterMesCartao');
             const filterMes = filterMesEl ? filterMesEl.value : 'todos';
+
+            const sig = filterMes + '|' + filter;
+            if (sig !== _cartaoSig) { _cartaoSig = sig; _cartaoAte = LIMITE_LISTA; }
 
             const totalContainer = document.getElementById('totalizadorCartaoContainer');
             const totalValor = document.getElementById('totalizadorCartaoValor');
@@ -1738,9 +1776,10 @@
                 grupos[venc].liquido += (Number(t.debito) || 0) - (Number(t.credito) || 0);
             }
 
+            const total = linhas.length;
             const html = [];
             let grupoAtual = null;
-            for (let { t, venc } of linhas) {
+            for (let { t, venc } of linhas.slice(0, _cartaoAte)) {
                 if (venc !== grupoAtual) {
                     grupoAtual = venc;
                     const g = grupos[venc];
@@ -1755,6 +1794,7 @@
                 const isDeb = t.debito > 0;
                 html.push(linhaTransacaoHtml(t, dtHtml, isDeb ? 'text-amber-600' : 'text-emerald-600', 'cartao', 'apagarLinhaCartao'));
             }
+            if (total > _cartaoAte) html.push(rodapePaginacao(_cartaoAte, total, 'mostrarMaisCartao'));
             container.innerHTML = html.join('');
         }
 
