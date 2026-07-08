@@ -451,6 +451,11 @@
                 }
                 
                 let addedCount = 0;
+                // Deduplica contra o que JA existia antes desta importacao (evita
+                // reimportar a mesma fatura), mas preserva itens identicos dentro do
+                // proprio arquivo — comuns em faturas com mais de um portador, onde a
+                // mesma compra (loja/dia/valor) pode aparecer legitimamente em cada cartao.
+                const existentesAntes = appState.ccTransactions.slice();
                 for (let i = headerIndex + 1; i < lines.length; i++) {
                     const line = lines[i].trim();
                     if (!line) continue;
@@ -499,7 +504,7 @@
                     
                     const realUniqueId = 'cc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9) + '_' + i;
                     
-                    const exists = appState.ccTransactions.some(t => 
+                    const exists = existentesAntes.some(t =>
                         t.descricao === descricaoFinal && t.dataCompra === dataOriginalCompraCompleta && Math.abs((t.debito || t.credito) - valor) < 0.01
                     );
                     if (!exists) {
@@ -542,10 +547,15 @@
                 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
 
                 const linhas = await extrairLinhasPdf(file);
-                const resultado = converterPdfFaturaParaCsv(linhas);
+                // Detecta o banco pelo conteudo: Caixa (CEF) tem layout proprio (secao
+                // "Demonstrativo" com coluna Credito/Debito); caso contrario, Santander.
+                const dataFallback = (dataVencimentoFatura || '').slice(0, 5); // "DD/MM"
+                const resultado = detectarFaturaCEF(linhas)
+                    ? converterPdfFaturaCEFParaCsv(linhas, dataFallback)
+                    : converterPdfFaturaParaCsv(linhas);
 
                 if (resultado.total === 0) {
-                    alert("Nenhum lancamento foi encontrado no PDF. Verifique se e uma fatura Santander no layout esperado (secoes 'Despesas', 'Parcelamentos' e 'Pagamento e Demais Creditos').");
+                    alert("Nenhum lancamento foi encontrado no PDF. Verifique se e uma fatura Santander (secoes 'Despesas', 'Parcelamentos' e 'Pagamento e Demais Creditos') ou Caixa (secao 'Demonstrativo') no layout esperado.");
                     e.target.value = ''; return;
                 }
                 processarConteudoCartao(resultado.csv, e, dataVencimentoFatura, anoFaturaCartao);
@@ -684,6 +694,107 @@
                     saida.push(['Despesa', data, descricao, '-', Math.abs(valorNum).toFixed(2)].join(','));
                     ultimaData = data;
                     total++;
+                }
+            }
+            return { csv: saida.join('\n'), total: total };
+        }
+
+
+        // Detecta se as linhas extraidas sao de uma fatura da Caixa (CEF), que tem
+        // layout proprio: secao "Demonstrativo" com a coluna "Credito/Debito" (D/C
+        // colado ao valor) em vez das secoes "Despesas/Parcelamentos" do Santander.
+        function detectarFaturaCEF(linhas) {
+            const txt = normalizarTextoPdf(linhas.join(' '));
+            return txt.indexOf('CARTOES CAIXA') !== -1 ||
+                   (txt.indexOf('DEMONSTRATIVO') !== -1 && txt.indexOf('CIDADE/PAIS') !== -1);
+        }
+
+
+        // Converte as linhas de uma fatura da CAIXA (CEF) para o mesmo formato
+        // Tipo,Data,Descricao,Parcela,Valor consumido por processarConteudoCartao.
+        // Cada lancamento traz o valor com sufixo D (debito=Despesa) ou C
+        // (credito=Credito). Parcelamentos vem como "NN DE NN" no meio da linha e
+        // as compras internacionais trazem dois valores (US$ e R$) — importamos so
+        // o R$. A coluna Cidade/Pais fica junto da descricao (nao ha separador
+        // confiavel no texto). Ruidos (fatura anterior, pagamento) sao descartados.
+        function converterPdfFaturaCEFParaCsv(linhas, dataFallback) {
+            const V = '\\d{1,3}(?:\\.\\d{3})*,\\d{2}'; // valor BR: 1.234,56
+            const RE_NORMAL = new RegExp('^(\\d{2}/\\d{2})\\s+(.+?)\\s+(' + V + ')\\s*([DC])$');
+            const RE_PARC = new RegExp('^(\\d{2}/\\d{2})\\s+(.+?)\\s+(\\d{2})\\s+DE\\s+(\\d{2})\\b.*?\\s(' + V + ')\\s*([DC])$');
+            const RE_INTL = new RegExp('^(\\d{2}/\\d{2})\\s+(.+?)\\s+' + V + '\\s+(' + V + ')\\s*([DC])$');
+            const RE_ANUID = new RegExp('^(ANUIDADE\\b.*?)(?:\\s+(\\d{2})\\s*/\\s*(\\d{2}))?\\s+(' + V + ')\\s*([DC])$', 'i');
+
+            let modo = 'normal'; // 'normal' | 'parcelamento' | 'internacional'
+            let total = 0;
+            const saida = ['Tipo,Data,Descricao,Parcela,Valor'];
+
+            const emitir = (tipo, data, desc, parcela, valor) => {
+                desc = String(desc).replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
+                saida.push([tipo, data, desc, parcela || '-', valor].join(','));
+                total++;
+            };
+            const ehRuido = (norm) => (
+                norm.indexOf('FATURA ANTERIOR') !== -1 || norm.indexOf('OBRIGADO PELO PAGAMENTO') !== -1 ||
+                norm.indexOf('TOTAL ') === 0 || norm === 'TOTAL' || norm.indexOf('VALOR TOTAL') === 0 ||
+                norm.indexOf('SALDO') === 0 || norm.indexOf('DATA DESCRICAO') === 0 || norm.indexOf('DEMONSTRATIVO') === 0
+            );
+
+            for (const bruta of linhas) {
+                const linha = bruta.replace(/\s+/g, ' ').trim();
+                const norm = normalizarTextoPdf(linha);
+
+                // Cabecalhos de secao definem o modo de parsing
+                if (norm.indexOf('COMPRAS PARCELADAS') !== -1) { modo = 'parcelamento'; continue; }
+                if (norm.indexOf('COMPRAS INTERNACIONAIS') !== -1) { modo = 'internacional'; continue; }
+                if (norm.indexOf('COMPRAS') === 0 || norm.indexOf('COMPRAS (CARTAO') !== -1) { modo = 'normal'; continue; }
+                if (/\(CARTAO\s+\d+\)/.test(norm)) { modo = 'normal'; } // novo portador
+
+                // Anuidade: linha sem data propria -> usa a data de fallback (vencimento)
+                if (norm.indexOf('ANUIDADE') === 0) {
+                    const ma = linha.match(RE_ANUID);
+                    if (ma) {
+                        const v = valorPdfParaDecimal(ma[4]);
+                        if (v && parseFloat(v) !== 0 && ma[5] === 'D' && dataFallback) {
+                            const parc = (ma[2] && ma[3]) ? `${ma[2]}/${ma[3]}` : '';
+                            emitir('Despesa', dataFallback, ma[1], parc, v);
+                        }
+                    }
+                    continue;
+                }
+
+                if (ehRuido(norm)) continue;
+
+                if (modo === 'parcelamento') {
+                    const mp = linha.match(RE_PARC);
+                    if (mp) {
+                        const v = valorPdfParaDecimal(mp[5]);
+                        if (v && parseFloat(v) !== 0) emitir('Despesa', mp[1], mp[2], `${mp[3]}/${mp[4]}`, v);
+                        continue;
+                    }
+                    // parcelada sem "NN DE NN" reconhecivel -> cai no RE_NORMAL abaixo
+                }
+
+                if (modo === 'internacional') {
+                    const mi = linha.match(RE_INTL); // dois valores: US$ (ignorado) e R$ (o ultimo)
+                    if (mi) {
+                        const v = valorPdfParaDecimal(mi[3]);
+                        if (v && parseFloat(v) !== 0) emitir(mi[4] === 'C' ? 'Credito' : 'Despesa', mi[1], mi[2], '', v);
+                        continue;
+                    }
+                    // IOF e demais linhas com um unico valor caem no RE_NORMAL abaixo
+                }
+
+                const m = linha.match(RE_NORMAL);
+                if (!m) continue;
+                const data = m[1];
+                const desc = m[2];
+                const v = valorPdfParaDecimal(m[3]);
+                if (v === null || parseFloat(v) === 0) continue;
+                if (m[4] === 'C') {
+                    if (normalizarTextoPdf(desc).indexOf('PAGAMENTO') !== -1) continue;
+                    emitir('Credito', data, desc, '', v);
+                } else {
+                    emitir('Despesa', data, desc, '', v);
                 }
             }
             return { csv: saida.join('\n'), total: total };
