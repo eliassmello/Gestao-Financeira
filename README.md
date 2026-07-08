@@ -37,6 +37,7 @@ Aplicativo de orçamento pessoal em **um único arquivo HTML**, que roda direto 
 - **🚨 Alerta de cheque especial**: a coluna Saldo Projetado é acompanhada dia a dia e a linha fica **vermelha** no dia em que a conta atinge o **limite de dias com saldo negativo dentro de um mesmo mês** (configurável, padrão **10 dias/mês**). Se não houver lançamento no dia exato do estouro, o alerta marca a **linha anterior disponível** informando a data real. Recalcula em tempo real ao alterar qualquer valor.
 - **✔ Efetivar previsão (Previsto × Realizado)**: quando o valor real cair no banco, clique em **✔** no cronograma e informe o valor realizado. A previsão sai do cronograma/simulador e vai para o painel **✅ Previsto × Realizado**, que mostra por mês: previsto, realizado e **diferença** (positiva = melhor que o previsto) por lançamento, totais de entradas/saídas e **resumo por categoria**. Dá para **desfazer** (↩️) e a previsão volta ao cronograma.
 - **💳 Parcelamentos Futuros do Cartão**: as parcelas restantes dos lançamentos "Parc. N/M" das faturas importadas são projetadas automaticamente mês a mês, com total comprometido e detalhe por compra. Compras repetidas em faturas consecutivas são deduplicadas (vale a fatura mais recente). Painel informativo — não altera o Saldo Projetado.
+- **🔁 Lançamentos recorrentes**: cadastre regras (salário, aluguel, assinaturas...) com frequência **mensal, semanal ou anual** e fim opcional; o app gera as previsões sozinho pelos próximos 12 meses e mantém o horizonte rolando a cada abertura. Pausar/excluir remove as futuras não conciliadas.
 - **🧹 Excluir por categoria**: remova de uma vez todos os agendamentos pendentes de uma categoria (útil para refazer planos gerados em massa). Previsões já efetivadas são preservadas e reflexos em investimentos são revertidos.
 - **Reflexo em Investimento (opcional)**: uma **Saída** vira **Aporte** e uma **Entrada** vira **Resgate** no investimento escolhido, lançado na data e recalculado em cascata.
 
@@ -44,7 +45,7 @@ Aplicativo de orçamento pessoal em **um único arquivo HTML**, que roda direto 
 - **Múltiplas contas correntes**, cada uma independente (ex.: Nubank, Itaú, Carteira), com **nome** e **saldo inicial próprios**.
 - **Conta ativa**: o seletor no topo define qual conta recebe as **importações** e cujos lançamentos são exibidos. Clique no nome de uma conta nos "chips" para torná-la ativa.
 - **Checkbox "Refletir no dashboard/previsão"** por conta: marque quais contas entram nas **totalizações do Dashboard** e na **Caixa de Partida da Previsão**. Os totais somam **todas as contas marcadas**.
-- **Importação de extrato bancário** (**.xls, .xlsx, .csv**) direto na conta ativa, com detecção de duplicidade por conta.
+- **Importação de extrato bancário** (**.ofx, .xls, .xlsx, .csv**) direto na conta ativa, com detecção de duplicidade por conta.
 - Filtros por **mês** e por **tipo** (entradas, saídas ou sem categoria) e **categorização** rápida.
 - Exclusão de **um mês específico** dentro da conta ativa; criação, renomeação e exclusão de contas.
 
@@ -85,6 +86,12 @@ Aplicativo de orçamento pessoal em **um único arquivo HTML**, que roda direto 
 - Com a proteção ligada, o app **pede a senha ao abrir** e grava no IndexedDB apenas um bloco embaralhado — quem inspecionar pelo F12 vê `a8f9e23b…`, não "Mercado". A senha (chave) fica só na memória enquanto o app está aberto.
 - **Opcional e reversível**: desligada por padrão; ao desativar (com o app desbloqueado) os dados voltam ao normal. Ao ativar, o app **exige salvar um backup** antes.
 - ⚠️ **Se esquecer a senha, não há recuperação** — por isso guarde o backup e a senha dele em local seguro. Protege contra bisbilhotagem do armazenamento/perfil do navegador; não substitui cuidados com o dispositivo em si.
+
+### 📆 Calendário Financeiro
+- Visão de mês em grade com as **entradas e saídas previstas** de cada dia (agendamentos + recorrências). Navegue entre meses e clique num dia para ver os lançamentos; recorrentes aparecem com 🔁.
+
+### 🔔 Notificações de contas a vencer
+- Um **banner no topo** avisa sobre saídas previstas que vencem nos **próximos 3 dias**. Em **Config**, você pode autorizar **notificações do sistema** (aparecem ao abrir o app).
 
 ### ⚙️ Configurações
 - **Backup completo** dos dados: **exportar** e **restaurar** em arquivo **.json** (inclui as contas e os orçamentos).
