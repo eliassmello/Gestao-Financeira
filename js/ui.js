@@ -59,6 +59,20 @@
             // Rola o horizonte das recorrências (gera novas ocorrências que entraram nos 12 meses)
             try { if (gerarLancamentosRecorrentes()) await saveToDB(); } catch(e) {}
 
+            // Backup automático em pasta (desktop): tenta sincronizar ao abrir. Se a
+            // permissão da pasta ainda não foi concedida nesta sessão, mostra um banner
+            // para o usuário autorizar com um clique (exigência do navegador).
+            try {
+                await carregarAutoBkp();
+                if (autoBkpCfg && autoBkpCfg.ativo && autoBkpHandle) {
+                    if (await verificarPermissaoPasta(false)) {
+                        if (autoBkpCfg.restaurarAoAbrir) await autoRestaurarSeMaisNovo(false);
+                    } else {
+                        safeRun(atualizarBannerAutoBkp);
+                    }
+                }
+            } catch(e) {}
+
             const inputSaldoIni = document.getElementById('input-saldo-inicial');
             if (inputSaldoIni) inputSaldoIni.value = (appState.saldoInicial || 0).toFixed(2);
             const inputLimNeg = document.getElementById('prev-limite-negativo');
@@ -153,7 +167,7 @@
                 if (tabId === 'investimentos') renderInvestimentos();
                 if (tabId === 'quitacao') renderQuitacao();
                 if (tabId === 'calendario') renderCalendario();
-                if (tabId === 'config') { renderCategoriesTab(); safeRun(atualizarInfoUltimoBackup); safeRun(atualizarCardCripto); safeRun(atualizarCardNotif); }
+                if (tabId === 'config') { renderCategoriesTab(); safeRun(atualizarInfoUltimoBackup); safeRun(atualizarCardCripto); safeRun(atualizarCardNotif); safeRun(renderCardAutoBkp); }
             } catch(err) {}
         }
 
@@ -2347,6 +2361,90 @@
                 el.innerText = `Último backup: ${d.toLocaleDateString('pt-BR')} às ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
                 el.className = "text-xs font-bold text-emerald-700 mt-3";
             }
+        }
+
+
+        // ===== Backup automático em pasta (desktop) — UI =====
+
+        function renderCardAutoBkp() {
+            const sup = document.getElementById('autobkp-suporte');
+            if (sup) sup.classList.toggle('hidden', fsaDisponivel());
+            const pasta = document.getElementById('autobkp-pasta');
+            if (pasta) pasta.innerText = (autoBkpCfg && autoBkpCfg.dirNome) ? autoBkpCfg.dirNome : 'nenhuma';
+            const s = document.getElementById('autobkp-senha');
+            if (s && autoBkpCfg && autoBkpCfg.salvarSenha) s.value = autoBkpCfg.senha || '';
+            const ss = document.getElementById('autobkp-salvar-senha'); if (ss) ss.checked = !!(autoBkpCfg && autoBkpCfg.salvarSenha);
+            const at = document.getElementById('autobkp-ativo'); if (at) at.checked = !!(autoBkpCfg && autoBkpCfg.ativo);
+            const rt = document.getElementById('autobkp-restaurar'); if (rt) rt.checked = !!(autoBkpCfg && autoBkpCfg.restaurarAoAbrir);
+            const st = document.getElementById('autobkp-status');
+            if (st) {
+                if (autoBkpCfg && autoBkpCfg.ultimoAutoBackupISO) {
+                    const d = new Date(autoBkpCfg.ultimoAutoBackupISO);
+                    st.innerText = `Último backup na pasta: ${d.toLocaleDateString('pt-BR')} às ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+                    st.className = 'text-xs font-bold text-emerald-700';
+                } else { st.innerText = ''; }
+            }
+        }
+
+        function lerCamposAutoBkp() {
+            autoBkpCfg = autoBkpCfg || {};
+            const s = document.getElementById('autobkp-senha');
+            const ss = document.getElementById('autobkp-salvar-senha');
+            const at = document.getElementById('autobkp-ativo');
+            const rt = document.getElementById('autobkp-restaurar');
+            if (ss) autoBkpCfg.salvarSenha = ss.checked;
+            if (s) autoBkpCfg.senha = s.value || '';
+            if (at) autoBkpCfg.ativo = at.checked;
+            if (rt) autoBkpCfg.restaurarAoAbrir = rt.checked;
+        }
+
+        async function salvarConfigAutoBkp() {
+            lerCamposAutoBkp();
+            await salvarAutoBkpCfg();
+            renderCardAutoBkp();
+        }
+
+        async function escolherPastaBackup() {
+            if (!fsaDisponivel()) { alert("Este navegador não suporta escolher uma pasta fixa de backup. Use um navegador de desktop baseado no Chrome/Edge, ou o backup manual acima."); return; }
+            try {
+                const h = await window.showDirectoryPicker({ mode: 'readwrite' });
+                autoBkpHandle = h;
+                autoBkpCfg = autoBkpCfg || {};
+                autoBkpCfg.dirNome = h.name;
+                autoBkpCfg.dirHandle = h;
+                if (autoBkpCfg.ativo === undefined) autoBkpCfg.ativo = true;
+                if (autoBkpCfg.restaurarAoAbrir === undefined) autoBkpCfg.restaurarAoAbrir = true;
+                lerCamposAutoBkp();
+                await salvarAutoBkpCfg();
+                const ok = await autoBackupSalvar(true);
+                renderCardAutoBkp();
+                const b = document.getElementById('banner-autobkp'); if (b) b.classList.add('hidden');
+                alert(ok ? `Pasta "${h.name}" escolhida e backup inicial gravado.` : `Pasta "${h.name}" escolhida. Ative o backup automático para começar a gravar.`);
+            } catch (e) { /* usuário cancelou o seletor */ }
+        }
+
+        async function autoBackupAgora() {
+            if (!autoBkpHandle) { alert("Escolha uma pasta primeiro."); return; }
+            const ok = await autoBackupSalvar(true);
+            renderCardAutoBkp();
+            alert(ok ? "Backup gravado na pasta." : "Não foi possível gravar. Verifique se você autorizou o acesso à pasta.");
+        }
+
+        function atualizarBannerAutoBkp() {
+            const b = document.getElementById('banner-autobkp'); if (!b) return;
+            if (autoBkpCfg && autoBkpCfg.ativo && autoBkpHandle) {
+                const p = document.getElementById('banner-autobkp-pasta'); if (p) p.innerText = autoBkpCfg.dirNome || '';
+                b.classList.remove('hidden');
+            } else { b.classList.add('hidden'); }
+        }
+
+        async function sincronizarPastaBackup() {
+            if (!(await verificarPermissaoPasta(true))) { alert("Não foi possível obter acesso à pasta."); return; }
+            if (autoBkpCfg && autoBkpCfg.restaurarAoAbrir) await autoRestaurarSeMaisNovo(true);
+            const b = document.getElementById('banner-autobkp'); if (b) b.classList.add('hidden');
+            // permissão concedida nesta sessão → o auto-save silencioso passa a funcionar
+            await autoBackupSalvar(true);
+            renderCardAutoBkp();
         }
 
 
