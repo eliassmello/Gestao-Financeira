@@ -83,12 +83,11 @@ Aplicativo de orçamento pessoal que roda direto no navegador, funciona **offlin
 ### 🔍 Busca Global
 - Botão **🔍 Buscar** no topo: encontre lançamentos por **descrição, categoria ou valor** (ex.: `mercado`, `1.500,00`) em **todas as contas correntes, cartão e previsões**, em todos os meses, ordenados do mais recente para o mais antigo.
 
-### 🔒 Proteção por senha (criptografia local, opcional)
-- Em **⚙️ Config → Proteção por Senha**, você pode **cifrar todos os dados** no navegador com uma senha de acesso (usa a mesma criptografia AES-GCM do backup `.pib`).
-- Com a proteção ligada, o app **pede a senha ao abrir** e grava no IndexedDB apenas um bloco embaralhado — quem inspecionar pelo F12 vê `a8f9e23b…`, não "Mercado". A senha (chave) fica só na memória enquanto o app está aberto.
-- **Senha única**: com a proteção ligada, essa **mesma senha é reaproveitada automaticamente** nos backups — no protegido `.pib`, no backup automático em pasta e ao restaurar um `.pib`. Você não digita nem gerencia senhas diferentes; e ela continua **só na memória** (nada é gravado a mais). Trocar a senha de acesso atualiza todos de uma vez.
-- **Opcional e reversível**: desligada por padrão; ao desativar (com o app desbloqueado) os dados voltam ao normal. Ao ativar, o app **exige salvar um backup** antes.
-- ⚠️ **Se esquecer a senha, não há recuperação** — por isso guarde o backup e a senha dele em local seguro. Protege contra bisbilhotagem do armazenamento/perfil do navegador; não substitui cuidados com o dispositivo em si.
+### 🔒 Senha do app (criptografia local, sempre ativa)
+- A criptografia é **sempre ativa**. Na **primeira abertura**, o app pede para você **criar uma senha**; a partir daí ele **pede essa senha toda vez que abrir** e grava no IndexedDB apenas um bloco embaralhado (AES-GCM) — quem inspecionar pelo F12 vê `a8f9e23b…`, não "Mercado". A senha (chave) fica **só na memória** enquanto o app está aberto.
+- **Senha única para tudo**: a mesma senha é usada **automaticamente** em todos os backups — no `.pib` manual, no backup automático em pasta e ao restaurar um `.pib`. Você não digita nem gerencia senhas diferentes.
+- **Alterar a senha**: em **⚙️ Config → Senha do app**, o campo de senha pode ser editado; ao salvar, a nova senha passa a valer para abrir o app e para todos os backups.
+- ⚠️ **Se esquecer a senha, não há recuperação** — por isso guarde um backup em local seguro. Protege contra bisbilhotagem do armazenamento/perfil do navegador; não substitui cuidados com o dispositivo em si.
 
 ### 📆 Calendário Financeiro
 - Visão de mês em grade com as **entradas e saídas previstas** de cada dia (agendamentos + recorrências). Navegue entre meses e clique num dia para ver os lançamentos; recorrentes aparecem com 🔁.
@@ -108,9 +107,9 @@ Aplicativo de orçamento pessoal que roda direto no navegador, funciona **offlin
 ## 💾 Backup e segurança dos dados
 
 - Os dados são gravados em **IndexedDB** (banco local do navegador, `AppFinancas_DB`), com migração automática de dados antigos em `localStorage`. Contas correntes antigas (de uma única conta) são migradas automaticamente para uma "Conta Principal".
-- **Faça backup periodicamente** em **Config → Salvar backup (.json)**. Para migrar de máquina ou recuperar, use **Restaurar backup (.json)**.
+- **Faça backup periodicamente** em **Config → Salvar backup**. O arquivo é **criptografado (`.pib`) com a senha do app** e a restauração usa essa senha automaticamente (ainda reconhece backups `.json` antigos). Para migrar de máquina ou recuperar, use **Restaurar backup**.
 - **Lembrete automático**: o app mostra um aviso no topo se você **nunca fez backup** ou se o último foi há **30 dias ou mais** (dá para adiar por 7 dias). A data/hora do último backup aparece em **Config → Backup Completo**.
-- **📁 Backup automático em pasta (desktop)**: em **Config → Backup automático em pasta**, escolha uma **pasta fixa** do computador para o app gravar o backup **a cada alteração** e, ao abrir, **oferecer restaurar** caso a pasta tenha dados mais recentes (sempre com confirmação — nunca sobrescreve sem perguntar). Apontando a pasta para um diretório do **Google Drive / OneDrive / Dropbox**, isso vira uma **sincronização entre máquinas**. Uma **senha opcional** grava o arquivo criptografado (`.pib`); marcar "salvar senha" guarda-a neste aparelho (mais prático, menos seguro). As preferências (pasta e senha) são **locais do aparelho** e **não entram no backup exportável**. Requer navegador de **desktop baseado no Chrome/Edge** (não disponível em Firefox, Safari ou celulares) e **uma autorização por sessão** exigida pelo próprio navegador.
+- **📁 Backup automático em pasta (desktop)**: em **Config → Backup automático em pasta**, escolha uma **pasta fixa** do computador para o app gravar o backup **a cada alteração** e, ao abrir, **oferecer restaurar** caso a pasta tenha dados mais recentes (sempre com confirmação — nunca sobrescreve sem perguntar). Apontando a pasta para um diretório do **Google Drive / OneDrive / Dropbox**, isso vira uma **sincronização entre máquinas**. O arquivo é gravado **criptografado (`.pib`) com a senha do app** (a mesma de tudo). As preferências (pasta) são **locais do aparelho** e **não entram no backup exportável**. Requer navegador de **desktop baseado no Chrome/Edge** (não disponível em Firefox, Safari ou celulares) e **uma autorização por sessão** exigida pelo próprio navegador.
 - Limpar os dados do navegador, trocar de dispositivo ou usar janela anônima **apaga ou não enxerga** os dados — por isso o backup é essencial.
 
 ---
