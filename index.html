@@ -81,7 +81,7 @@
                 </div>
             </div>
             <div class="flex gap-2 shrink-0">
-                <button onclick="exportData()" class="bg-amber-600 hover:bg-amber-700 text-white px-3 py-2 rounded-md text-xs font-bold transition whitespace-nowrap">💾 Salvar backup agora</button>
+                <button onclick="exportDataProtegido()" class="bg-amber-600 hover:bg-amber-700 text-white px-3 py-2 rounded-md text-xs font-bold transition whitespace-nowrap">💾 Salvar backup agora</button>
                 <button onclick="adiarLembreteBackup()" class="bg-white border border-amber-300 text-amber-700 hover:bg-amber-100 px-3 py-2 rounded-md text-xs font-bold transition whitespace-nowrap">Lembrar em 7 dias</button>
             </div>
         </div>
@@ -860,10 +860,9 @@
 
                 <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100 flex flex-col justify-center">
                     <h2 class="font-bold text-slate-700 text-lg mb-1">Backup Completo</h2>
-                    <p class="text-sm text-slate-500 mb-4"><b>Protegido (.pib)</b>: comprimido e criptografado por senha. <b>.json</b>: texto simples (compatível com o sistema antigo). A restauração reconhece os dois formatos automaticamente. <span class="text-rose-600">Se usar senha e esquecê-la, não há recuperação.</span></p>
+                    <p class="text-sm text-slate-500 mb-4">O backup é <b>criptografado (.pib)</b> com a <b>senha do app</b> — a mesma que você usa para abrir. A restauração usa essa senha automaticamente (e ainda reconhece backups <b>.json</b> antigos). <span class="text-rose-600">Se esquecer a senha, não há recuperação.</span></p>
                     <div class="flex gap-3 flex-wrap">
-                        <button onclick="exportDataProtegido()" class="flex-1 bg-emerald-700 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-emerald-800 transition text-center whitespace-nowrap">🔒 Salvar protegido (senha)</button>
-                        <button onclick="exportData()" class="flex-1 bg-slate-800 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-slate-900 transition text-center whitespace-nowrap">💾 Salvar .json simples</button>
+                        <button onclick="exportDataProtegido()" class="flex-1 bg-emerald-700 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-emerald-800 transition text-center whitespace-nowrap">💾 Salvar backup</button>
                         <label class="flex-1 bg-slate-200 text-slate-700 px-4 py-2 rounded-md text-sm font-bold hover:bg-slate-300 cursor-pointer transition text-center whitespace-nowrap">
                             📂 Restaurar backup
                             <input type="file" accept=".json,.pib" onchange="importData(event)" class="hidden">
@@ -928,13 +927,13 @@
             </div>
 
             <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100 mt-6">
-                <h2 class="font-bold text-slate-700 text-lg mb-1">🔒 Proteção por Senha (criptografia local)</h2>
-                <p class="text-sm text-slate-500 mb-3">Cifra seus dados no navegador com uma senha de acesso. Quem inspecionar o armazenamento (F12) vê só código embaralhado; sem a senha, os dados ficam inúteis. Esta é a <b>senha única do app</b>: a mesma vale para os backups (manual e automático) — você não precisa gerenciar senhas diferentes. <span class="text-rose-600 font-semibold">Se esquecer a senha, não há recuperação</span> — por isso um backup é exigido ao ativar.</p>
-                <p id="cripto-status" class="text-sm mb-3"></p>
-                <div class="flex gap-2 flex-wrap">
-                    <button id="btn-cripto-ativar" onclick="ativarCriptoUI()" class="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-indigo-700 transition">🔒 Proteger com senha</button>
-                    <button id="btn-cripto-senha" onclick="trocarSenhaCripto()" class="hidden bg-slate-700 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-slate-800 transition">Trocar senha</button>
-                    <button id="btn-cripto-desativar" onclick="desativarCriptoUI()" class="hidden bg-amber-500 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-amber-600 transition">Desativar proteção</button>
+                <h2 class="font-bold text-slate-700 text-lg mb-1">🔒 Senha do app</h2>
+                <p class="text-sm text-slate-500 mb-3">A criptografia é <b>sempre ativa</b>: o app pede esta senha ao abrir, guarda seus dados cifrados no navegador e usa a <b>mesma senha</b> em todos os backups (manual e automático em pasta). Você pode alterá-la abaixo. <span class="text-rose-600 font-semibold">Se esquecer a senha, não há recuperação</span> — anote-a e mantenha um backup em local seguro.</p>
+                <div class="flex items-center gap-2 flex-wrap">
+                    <label class="text-sm text-slate-600">Senha:</label>
+                    <input type="password" id="config-senha" class="text-sm border border-slate-200 rounded-md p-1.5 outline-none focus:ring-1 focus:ring-indigo-500" autocomplete="off">
+                    <label class="text-xs text-slate-500 flex items-center gap-1"><input type="checkbox" id="config-senha-mostrar" onchange="toggleMostrarSenhaConfig()"> mostrar</label>
+                    <button onclick="salvarSenhaConfig()" class="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-indigo-700 transition">Salvar senha</button>
                 </div>
             </div>
 
@@ -971,6 +970,21 @@
             <p id="erro-desbloqueio" class="hidden text-sm font-semibold text-rose-600 mt-2">Senha incorreta. Tente novamente.</p>
             <button onclick="submeterDesbloqueio()" class="w-full mt-4 bg-indigo-600 text-white rounded-lg p-3 font-bold hover:bg-indigo-700 transition">Desbloquear</button>
             <p class="text-[11px] text-slate-400 mt-4">Esqueceu a senha? Não há recuperação — restaure o backup em outro navegador ou zere os dados.</p>
+        </div>
+    </div>
+
+    <!-- Tela de criação de senha: exibida na primeira abertura (ainda sem senha).
+         A criptografia é sempre ativa; aqui o usuário define a senha única. -->
+    <div id="tela-criar-senha" class="hidden fixed inset-0 bg-slate-900 z-[100] flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-8 text-center">
+            <div class="text-5xl mb-3">🔐</div>
+            <h2 class="text-xl font-bold text-slate-800">Crie sua senha</h2>
+            <p class="text-sm text-slate-500 mt-1 mb-5">Esta senha protege seus dados no navegador e é usada em todos os backups. O app vai pedi-la toda vez que abrir.</p>
+            <input type="password" id="criar-senha-1" placeholder="Nova senha (mín. 4 caracteres)" class="w-full text-center text-lg border border-slate-300 rounded-lg p-3 outline-none focus:ring-2 focus:ring-indigo-500">
+            <input type="password" id="criar-senha-2" placeholder="Confirme a senha" onkeydown="if(event.key === 'Enter') criarSenhaInicial()" class="w-full mt-3 text-center text-lg border border-slate-300 rounded-lg p-3 outline-none focus:ring-2 focus:ring-indigo-500">
+            <p id="erro-criar-senha" class="hidden text-sm font-semibold text-rose-600 mt-2"></p>
+            <button onclick="criarSenhaInicial()" class="w-full mt-4 bg-indigo-600 text-white rounded-lg p-3 font-bold hover:bg-indigo-700 transition">Criar e proteger</button>
+            <p class="text-[11px] text-rose-500 font-semibold mt-4">⚠️ Anote a senha em local seguro: se esquecê-la, não há como recuperar seus dados.</p>
         </div>
     </div>
 
