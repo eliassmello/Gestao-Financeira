@@ -1,14 +1,15 @@
 # 💰 Controle Financeiro Pessoal (PWA)
 
-Aplicativo de orçamento pessoal em **um único arquivo HTML**, que roda direto no navegador, funciona **offline** e guarda todos os dados **localmente no seu dispositivo** (nada vai para a internet).
+Aplicativo de orçamento pessoal que roda direto no navegador, funciona **offline** e guarda todos os dados **localmente no seu dispositivo** (nada vai para a internet).
 
-> Arquivo principal: **`Financas com evolucao invest5_claude.html`**
+> **Acesse online:** https://eliassmello.github.io/Gestao-Financeira/ — instalável como app (PWA).
+> **Arquivos principais:** `index.html` + `js/services.js` + `js/ui.js` (veja [Tecnologia](#️-tecnologia)).
 
 ---
 
 ## 🚀 Como usar
 
-1. Abra o arquivo HTML no navegador (Chrome, Edge ou Firefox) com um **duplo clique**, ou publique a pasta em um servidor para instalar como aplicativo (PWA).
+1. Abra o app pela **URL publicada** acima (Chrome, Edge ou Firefox) e, se quiser, **instale-o** como aplicativo (PWA) — funciona offline depois da primeira visita. Também dá para publicar a pasta em qualquer servidor estático.
 2. Na primeira vez, vá em **🏦 Conta Corrente** e ajuste sua primeira conta (nome e **saldo inicial**). O sistema já cria uma "Conta Principal" automaticamente.
 3. Cadastre suas **categorias** de receita e despesa em **⚙️ Config**.
 4. Importe seus extratos ou lance previsões e comece a acompanhar.
@@ -133,4 +134,4 @@ Aplicativo de orçamento pessoal em **um único arquivo HTML**, que roda direto 
 | Troquei de computador | Restaure o último arquivo `.json` em Config |
 | Os dados sumiram | Verifique se está no mesmo navegador/perfil; restaure um backup |
 | Quero recomeçar do zero | Config → Zona de Perigo → Zerar banco de dados (faça backup antes!) |
-| Importação não reconheceu o arquivo | Confirme o formato: extrato `.xls/.xlsx/.csv`, cartão `.txt/.csv` |
+| Importação não reconheceu o arquivo | Confirme o formato: extrato `.ofx/.xls/.xlsx/.csv`, cartão `.txt/.csv` |
