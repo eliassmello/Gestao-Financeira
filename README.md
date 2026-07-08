@@ -86,6 +86,7 @@ Aplicativo de orçamento pessoal que roda direto no navegador, funciona **offlin
 ### 🔒 Proteção por senha (criptografia local, opcional)
 - Em **⚙️ Config → Proteção por Senha**, você pode **cifrar todos os dados** no navegador com uma senha de acesso (usa a mesma criptografia AES-GCM do backup `.pib`).
 - Com a proteção ligada, o app **pede a senha ao abrir** e grava no IndexedDB apenas um bloco embaralhado — quem inspecionar pelo F12 vê `a8f9e23b…`, não "Mercado". A senha (chave) fica só na memória enquanto o app está aberto.
+- **Senha única**: com a proteção ligada, essa **mesma senha é reaproveitada automaticamente** nos backups — no protegido `.pib`, no backup automático em pasta e ao restaurar um `.pib`. Você não digita nem gerencia senhas diferentes; e ela continua **só na memória** (nada é gravado a mais). Trocar a senha de acesso atualiza todos de uma vez.
 - **Opcional e reversível**: desligada por padrão; ao desativar (com o app desbloqueado) os dados voltam ao normal. Ao ativar, o app **exige salvar um backup** antes.
 - ⚠️ **Se esquecer a senha, não há recuperação** — por isso guarde o backup e a senha dele em local seguro. Protege contra bisbilhotagem do armazenamento/perfil do navegador; não substitui cuidados com o dispositivo em si.
 

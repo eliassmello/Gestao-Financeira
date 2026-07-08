@@ -2372,8 +2372,18 @@
             const pasta = document.getElementById('autobkp-pasta');
             if (pasta) pasta.innerText = (autoBkpCfg && autoBkpCfg.dirNome) ? autoBkpCfg.dirNome : 'nenhuma';
             const s = document.getElementById('autobkp-senha');
-            if (s && autoBkpCfg && autoBkpCfg.salvarSenha) s.value = autoBkpCfg.senha || '';
-            const ss = document.getElementById('autobkp-salvar-senha'); if (ss) ss.checked = !!(autoBkpCfg && autoBkpCfg.salvarSenha);
+            const ss = document.getElementById('autobkp-salvar-senha');
+            const nota = document.getElementById('autobkp-senha-nota');
+            if (criptoAtivada) {
+                // proteção ligada => usa a senha mestra do app; campo próprio fica desativado
+                if (s) { s.disabled = true; s.value = ''; s.placeholder = 'usando a senha do app'; }
+                if (ss) { ss.disabled = true; ss.checked = false; }
+                if (nota) nota.classList.remove('hidden');
+            } else {
+                if (s) { s.disabled = false; s.placeholder = 'em branco = .json simples'; if (autoBkpCfg && autoBkpCfg.salvarSenha) s.value = autoBkpCfg.senha || ''; }
+                if (ss) { ss.disabled = false; ss.checked = !!(autoBkpCfg && autoBkpCfg.salvarSenha); }
+                if (nota) nota.classList.add('hidden');
+            }
             const at = document.getElementById('autobkp-ativo'); if (at) at.checked = !!(autoBkpCfg && autoBkpCfg.ativo);
             const rt = document.getElementById('autobkp-restaurar'); if (rt) rt.checked = !!(autoBkpCfg && autoBkpCfg.restaurarAoAbrir);
             const st = document.getElementById('autobkp-status');
@@ -2740,7 +2750,7 @@
             const btnSenha = document.getElementById('btn-cripto-senha');
             if (!st) return;
             if (criptoAtivada) {
-                st.innerHTML = '🔒 <b class="text-emerald-600">Proteção ativa</b> — o app pede a senha ao abrir e os dados ficam cifrados no navegador.';
+                st.innerHTML = '🔒 <b class="text-emerald-600">Proteção ativa</b> — o app pede a senha ao abrir, os dados ficam cifrados no navegador e a <b>mesma senha</b> é usada automaticamente nos backups (manual e automático).';
                 if (btnOn) btnOn.classList.add('hidden');
                 if (btnOff) btnOff.classList.remove('hidden');
                 if (btnSenha) btnSenha.classList.remove('hidden');
@@ -2755,19 +2765,22 @@
         async function ativarCriptoUI() {
             if (!window.crypto || !crypto.subtle) { alert("Criptografia indisponível neste navegador."); return; }
             if (criptoAtivada) return;
-            if (!confirm("⚠️ Proteger os dados com senha:\n\n• O app vai pedir a senha TODA VEZ que abrir.\n• Se você ESQUECER a senha, PERDE todos os dados — não há recuperação (nem eu, nem ninguém, consegue reverter).\n\nPor isso, antes de ligar, vamos salvar um backup de segurança.\n\nDeseja continuar?")) return;
-            alert("Passo 1 de 2 — salve um BACKUP protegido (.pib) agora.\nGuarde o arquivo E a senha dele em local seguro: é a sua rede de segurança caso esqueça a senha de acesso.");
-            await exportDataProtegido();
-            if (!confirm("O backup foi salvo com sucesso?\n\nSó continue se você tem o arquivo .pib guardado.")) return;
-            const s1 = prompt("Passo 2 de 2 — defina a SENHA DE ACESSO do app (mínimo 4 caracteres):");
+            if (!confirm("⚠️ Proteger os dados com senha:\n\n• O app vai pedir a senha TODA VEZ que abrir.\n• Esta senha passa a ser a senha ÚNICA do app: vale também para os backups (manual e automático).\n• Se você ESQUECER a senha, PERDE todos os dados — não há recuperação (nem eu, nem ninguém, consegue reverter).\n\nPor isso, antes de ligar, vamos salvar um backup de segurança.\n\nDeseja continuar?")) return;
+            const s1 = prompt("Passo 1 de 2 — defina a SENHA DE ACESSO do app (mínimo 4 caracteres):\n\nEla desbloqueia o app e também protege seus backups.");
             if (s1 === null) return;
             if (s1.length < 4) { alert("Use uma senha com pelo menos 4 caracteres."); return; }
             if (prompt("Confirme a senha de acesso:") !== s1) { alert("As senhas não conferem."); return; }
+            alert("Passo 2 de 2 — vamos salvar um BACKUP protegido (.pib) com esta senha.\nGuarde o arquivo em local seguro: é a sua rede de segurança caso esqueça a senha.");
+            const prev = senhaSessao; senhaSessao = s1;   // faz o backup já com a senha mestra (sem pedir de novo)
+            await exportDataProtegido();
+            if (!confirm("O backup foi salvo com sucesso?\n\nSó continue se você tem o arquivo .pib guardado.")) { senhaSessao = prev; return; }
             try {
                 await ativarCripto(s1);
-                atualizarCardCripto();
-                alert("🔒 Proteção ativada! A partir de agora o app pede esta senha ao abrir. Não a perca.");
-            } catch (e) { alert("Falha ao ativar a proteção. Seus dados não foram alterados."); }
+                // remove eventual senha do backup automático guardada antes (agora é a senha mestra)
+                if (typeof autoBkpCfg !== 'undefined' && autoBkpCfg) { autoBkpCfg.salvarSenha = false; autoBkpCfg.senha = ''; await salvarAutoBkpCfg(); }
+                atualizarCardCripto(); safeRun(renderCardAutoBkp);
+                alert("🔒 Proteção ativada! Esta senha agora vale para o app e para os backups. Não a perca.");
+            } catch (e) { senhaSessao = prev; alert("Falha ao ativar a proteção. Seus dados não foram alterados."); }
         }
 
         async function desativarCriptoUI() {
@@ -2787,8 +2800,9 @@
                 const salt = Array.from(crypto.getRandomValues(new Uint8Array(16)));
                 chaveSessao = await _deriveKey(s1, new Uint8Array(salt));
                 criptoSalt = salt;
+                senhaSessao = s1;   // atualiza a senha mestra usada nos backups
                 await saveToDB();
-                alert("Senha de acesso alterada.");
+                alert("Senha de acesso alterada. Ela também passa a valer para os backups.");
             } catch (e) { alert("Falha ao alterar a senha."); }
         }
 
@@ -2796,7 +2810,7 @@
             if (confirm("ATENÇÃO: Tem certeza que deseja apagar TODOS os dados do IndexedDB? Esta ação não pode ser desfeita!")) {
                 if (confirm("Você tem certeza ABSOLUTA? Todo o seu histórico financeiro será perdido.")) {
                     // desliga a proteção e limpa vestígios cifrados, voltando a app "de fábrica"
-                    criptoAtivada = false; chaveSessao = null; criptoSalt = null;
+                    criptoAtivada = false; chaveSessao = null; criptoSalt = null; senhaSessao = null;
                     db.seguro.clear().catch(() => {});
                     db.config.delete('cripto').catch(() => {});
                     appState = { saldoInicial: 0, contas: [], transactions: [], ccTransactions: [], futureTransactions: [], investimentos: [], categories: { despesas: ["Outros"], receitas: ["Outros"] }, orcamentos: {}, comprasParceladas: [], recorrencias: [], limiteDiasNegativos: 10, notificarVencimentos: false };

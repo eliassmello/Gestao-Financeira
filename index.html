@@ -887,6 +887,7 @@
                         <input type="password" id="autobkp-senha" onchange="salvarConfigAutoBkp()" placeholder="em branco = .json simples" class="text-sm border border-slate-200 rounded-md p-1.5 outline-none focus:ring-1 focus:ring-indigo-500">
                         <label class="text-xs text-slate-500 flex items-center gap-1"><input type="checkbox" id="autobkp-salvar-senha" onchange="salvarConfigAutoBkp()"> salvar senha neste aparelho</label>
                     </div>
+                    <p id="autobkp-senha-nota" class="hidden text-xs font-semibold text-emerald-700">🔒 A Proteção por Senha está ligada — o backup automático usa a <b>mesma senha do app</b> (você não precisa preencher nada aqui).</p>
                     <p class="text-xs text-rose-600">Preencher a senha grava o arquivo <b>criptografado (.pib)</b>. Marcar "salvar senha" guarda-a em texto neste navegador — mais prático, menos seguro. Sem senha salva, o app pede a senha ao restaurar.</p>
                     <div class="flex flex-col gap-1.5">
                         <label class="text-sm text-slate-700 flex items-center gap-2"><input type="checkbox" id="autobkp-ativo" onchange="salvarConfigAutoBkp()"> Salvar backup automaticamente nesta pasta a cada alteração</label>
@@ -928,7 +929,7 @@
 
             <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100 mt-6">
                 <h2 class="font-bold text-slate-700 text-lg mb-1">🔒 Proteção por Senha (criptografia local)</h2>
-                <p class="text-sm text-slate-500 mb-3">Cifra seus dados no navegador com uma senha de acesso. Quem inspecionar o armazenamento (F12) vê só código embaralhado; sem a senha, os dados ficam inúteis. <span class="text-rose-600 font-semibold">Se esquecer a senha, não há recuperação</span> — por isso um backup é exigido ao ativar.</p>
+                <p class="text-sm text-slate-500 mb-3">Cifra seus dados no navegador com uma senha de acesso. Quem inspecionar o armazenamento (F12) vê só código embaralhado; sem a senha, os dados ficam inúteis. Esta é a <b>senha única do app</b>: a mesma vale para os backups (manual e automático) — você não precisa gerenciar senhas diferentes. <span class="text-rose-600 font-semibold">Se esquecer a senha, não há recuperação</span> — por isso um backup é exigido ao ativar.</p>
                 <p id="cripto-status" class="text-sm mb-3"></p>
                 <div class="flex gap-2 flex-wrap">
                     <button id="btn-cripto-ativar" onclick="ativarCriptoUI()" class="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-indigo-700 transition">🔒 Proteger com senha</button>
