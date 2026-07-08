@@ -32,6 +32,10 @@
         let chaveSessao = null;      // CryptoKey da sessão (null = bloqueado/sem proteção)
         let criptoAtivada = false;   // proteção por senha ligada?
         let criptoSalt = null;       // salt (array de bytes) do PBKDF2, guardado no meta
+        // Senha mestra em TEXTO, só na memória desta aba: capturada ao ligar/desbloquear
+        // a proteção e reaproveitada em todos os backups (manual, automático e restauração),
+        // para o usuário ter uma senha única. Nunca é gravada em lugar nenhum.
+        let senhaSessao = null;
 
 
         let appState = {
@@ -127,6 +131,7 @@
                 const blob = await db.seguro.get('blob');
                 if (blob) await _decifrarEstado(key, blob); // lança se a senha estiver errada
                 chaveSessao = key; criptoSalt = meta.salt; criptoAtivada = true;
+                senhaSessao = senha;   // guarda a senha mestra (memória) p/ reuso nos backups
                 return true;
             } catch (e) { return false; }
         }
@@ -144,6 +149,7 @@
                 await db.transacoes.clear(); await db.cartao.clear(); await db.previsoes.clear(); await db.investimentos.clear();
             });
             chaveSessao = key; criptoSalt = salt; criptoAtivada = true;
+            senhaSessao = senha;   // senha mestra p/ reuso nos backups
         }
 
         // Desliga a proteção: grava o estado em texto puro e remove os vestígios cifrados.
@@ -152,7 +158,7 @@
             await saveToDB();                       // grava global + tabelas em texto puro
             await db.seguro.clear().catch(() => {});
             await db.config.delete('cripto').catch(() => {});
-            chaveSessao = null; criptoSalt = null;
+            chaveSessao = null; criptoSalt = null; senhaSessao = null;
         }
 
         async function loadDataFromDB() {
@@ -1512,10 +1518,14 @@
         // Exportar protegido (.pib): magic "FIN1" + flag(1) + salt(16) + iv(12) + ciphertext
         async function exportDataProtegido() {
             if (!window.crypto || !crypto.subtle) { alert("Criptografia indisponível neste navegador. Use o backup .json simples."); return; }
-            const senha = prompt("Defina uma senha para o backup:");
-            if (senha === null) return;
-            if (senha.length < 4) { alert("Use uma senha com pelo menos 4 caracteres."); return; }
-            if (prompt("Confirme a senha:") !== senha) { alert("As senhas não conferem."); return; }
+            // Se a proteção do app está ligada, reaproveita a senha mestra (sem perguntar).
+            let senha = senhaSessao;
+            if (!senha) {
+                senha = prompt("Defina uma senha para o backup:");
+                if (senha === null) return;
+                if (senha.length < 4) { alert("Use uma senha com pelo menos 4 caracteres."); return; }
+                if (prompt("Confirme a senha:") !== senha) { alert("As senhas não conferem."); return; }
+            }
             try {
                 appState.ultimoBackup = new Date().toISOString();
                 appState.backupAdiadoAte = null;
@@ -1575,15 +1585,21 @@
                 let imported;
                 if (ehProtegido) {
                     if (!window.crypto || !crypto.subtle) throw new Error("cripto");
-                    const senha = prompt("Senha do backup protegido:");
-                    if (senha === null) { e.target.value = ''; return; }
                     const flag = buf[4], salt = buf.slice(5, 21), iv = buf.slice(21, 33), cipher = buf.slice(33);
-                    const key = await _deriveKey(senha, salt);
-                    let plain;
-                    try { plain = new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, cipher)); }
-                    catch (_) { alert("Senha incorreta ou arquivo corrompido."); e.target.value = ''; return; }
-                    if (flag === 1) plain = await _gunzip(plain);
-                    imported = JSON.parse(new TextDecoder().decode(plain));
+                    const tentar = async (senha) => {
+                        const key = await _deriveKey(senha, salt);
+                        let plain = new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, cipher));
+                        if (flag === 1) plain = await _gunzip(plain);
+                        return JSON.parse(new TextDecoder().decode(plain));
+                    };
+                    // tenta a senha mestra do app primeiro; se falhar/não houver, pede ao usuário
+                    if (senhaSessao) { try { imported = await tentar(senhaSessao); } catch (_) {} }
+                    if (!imported) {
+                        const senha = prompt("Senha do backup protegido:");
+                        if (senha === null) { e.target.value = ''; return; }
+                        try { imported = await tentar(senha); }
+                        catch (_) { alert("Senha incorreta ou arquivo corrompido."); e.target.value = ''; return; }
+                    }
                 } else {
                     imported = JSON.parse(new TextDecoder().decode(buf));
                 }
@@ -1681,7 +1697,13 @@
             return JSON.parse(new TextDecoder().decode(buf));
         }
 
-        function _senhaAutoBkp() { return (autoBkpCfg && autoBkpCfg.senha) ? autoBkpCfg.senha : ''; }
+        // Senha usada nos backups: se a proteção do app está ligada, reaproveita a senha
+        // mestra (memória) — senha única para tudo. Sem proteção, usa a senha do próprio
+        // backup automático (opcional, gravada no aparelho).
+        function _senhaAutoBkp() {
+            if (criptoAtivada && senhaSessao) return senhaSessao;
+            return (autoBkpCfg && autoBkpCfg.senha) ? autoBkpCfg.senha : '';
+        }
 
         // Grava o backup na pasta configurada. interativo=true permite pedir permissão.
         async function autoBackupSalvar(interativo) {
@@ -1690,7 +1712,10 @@
             try {
                 const senha = _senhaAutoBkp();
                 const bytes = await _construirBackupBytes(senha);
-                const nome = autoBkpCfg.nomeArquivo || (senha ? 'backup-financeiro-auto.pib' : 'backup-financeiro-auto.json');
+                // extensão coerente com o conteúdo (muda se a senha passar a existir/some)
+                const ext = senha ? '.pib' : '.json';
+                let nome = autoBkpCfg.nomeArquivo;
+                if (!nome || !nome.endsWith(ext)) nome = 'backup-financeiro-auto' + ext;
                 const fh = await autoBkpHandle.getFileHandle(nome, { create: true });
                 const w = await fh.createWritable();
                 await w.write(bytes); await w.close();
