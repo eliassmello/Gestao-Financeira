@@ -244,6 +244,7 @@
                 else if (activeTab === 'tab-config') renderCategoriesTab();
                 safeRun(atualizarLembreteBackup);
                 safeRun(atualizarInfoUltimoBackup);
+                safeRun(agendarAutoBackup);
             }).catch(e => alert("Erro ao salvar no banco de dados."));
         }
 
@@ -1590,6 +1591,153 @@
                 alert("Backup restaurado com sucesso para o banco de dados interno (IndexedDB)!");
             } catch (err) { alert("Arquivo inválido ou erro ao restaurar o backup."); }
             e.target.value = '';
+        }
+
+
+        // ============================================================================
+        // Backup automático em pasta local (File System Access API — desktop)
+        // ----------------------------------------------------------------------------
+        // Grava/le um arquivo de backup numa pasta escolhida pelo usuário. Recurso de
+        // desktop Chromium (Chrome/Edge). As preferências (pasta, senha) são LOCAIS do
+        // aparelho: ficam em db.config 'autobkp' e NUNCA entram no backup exportável
+        // (que é apenas o appState). Por segurança, o navegador exige um clique por
+        // sessão para (re)autorizar o acesso à pasta.
+        // ============================================================================
+
+        let autoBkpCfg = null;      // { ativo, restaurarAoAbrir, salvarSenha, senha, nomeArquivo, dirNome, dirHandle, ultimoAutoBackupISO }
+        let autoBkpHandle = null;   // FileSystemDirectoryHandle da sessão
+        let _autoBkpTimer = null;
+
+        function fsaDisponivel() { return typeof window !== 'undefined' && typeof window.showDirectoryPicker === 'function'; }
+
+        async function carregarAutoBkp() {
+            try {
+                const cfg = await db.config.get('autobkp');
+                if (cfg) { autoBkpCfg = cfg; if (cfg.dirHandle) autoBkpHandle = cfg.dirHandle; }
+            } catch (e) {}
+            return autoBkpCfg;
+        }
+
+        async function salvarAutoBkpCfg() {
+            if (!autoBkpCfg) return;
+            const rec = {
+                id: 'autobkp',
+                ativo: !!autoBkpCfg.ativo,
+                restaurarAoAbrir: !!autoBkpCfg.restaurarAoAbrir,
+                salvarSenha: !!autoBkpCfg.salvarSenha,
+                senha: autoBkpCfg.salvarSenha ? (autoBkpCfg.senha || '') : '',  // só persiste se o usuário pediu
+                nomeArquivo: autoBkpCfg.nomeArquivo || '',
+                dirNome: autoBkpCfg.dirNome || '',
+                dirHandle: autoBkpHandle || autoBkpCfg.dirHandle || null,
+                ultimoAutoBackupISO: autoBkpCfg.ultimoAutoBackupISO || null
+            };
+            try { await db.config.put(rec); }
+            catch (e) { try { await db.config.put({ ...rec, dirHandle: null }); } catch (_) {} }
+        }
+
+        // Confere a permissão de escrita na pasta. pedir=true chama requestPermission
+        // (só funciona dentro de um gesto do usuário — clique).
+        async function verificarPermissaoPasta(pedir) {
+            if (!autoBkpHandle) return false;
+            const opts = { mode: 'readwrite' };
+            try {
+                if (typeof autoBkpHandle.queryPermission === 'function' &&
+                    (await autoBkpHandle.queryPermission(opts)) === 'granted') return true;
+                if (pedir && typeof autoBkpHandle.requestPermission === 'function' &&
+                    (await autoBkpHandle.requestPermission(opts)) === 'granted') return true;
+            } catch (e) {}
+            return false;
+        }
+
+        // Monta os bytes do backup: com senha -> .pib protegido; sem senha -> .json
+        async function _construirBackupBytes(senha) {
+            appState.ultimoBackup = new Date().toISOString();
+            appState.backupAdiadoAte = null;
+            if (senha) {
+                let payload = new TextEncoder().encode(JSON.stringify(appState));
+                const flag = _temGzip ? 1 : 0;
+                if (flag) payload = await _gzip(payload);
+                const salt = crypto.getRandomValues(new Uint8Array(16));
+                const iv = crypto.getRandomValues(new Uint8Array(12));
+                const key = await _deriveKey(senha, salt);
+                const cipher = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, payload));
+                const out = new Uint8Array(4 + 1 + 16 + 12 + cipher.length);
+                out.set(new TextEncoder().encode('FIN1'), 0); out[4] = flag; out.set(salt, 5); out.set(iv, 21); out.set(cipher, 33);
+                return out;
+            }
+            return new TextEncoder().encode(JSON.stringify(appState, null, 2));
+        }
+
+        // Decodifica bytes de backup (detecta .pib protegido pelo magic "FIN1")
+        async function _decodificarBackupBytes(buf, senha) {
+            const ehProtegido = buf.length > 33 && String.fromCharCode(buf[0], buf[1], buf[2], buf[3]) === 'FIN1';
+            if (ehProtegido) {
+                const flag = buf[4], salt = buf.slice(5, 21), iv = buf.slice(21, 33), cipher = buf.slice(33);
+                const key = await _deriveKey(senha || '', salt);
+                let plain = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, cipher));
+                if (flag === 1) plain = await _gunzip(plain);
+                return JSON.parse(new TextDecoder().decode(plain));
+            }
+            return JSON.parse(new TextDecoder().decode(buf));
+        }
+
+        function _senhaAutoBkp() { return (autoBkpCfg && autoBkpCfg.senha) ? autoBkpCfg.senha : ''; }
+
+        // Grava o backup na pasta configurada. interativo=true permite pedir permissão.
+        async function autoBackupSalvar(interativo) {
+            if (!autoBkpCfg || !autoBkpCfg.ativo || !autoBkpHandle) return false;
+            if (!(await verificarPermissaoPasta(interativo))) return false;
+            try {
+                const senha = _senhaAutoBkp();
+                const bytes = await _construirBackupBytes(senha);
+                const nome = autoBkpCfg.nomeArquivo || (senha ? 'backup-financeiro-auto.pib' : 'backup-financeiro-auto.json');
+                const fh = await autoBkpHandle.getFileHandle(nome, { create: true });
+                const w = await fh.createWritable();
+                await w.write(bytes); await w.close();
+                autoBkpCfg.nomeArquivo = nome;
+                autoBkpCfg.ultimoAutoBackupISO = appState.ultimoBackup;
+                await salvarAutoBkpCfg();
+                await saveToDB();  // persiste o novo ultimoBackup no appState
+                safeRun(atualizarInfoUltimoBackup);
+                return true;
+            } catch (e) { console.error('auto-backup falhou', e); return false; }
+        }
+
+        // Agenda um auto-backup (debounce) após alterações, se ativo e autorizado.
+        function agendarAutoBackup() {
+            if (!autoBkpCfg || !autoBkpCfg.ativo || !autoBkpHandle) return;
+            if (_autoBkpTimer) clearTimeout(_autoBkpTimer);
+            _autoBkpTimer = setTimeout(() => { safeRun(() => autoBackupSalvar(false)); }, 2500);
+        }
+
+        // Le o backup da pasta e, se for MAIS NOVO que os dados locais, oferece restaurar
+        // (sempre com confirmação — nunca sobrescreve sem perguntar).
+        async function autoRestaurarSeMaisNovo(interativo) {
+            if (!autoBkpCfg || !autoBkpHandle || !autoBkpCfg.nomeArquivo) return;
+            if (!(await verificarPermissaoPasta(interativo))) return;
+            try {
+                const fh = await autoBkpHandle.getFileHandle(autoBkpCfg.nomeArquivo, { create: false }).catch(() => null);
+                if (!fh) return;
+                const file = await fh.getFile();
+                const buf = new Uint8Array(await file.arrayBuffer());
+                let senha = _senhaAutoBkp();
+                let imported;
+                try { imported = await _decodificarBackupBytes(buf, senha); }
+                catch (_) {
+                    senha = prompt('Senha do backup na pasta:') || '';
+                    try { imported = await _decodificarBackupBytes(buf, senha); }
+                    catch (__) { alert('Não foi possível ler o backup da pasta (senha incorreta?).'); return; }
+                }
+                const tPasta = (imported && imported.ultimoBackup) ? new Date(imported.ultimoBackup).getTime() : 0;
+                const tLocal = appState.ultimoBackup ? new Date(appState.ultimoBackup).getTime() : 0;
+                if (tPasta > tLocal + 1000) {
+                    const fmt = (iso) => iso ? new Date(iso).toLocaleString('pt-BR') : 'nunca';
+                    if (confirm(`O backup na pasta é mais recente que os dados deste aparelho:\n\nPasta: ${fmt(imported.ultimoBackup)}\nEste aparelho: ${fmt(appState.ultimoBackup)}\n\nRestaurar os dados da pasta? Os dados atuais deste aparelho serão substituídos.`)) {
+                        _aplicarBackup(imported);
+                        alert('Dados restaurados a partir da pasta de backup.');
+                    }
+                }
+            } catch (e) { console.error('auto-restore falhou', e); }
         }
 
 

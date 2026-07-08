@@ -86,6 +86,14 @@
             </div>
         </div>
 
+        <div id="banner-autobkp" class="hidden mb-6 bg-sky-50 border border-sky-200 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+                <span class="text-2xl">📁</span>
+                <p class="text-sm font-medium text-sky-800">Pasta de backup configurada (<b id="banner-autobkp-pasta"></b>). Autorize o acesso para sincronizar e salvar automaticamente nesta sessão.</p>
+            </div>
+            <button onclick="sincronizarPastaBackup()" class="bg-sky-600 hover:bg-sky-700 text-white px-3 py-2 rounded-md text-xs font-bold transition whitespace-nowrap shrink-0">Autorizar / Sincronizar</button>
+        </div>
+
         <div id="banner-vencimentos" class="hidden mb-6 bg-rose-50 border border-rose-200 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
             <div class="flex items-center gap-3">
                 <span class="text-2xl">🔔</span>
@@ -862,6 +870,32 @@
                         </label>
                     </div>
                     <p id="info-ultimo-backup" class="text-xs font-bold text-slate-400 mt-3"></p>
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+                <h2 class="font-bold text-slate-700 text-lg mb-1">📁 Backup automático em pasta (desktop)</h2>
+                <p class="text-sm text-slate-500 mb-3">Grava o backup numa <b>pasta fixa</b> do computador a cada alteração e, ao abrir o app, oferece <b>restaurar</b> se a pasta tiver dados mais recentes (sempre com confirmação). Apontando para uma pasta do <b>Google Drive / OneDrive / Dropbox</b>, vira uma sincronização entre máquinas. <b>Só funciona em navegadores de desktop baseados no Chrome/Edge</b> e o navegador pede <b>uma autorização por sessão</b>. Estas preferências são deste aparelho e <b>não entram no backup</b>.</p>
+                <p id="autobkp-suporte" class="hidden text-sm font-semibold text-amber-600 mb-3">⚠️ Seu navegador não suporta este recurso (comum em Firefox, Safari e celulares). Use o backup manual acima.</p>
+                <div class="space-y-3">
+                    <div class="flex items-center gap-3 flex-wrap">
+                        <button onclick="escolherPastaBackup()" class="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-indigo-700 transition">📂 Escolher pasta</button>
+                        <span class="text-sm text-slate-600">Pasta atual: <b id="autobkp-pasta">nenhuma</b></span>
+                    </div>
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <label class="text-sm text-slate-600">Senha (opcional):</label>
+                        <input type="password" id="autobkp-senha" onchange="salvarConfigAutoBkp()" placeholder="em branco = .json simples" class="text-sm border border-slate-200 rounded-md p-1.5 outline-none focus:ring-1 focus:ring-indigo-500">
+                        <label class="text-xs text-slate-500 flex items-center gap-1"><input type="checkbox" id="autobkp-salvar-senha" onchange="salvarConfigAutoBkp()"> salvar senha neste aparelho</label>
+                    </div>
+                    <p class="text-xs text-rose-600">Preencher a senha grava o arquivo <b>criptografado (.pib)</b>. Marcar "salvar senha" guarda-a em texto neste navegador — mais prático, menos seguro. Sem senha salva, o app pede a senha ao restaurar.</p>
+                    <div class="flex flex-col gap-1.5">
+                        <label class="text-sm text-slate-700 flex items-center gap-2"><input type="checkbox" id="autobkp-ativo" onchange="salvarConfigAutoBkp()"> Salvar backup automaticamente nesta pasta a cada alteração</label>
+                        <label class="text-sm text-slate-700 flex items-center gap-2"><input type="checkbox" id="autobkp-restaurar" onchange="salvarConfigAutoBkp()"> Ao abrir, restaurar da pasta se for mais recente (com confirmação)</label>
+                    </div>
+                    <div class="flex items-center gap-3 flex-wrap">
+                        <button onclick="autoBackupAgora()" class="bg-slate-800 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-slate-900 transition">💾 Fazer backup na pasta agora</button>
+                        <p id="autobkp-status" class="text-xs font-bold text-slate-400"></p>
+                    </div>
                 </div>
             </div>
 
