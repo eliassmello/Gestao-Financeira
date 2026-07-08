@@ -51,7 +51,8 @@ Aplicativo de orçamento pessoal que roda direto no navegador, funciona **offlin
 - Exclusão de **um mês específico** dentro da conta ativa; criação, renomeação e exclusão de contas.
 
 ### 💳 Cartão de Crédito
-- **Importação de fatura** (**.txt, .csv**), informando o **mês da fatura** e o **dia de vencimento**.
+- **Importação de fatura** (**.txt, .csv** ou **.pdf**), informando o **mês da fatura** e o **dia de vencimento**.
+- **Fatura em PDF**: reconhece automaticamente o layout do **Santander** (seções *Despesas / Parcelamentos / Pagamento e Demais Créditos*) e da **Caixa/CEF** (seção *Demonstrativo* com a coluna *Crédito/Débito*). Em ambos, os **parcelamentos** ("N DE N" ou "N/N") vão para o campo Parcela, os **créditos/estornos** entram como entradas e as **compras internacionais** importam o valor em **R$** (o valor em US$ é ignorado). Faturas com mais de um portador (cartões adicionais) são importadas juntas; reimportar a mesma fatura não duplica os lançamentos.
 - Lançamentos **agrupados por fatura (mês de vencimento)**, da mais recente para a mais antiga, com **cabeçalho por fatura** (nº de lançamentos e total líquido); dentro de cada fatura, ordenados pela **data da compra**.
 - **💳 Parcelamentos Futuros do Cartão** fica nesta aba (quadro com rolagem própria, logo acima da Área de Risco): projeção das parcelas restantes ("Parc. N/M") das faturas importadas, mês a mês, com total comprometido.
 - **Totalizador da fatura**: valor líquido e soma bruta de todos os lançamentos.
