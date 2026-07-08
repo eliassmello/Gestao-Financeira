@@ -56,6 +56,9 @@
         async function continuarInit() {
             await loadDataFromDB();
 
+            // Rola o horizonte das recorrências (gera novas ocorrências que entraram nos 12 meses)
+            try { if (gerarLancamentosRecorrentes()) await saveToDB(); } catch(e) {}
+
             const inputSaldoIni = document.getElementById('input-saldo-inicial');
             if (inputSaldoIni) inputSaldoIni.value = (appState.saldoInicial || 0).toFixed(2);
             const inputLimNeg = document.getElementById('prev-limite-negativo');
@@ -98,6 +101,10 @@
                 document.getElementById('fileInputBanco').addEventListener('change', e => handleFileUpload(e, 'banco'));
                 document.getElementById('fileInputCartao').addEventListener('change', e => handleFileUpload(e, 'cartao'));
             } catch(e) {}
+
+            safeRun(renderRecorrencias);
+            safeRun(atualizarBannerVencimentos);
+            safeRun(notificarVencimentosSeAtivo);
         }
 
 
@@ -145,7 +152,8 @@
                 if (tabId === 'cartao') renderTransactionsCartao();
                 if (tabId === 'investimentos') renderInvestimentos();
                 if (tabId === 'quitacao') renderQuitacao();
-                if (tabId === 'config') { renderCategoriesTab(); safeRun(atualizarInfoUltimoBackup); safeRun(atualizarCardCripto); }
+                if (tabId === 'calendario') renderCalendario();
+                if (tabId === 'config') { renderCategoriesTab(); safeRun(atualizarInfoUltimoBackup); safeRun(atualizarCardCripto); safeRun(atualizarCardNotif); }
             } catch(err) {}
         }
 
@@ -215,6 +223,12 @@
                 if (!contaSelecionadaId || !getContaById(contaSelecionadaId)) {
                     alert("Selecione (ou crie) uma Conta Corrente antes de importar o extrato.");
                     e.target.value = '';
+                    return;
+                }
+                if ((file.name || '').toLowerCase().endsWith('.ofx')) {
+                    const r = new FileReader();
+                    r.onload = ev => importarOFX(ev.target.result, e);
+                    r.readAsText(file, 'UTF-8');
                     return;
                 }
                 const reader = new FileReader();
@@ -379,6 +393,33 @@
             }
         }
 
+
+        // Importa um extrato .ofx na conta ativa (dedup por FITID ou descrição+data+valor)
+        function importarOFX(texto, e) {
+            try {
+                const txns = parseOFX(texto);
+                if (!txns.length) { alert("Nenhum lançamento encontrado no arquivo OFX. Confira se é um extrato .ofx válido."); e.target.value = ''; return; }
+                const fitidsExistentes = new Set(appState.transactions.filter(t => t.contaId === contaSelecionadaId && t.fitid).map(t => t.fitid));
+                let addc = 0;
+                for (const tx of txns) {
+                    const dup = (tx.fitid && fitidsExistentes.has(tx.fitid)) || appState.transactions.some(t =>
+                        t.contaId === contaSelecionadaId && t.data === tx.data && t.descricao === tx.descricao &&
+                        Math.abs((t.debito || t.credito) - (tx.debito || tx.credito)) < 0.01);
+                    if (dup) continue;
+                    const cat = findBestCategoryMatch(tx.descricao, tx.debito > 0);
+                    appState.transactions.push({
+                        id: 'ofx_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+                        data: tx.data, descricao: tx.descricao, contaId: contaSelecionadaId,
+                        credito: tx.credito, debito: tx.debito, categoria: cat || '', fitid: tx.fitid || '', isDuplicate: false
+                    });
+                    if (tx.fitid) fitidsExistentes.add(tx.fitid);
+                    addc++;
+                }
+                updateFilterMesBancoLight(); updateFutureCategoriesDropdown(); updatePrevSumDropdown();
+                alert(addc > 0 ? `Foram importados ${addc} lançamentos do OFX com sucesso.` : "Nenhum lançamento novo — todos já existem na conta.");
+                e.target.value = ''; saveData();
+            } catch (err) { alert("Erro ao processar o arquivo OFX: " + err.message); e.target.value = ''; }
+        }
 
         function updateSaldoDisplay() {
             const saldo = getSaldoAtualReal();
@@ -691,6 +732,7 @@
 
             calcularSaldoAlvo(); calcularSomaCategoriaFuturo();
             safeRun(renderPrevistoRealizado);
+            safeRun(renderRecorrencias);
         }
 
 
@@ -724,6 +766,87 @@
             for (let cat of lista) { const opt = document.createElement('option'); opt.value = cat; opt.innerText = cat; dropdown.appendChild(opt); }
         }
 
+
+        // ===== Lançamentos recorrentes (UI) =====
+        function atualizarCategoriasRec() {
+            const tipo = document.getElementById('rec-tipo').value;
+            const dd = document.getElementById('rec-categoria'); if (!dd) return;
+            const atual = dd.value;
+            dd.innerHTML = '';
+            for (const c of sortedCats(tipo === 'debito' ? appState.categories.despesas : appState.categories.receitas)) {
+                const o = document.createElement('option'); o.value = c; o.innerText = c; dd.appendChild(o);
+            }
+            if ([...dd.options].some(o => o.value === atual)) dd.value = atual;
+        }
+        function atualizarCamposFreqRec() {
+            const f = document.getElementById('rec-freq').value;
+            document.getElementById('rec-campo-dia').classList.toggle('hidden', f === 'semanal');
+            document.getElementById('rec-campo-diasemana').classList.toggle('hidden', f !== 'semanal');
+            document.getElementById('rec-campo-mes').classList.toggle('hidden', f !== 'anual');
+        }
+        function salvarRecorrencia() {
+            const desc = document.getElementById('rec-desc').value.trim();
+            const valor = parseFloat(document.getElementById('rec-valor').value) || 0;
+            if (!desc || valor <= 0) { alert("Informe descrição e valor da recorrência."); return; }
+            const rec = {
+                id: 'rec_' + Date.now(),
+                descricao: desc, tipo: document.getElementById('rec-tipo').value,
+                categoria: document.getElementById('rec-categoria').value || '',
+                valor, freq: document.getElementById('rec-freq').value,
+                dia: parseInt(document.getElementById('rec-dia').value) || 1,
+                diaSemana: parseInt(document.getElementById('rec-diasemana').value) || 0,
+                mesAno: parseInt(document.getElementById('rec-mes').value) || 1,
+                inicio: null,
+                fim: document.getElementById('rec-fim').value ? ultimoDiaMes(document.getElementById('rec-fim').value) : null,
+                ativo: true
+            };
+            appState.recorrencias.push(rec);
+            gerarLancamentosRecorrentes();
+            document.getElementById('rec-desc').value = ''; document.getElementById('rec-valor').value = '';
+            saveData();
+            renderRecorrencias();
+            alert(`Recorrência "${desc}" criada — as previsões dos próximos 12 meses já entraram no cronograma.`);
+        }
+        function toggleRecorrencia(id) {
+            const r = appState.recorrencias.find(x => x.id === id); if (!r) return;
+            r.ativo = !r.ativo;
+            gerarLancamentosRecorrentes();
+            saveData(); renderRecorrencias();
+        }
+        function excluirRecorrencia(id) {
+            const r = appState.recorrencias.find(x => x.id === id); if (!r) return;
+            if (!confirm(`Excluir a recorrência "${r.descricao}"?\nAs previsões futuras dela (não conciliadas) serão removidas do cronograma.`)) return;
+            appState.recorrencias = appState.recorrencias.filter(x => x.id !== id);
+            gerarLancamentosRecorrentes();
+            saveData(); renderRecorrencias();
+        }
+        function renderRecorrencias() {
+            const cont = document.getElementById('lista-recorrencias');
+            if (!cont) return;
+            atualizarCategoriasRec();
+            const recs = appState.recorrencias || [];
+            if (!recs.length) { cont.innerHTML = '<p class="text-xs text-slate-400">Nenhuma recorrência cadastrada.</p>'; return; }
+            const nomeFreq = (r) => r.freq === 'semanal' ? `toda ${['dom','seg','ter','qua','qui','sex','sáb'][r.diaSemana]}`
+                : r.freq === 'anual' ? `todo ano em ${String(r.dia).padStart(2,'0')}/${String(r.mesAno).padStart(2,'0')}`
+                : `todo dia ${r.dia}`;
+            let html = '';
+            for (const r of recs) {
+                const cor = r.tipo === 'debito' ? 'text-rose-600' : 'text-emerald-600';
+                html += `
+                    <div class="flex flex-wrap items-center justify-between gap-2 border border-slate-100 rounded-lg px-3 py-2 ${r.ativo ? '' : 'opacity-50'}">
+                        <div class="min-w-0">
+                            <span class="text-sm font-medium text-slate-700">${escapeHtml(r.descricao)}</span>
+                            <span class="text-xs ${cor} font-semibold ml-1">${r.tipo === 'debito' ? '-' : '+'} ${formatCurrency(r.valor)}</span>
+                            <span class="block text-[11px] text-slate-400">${escapeHtml(r.categoria || 'Sem categoria')} · ${nomeFreq(r)}${r.fim ? ` · até ${String(r.fim).split('-').reverse().join('/')}` : ''}</span>
+                        </div>
+                        <div class="flex gap-1">
+                            <button onclick="toggleRecorrencia('${r.id}')" title="${r.ativo ? 'Pausar' : 'Reativar'}" class="text-xs border rounded px-2 py-1 ${r.ativo ? 'text-amber-600 hover:bg-amber-50' : 'text-emerald-600 hover:bg-emerald-50'} bg-white">${r.ativo ? '⏸' : '▶'}</button>
+                            <button onclick="excluirRecorrencia('${r.id}')" title="Excluir" class="text-xs border rounded px-2 py-1 text-rose-500 hover:bg-rose-50 bg-white">🗑️</button>
+                        </div>
+                    </div>`;
+            }
+            cont.innerHTML = html;
+        }
 
         function updateFutureInvestimentoDropdown() {
             const dropdown = document.getElementById('fut-investimento'); if(!dropdown) return;
@@ -2355,6 +2478,145 @@
         }
 
 
+        // ===== Calendário financeiro =====
+        let calAno = null, calMes = null, calDiaSel = null;
+
+        function mudarMesCalendario(delta) {
+            calMes += delta;
+            if (calMes < 0) { calMes = 11; calAno--; }
+            else if (calMes > 11) { calMes = 0; calAno++; }
+            calDiaSel = null;
+            renderCalendario();
+        }
+        function irHojeCalendario() {
+            const t = new Date(); calAno = t.getFullYear(); calMes = t.getMonth();
+            calDiaSel = `${String(t.getDate()).padStart(2,'0')}/${String(t.getMonth()+1).padStart(2,'0')}/${t.getFullYear()}`;
+            renderCalendario();
+        }
+        // Agrupa previsões pendentes por dia do mês exibido
+        function _eventosPorDiaCalendario() {
+            const mapa = {};
+            const alvo = (calMes + 1) + '/' + calAno;
+            for (const f of appState.futureTransactions) {
+                if (f.conciliado) continue;
+                const d = converterDataBRParaDate(f.data);
+                if (d.getMonth() !== calMes || d.getFullYear() !== calAno) continue;
+                const dia = d.getDate();
+                if (!mapa[dia]) mapa[dia] = { entradas: 0, saidas: 0, itens: [] };
+                if (f.tipo === 'debito') mapa[dia].saidas += Number(f.valor) || 0; else mapa[dia].entradas += Number(f.valor) || 0;
+                mapa[dia].itens.push(f);
+            }
+            return mapa;
+        }
+        function renderCalendario() {
+            if (calAno === null) { const t = new Date(); calAno = t.getFullYear(); calMes = t.getMonth(); }
+            const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+            const tit = document.getElementById('cal-titulo'); if (tit) tit.innerText = `${meses[calMes]} ${calAno}`;
+            const grade = document.getElementById('cal-grade'); if (!grade) return;
+            const mapa = _eventosPorDiaCalendario();
+            const hoje = new Date(); const ehHoje = (d) => hoje.getDate() === d && hoje.getMonth() === calMes && hoje.getFullYear() === calAno;
+            const primeiroDiaSemana = new Date(calAno, calMes, 1).getDay();
+            const diasNoMes = new Date(calAno, calMes + 1, 0).getDate();
+            let html = '';
+            for (let i = 0; i < primeiroDiaSemana; i++) html += `<div></div>`;
+            for (let d = 1; d <= diasNoMes; d++) {
+                const ev = mapa[d];
+                const dataBR = `${String(d).padStart(2,'0')}/${String(calMes+1).padStart(2,'0')}/${calAno}`;
+                const sel = calDiaSel === dataBR;
+                const base = ehHoje(d) ? 'border-indigo-500 border-2' : 'border-slate-100';
+                html += `
+                    <button onclick="selecionarDiaCalendario('${dataBR}')" class="min-h-[62px] text-left border ${base} ${sel ? 'ring-2 ring-indigo-400' : ''} rounded-lg p-1.5 hover:bg-slate-50 transition flex flex-col">
+                        <span class="text-xs font-bold ${ehHoje(d) ? 'text-indigo-600' : 'text-slate-500'}">${d}</span>
+                        ${ev && ev.entradas ? `<span class="text-[10px] text-emerald-600 font-semibold leading-tight">+${formatCurrencyNumber(ev.entradas)}</span>` : ''}
+                        ${ev && ev.saidas ? `<span class="text-[10px] text-rose-600 font-semibold leading-tight">-${formatCurrencyNumber(ev.saidas)}</span>` : ''}
+                    </button>`;
+            }
+            grade.innerHTML = html;
+            renderDiaCalendario();
+        }
+        function selecionarDiaCalendario(dataBR) { calDiaSel = dataBR; renderCalendario(); }
+        function renderDiaCalendario() {
+            const tit = document.getElementById('cal-dia-titulo');
+            const lista = document.getElementById('cal-dia-lista');
+            if (!lista) return;
+            if (!calDiaSel) { tit.innerText = 'Selecione um dia'; lista.innerHTML = '<p class="text-slate-400 py-2">Clique num dia do calendário para ver os lançamentos previstos.</p>'; return; }
+            tit.innerText = `Lançamentos previstos — ${calDiaSel}`;
+            const itens = appState.futureTransactions.filter(f => !f.conciliado && f.data === calDiaSel)
+                .sort((a, b) => (a.tipo === b.tipo ? 0 : a.tipo === 'credito' ? -1 : 1));
+            if (!itens.length) { lista.innerHTML = '<p class="text-slate-400 py-2">Nada previsto neste dia.</p>'; return; }
+            let html = '';
+            for (const f of itens) {
+                const isDeb = f.tipo === 'debito';
+                html += `
+                    <div class="flex justify-between items-center py-2">
+                        <div>
+                            <span class="text-slate-700 font-medium">${escapeHtml(f.descricao)}</span>
+                            ${f.recorrenciaId ? '<span class="ml-1 text-[10px] bg-indigo-100 text-indigo-700 px-1 rounded font-bold">🔁</span>' : ''}
+                            <span class="block text-[11px] text-slate-400">${escapeHtml(f.categoria || 'Sem categoria')}</span>
+                        </div>
+                        <span class="font-bold ${isDeb ? 'text-rose-600' : 'text-emerald-600'} whitespace-nowrap">${isDeb ? '-' : '+'} ${formatCurrency(f.valor)}</span>
+                    </div>`;
+            }
+            lista.innerHTML = html;
+        }
+
+        // ===== Notificações de contas a vencer =====
+        function atualizarBannerVencimentos() {
+            const banner = document.getElementById('banner-vencimentos');
+            const texto = document.getElementById('banner-vencimentos-texto');
+            if (!banner) return;
+            const venc = contasAVencer(3);
+            if (!venc.length) { banner.classList.add('hidden'); return; }
+            const total = venc.reduce((s, f) => s + (Number(f.valor) || 0), 0);
+            const nomes = venc.slice(0, 3).map(f => `${escapeHtml(f.descricao)} (${f.data})`).join(', ');
+            if (texto) texto.innerHTML = `<b>${venc.length}</b> ${venc.length > 1 ? 'contas vencem' : 'conta vence'} nos próximos 3 dias — total <b>${formatCurrency(total)}</b>: ${nomes}${venc.length > 3 ? '…' : ''}`;
+            banner.classList.remove('hidden');
+        }
+        function notificarVencimentosSeAtivo() {
+            if (!appState.notificarVencimentos) return;
+            if (!('Notification' in window) || Notification.permission !== 'granted') return;
+            const hojeStr = new Date().toISOString().split('T')[0];
+            try { if (localStorage.getItem('ultimaNotifVenc') === hojeStr) return; } catch (e) {}
+            const venc = contasAVencer(3);
+            if (!venc.length) return;
+            const total = venc.reduce((s, f) => s + (Number(f.valor) || 0), 0);
+            try {
+                new Notification('Contas a vencer', {
+                    body: `${venc.length} ${venc.length > 1 ? 'contas somam' : 'conta de'} ${formatCurrency(total)} nos próximos 3 dias.`,
+                    icon: './icon-192.png'
+                });
+                localStorage.setItem('ultimaNotifVenc', hojeStr);
+            } catch (e) {}
+        }
+        function atualizarCardNotif() {
+            const st = document.getElementById('notif-status');
+            const btnOn = document.getElementById('btn-notif-ativar');
+            const btnOff = document.getElementById('btn-notif-desativar');
+            if (!st) return;
+            const suportado = 'Notification' in window;
+            if (!suportado) { st.innerText = 'Este navegador não suporta notificações do sistema. O banner no topo continua funcionando.'; if (btnOn) btnOn.classList.add('hidden'); return; }
+            if (appState.notificarVencimentos && Notification.permission === 'granted') {
+                st.innerHTML = '🔔 <b class="text-emerald-600">Notificações ativas</b> — você é avisado ao abrir o app.';
+                if (btnOn) btnOn.classList.add('hidden'); if (btnOff) btnOff.classList.remove('hidden');
+            } else {
+                st.innerHTML = '🔕 <b class="text-slate-500">Notificações do sistema desligadas</b> (o banner no topo continua avisando).';
+                if (btnOn) btnOn.classList.remove('hidden'); if (btnOff) btnOff.classList.add('hidden');
+            }
+        }
+        async function ativarNotificacoesUI() {
+            if (!('Notification' in window)) { alert("Este navegador não suporta notificações."); return; }
+            let perm = Notification.permission;
+            if (perm !== 'granted') perm = await Notification.requestPermission();
+            if (perm !== 'granted') { alert("Permissão de notificação negada. Você pode liberar nas configurações do navegador."); atualizarCardNotif(); return; }
+            appState.notificarVencimentos = true;
+            saveData(); atualizarCardNotif(); notificarVencimentosSeAtivo();
+            alert("Notificações ativadas. Você será avisado sobre contas a vencer ao abrir o app.");
+        }
+        function desativarNotificacoesUI() {
+            appState.notificarVencimentos = false;
+            saveData(); atualizarCardNotif();
+        }
+
         window.onload = init;
 
         // ===== Proteção por senha (criptografia local) =====
@@ -2439,7 +2701,7 @@
                     criptoAtivada = false; chaveSessao = null; criptoSalt = null;
                     db.seguro.clear().catch(() => {});
                     db.config.delete('cripto').catch(() => {});
-                    appState = { saldoInicial: 0, contas: [], transactions: [], ccTransactions: [], futureTransactions: [], investimentos: [], categories: { despesas: ["Outros"], receitas: ["Outros"] }, orcamentos: {}, comprasParceladas: [], limiteDiasNegativos: 10 };
+                    appState = { saldoInicial: 0, contas: [], transactions: [], ccTransactions: [], futureTransactions: [], investimentos: [], categories: { despesas: ["Outros"], receitas: ["Outros"] }, orcamentos: {}, comprasParceladas: [], recorrencias: [], limiteDiasNegativos: 10, notificarVencimentos: false };
                     garantirContas(); renderContasUI(); preencherFormConta();
                     safeRun(atualizarCardCripto);
                     saveData(); alert("O banco de dados foi completamente zerado.");

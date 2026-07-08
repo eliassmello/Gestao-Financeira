@@ -62,6 +62,7 @@
                 <button onclick="switchTab('cartao')" id="btn-cartao" class="tab-btn px-3 py-2 rounded-lg text-indigo-100 hover:bg-indigo-500 font-medium text-sm transition">💳 Cartão</button>
                 <button onclick="switchTab('investimentos')" id="btn-investimentos" class="tab-btn px-3 py-2 rounded-lg text-indigo-100 hover:bg-indigo-500 font-medium text-sm transition">📈 Investimentos</button>
                 <button onclick="switchTab('quitacao')" id="btn-quitacao" class="tab-btn px-3 py-2 rounded-lg text-indigo-100 hover:bg-indigo-500 font-medium text-sm transition">🧮 Quitação</button>
+                <button onclick="switchTab('calendario')" id="btn-calendario" class="tab-btn px-3 py-2 rounded-lg text-indigo-100 hover:bg-indigo-500 font-medium text-sm transition">📆 Calendário</button>
                 <button onclick="switchTab('config')" id="btn-config" class="tab-btn px-3 py-2 rounded-lg text-indigo-100 hover:bg-indigo-500 font-medium text-sm transition">⚙️ Config</button>
                 <button onclick="abrirBuscaGlobal()" title="Busca global: encontre lançamentos em todas as contas, cartão e previsões" class="px-3 py-2 rounded-lg text-indigo-100 hover:bg-indigo-500 font-medium text-sm transition border border-indigo-400/50">🔍 Buscar</button>
                 <button onclick="toggleTema()" id="btn-tema" title="Alternar modo claro/escuro" class="px-3 py-2 rounded-lg text-indigo-100 hover:bg-indigo-500 font-medium text-sm transition border border-indigo-400/50">🌙</button>
@@ -83,6 +84,14 @@
                 <button onclick="exportData()" class="bg-amber-600 hover:bg-amber-700 text-white px-3 py-2 rounded-md text-xs font-bold transition whitespace-nowrap">💾 Salvar backup agora</button>
                 <button onclick="adiarLembreteBackup()" class="bg-white border border-amber-300 text-amber-700 hover:bg-amber-100 px-3 py-2 rounded-md text-xs font-bold transition whitespace-nowrap">Lembrar em 7 dias</button>
             </div>
+        </div>
+
+        <div id="banner-vencimentos" class="hidden mb-6 bg-rose-50 border border-rose-200 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+                <span class="text-2xl">🔔</span>
+                <p id="banner-vencimentos-texto" class="text-sm font-medium text-rose-800"></p>
+            </div>
+            <button onclick="switchTab('previsao')" class="bg-rose-600 hover:bg-rose-700 text-white px-3 py-2 rounded-md text-xs font-bold transition whitespace-nowrap shrink-0">Ver na Previsão</button>
         </div>
 
         <section id="tab-dashboard" class="tab-content space-y-6">
@@ -208,6 +217,70 @@
                     </div>
                 </div>
             </div>
+
+            <details class="bg-white rounded-xl shadow-sm border border-slate-200 group">
+                <summary class="flex justify-between items-center p-5 cursor-pointer select-none">
+                    <div>
+                        <h2 class="font-bold text-slate-700 text-sm">🔁 Lançamentos Recorrentes</h2>
+                        <p class="text-xs text-slate-400">Regras que geram previsões sozinhas (salário, aluguel, assinaturas...) pelos próximos 12 meses.</p>
+                    </div>
+                    <span class="text-slate-400 text-xs group-open:hidden">▼ abrir</span>
+                    <span class="text-slate-400 text-xs hidden group-open:inline">▲ fechar</span>
+                </summary>
+                <div class="px-5 pb-5 border-t border-slate-100 pt-4">
+                    <div class="grid grid-cols-2 md:grid-cols-6 gap-2 items-end">
+                        <div class="col-span-2">
+                            <label class="block text-[10px] font-semibold text-slate-500 uppercase mb-1">Descrição</label>
+                            <input type="text" id="rec-desc" placeholder="Ex.: Salário" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-semibold text-slate-500 uppercase mb-1">Tipo</label>
+                            <select id="rec-tipo" onchange="atualizarCategoriasRec()" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
+                                <option value="debito">Saída (-)</option>
+                                <option value="credito">Entrada (+)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-semibold text-slate-500 uppercase mb-1">Categoria</label>
+                            <select id="rec-categoria" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500"></select>
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-semibold text-slate-500 uppercase mb-1">Valor (R$)</label>
+                            <input type="number" step="0.01" id="rec-valor" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-semibold text-slate-500 uppercase mb-1">Frequência</label>
+                            <select id="rec-freq" onchange="atualizarCamposFreqRec()" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
+                                <option value="mensal">Mensal</option>
+                                <option value="semanal">Semanal</option>
+                                <option value="anual">Anual</option>
+                            </select>
+                        </div>
+                        <div id="rec-campo-dia">
+                            <label class="block text-[10px] font-semibold text-slate-500 uppercase mb-1">Dia do mês</label>
+                            <input type="number" min="1" max="31" id="rec-dia" value="5" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
+                        </div>
+                        <div id="rec-campo-diasemana" class="hidden">
+                            <label class="block text-[10px] font-semibold text-slate-500 uppercase mb-1">Dia da semana</label>
+                            <select id="rec-diasemana" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
+                                <option value="1">Segunda</option><option value="2">Terça</option><option value="3">Quarta</option><option value="4">Quinta</option><option value="5">Sexta</option><option value="6">Sábado</option><option value="0">Domingo</option>
+                            </select>
+                        </div>
+                        <div id="rec-campo-mes" class="hidden">
+                            <label class="block text-[10px] font-semibold text-slate-500 uppercase mb-1">Mês (anual)</label>
+                            <input type="number" min="1" max="12" id="rec-mes" value="1" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-semibold text-slate-500 uppercase mb-1">Fim (opcional)</label>
+                            <input type="month" id="rec-fim" title="Deixe em branco para não ter fim" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
+                        </div>
+                        <div>
+                            <button onclick="salvarRecorrencia()" class="w-full bg-indigo-600 text-white rounded-md p-2 text-sm font-bold hover:bg-indigo-700 transition">➕ Adicionar</button>
+                        </div>
+                    </div>
+                    <div id="lista-recorrencias" class="mt-4 space-y-2"></div>
+                </div>
+            </details>
 
             <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 relative" id="form-previsao-container">
                 <div id="editing-badge" class="hidden absolute -top-3 left-4 bg-emerald-500 text-white text-[10px] font-bold px-2 py-1 rounded shadow-sm">MODO EDIÇÃO</div>
@@ -377,8 +450,8 @@
 
             <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100 text-center space-y-4">
                 <div class="max-w-md mx-auto">
-                    <label class="block text-sm font-medium text-slate-600 mb-2">Importar Extrato Bancário (<b>.xls</b>, <b>.xlsx</b>, <b>.csv</b>) <span class="text-xs text-indigo-500">→ para a conta ativa</span></label>
-                    <input type="file" id="fileInputBanco" accept=".csv, .xls, .xlsx" class="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 border border-slate-200 rounded-lg p-2 bg-slate-50 cursor-pointer" />
+                    <label class="block text-sm font-medium text-slate-600 mb-2">Importar Extrato Bancário (<b>.ofx</b>, <b>.xls</b>, <b>.xlsx</b>, <b>.csv</b>) <span class="text-xs text-indigo-500">→ para a conta ativa</span></label>
+                    <input type="file" id="fileInputBanco" accept=".csv, .xls, .xlsx, .ofx" class="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 border border-slate-200 rounded-lg p-2 bg-slate-50 cursor-pointer" />
                 </div>
             </div>
 
@@ -744,6 +817,31 @@
             </div>
         </section>
 
+        <section id="tab-calendario" class="tab-content hidden space-y-6">
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+                <div class="flex items-center justify-between gap-3 mb-4 flex-wrap">
+                    <div>
+                        <h2 class="font-bold text-slate-700 text-lg">📆 Calendário Financeiro</h2>
+                        <p class="text-xs text-slate-400">Entradas e saídas <b>previstas</b> (agendamentos e recorrências) de cada dia. Clique num dia para ver os lançamentos.</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="mudarMesCalendario(-1)" class="bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-md px-3 py-1.5 text-sm font-bold">‹</button>
+                        <span id="cal-titulo" class="text-sm font-bold text-slate-700 min-w-[130px] text-center"></span>
+                        <button onclick="mudarMesCalendario(1)" class="bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-md px-3 py-1.5 text-sm font-bold">›</button>
+                        <button onclick="irHojeCalendario()" class="bg-indigo-600 text-white rounded-md px-3 py-1.5 text-xs font-bold hover:bg-indigo-700">Hoje</button>
+                    </div>
+                </div>
+                <div class="grid grid-cols-7 gap-1 text-center text-[11px] font-bold text-slate-400 mb-1">
+                    <div>DOM</div><div>SEG</div><div>TER</div><div>QUA</div><div>QUI</div><div>SEX</div><div>SÁB</div>
+                </div>
+                <div id="cal-grade" class="grid grid-cols-7 gap-1"></div>
+            </div>
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-100">
+                <h3 id="cal-dia-titulo" class="font-bold text-slate-700 text-base border-b pb-2 mb-3">Selecione um dia</h3>
+                <div id="cal-dia-lista" class="divide-y divide-slate-100 text-sm"></div>
+            </div>
+        </section>
+
         <section id="tab-config" class="tab-content hidden space-y-6">
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100 space-y-2">
@@ -786,6 +884,14 @@
                     <ul id="list-cat-receitas" class="divide-y divide-slate-100 text-sm max-h-[350px] overflow-y-auto pr-2"></ul>
                 </div>
             </div>
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100 mt-6">
+                <h2 class="font-bold text-slate-700 text-lg mb-1">🔔 Notificações de contas a vencer</h2>
+                <p class="text-sm text-slate-500 mb-3">Avisa sobre <b>saídas previstas</b> que vencem nos próximos 3 dias. O aviso aparece sempre num banner no topo do app; se você autorizar, também vira uma <b>notificação do sistema</b> quando você abre o app.</p>
+                <p id="notif-status" class="text-sm mb-3"></p>
+                <button id="btn-notif-ativar" onclick="ativarNotificacoesUI()" class="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-indigo-700 transition">Ativar notificações do sistema</button>
+                <button id="btn-notif-desativar" onclick="desativarNotificacoesUI()" class="hidden bg-amber-500 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-amber-600 transition">Desativar</button>
+            </div>
+
             <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100 mt-6">
                 <h2 class="font-bold text-slate-700 text-lg mb-1">🔒 Proteção por Senha (criptografia local)</h2>
                 <p class="text-sm text-slate-500 mb-3">Cifra seus dados no navegador com uma senha de acesso. Quem inspecionar o armazenamento (F12) vê só código embaralhado; sem a senha, os dados ficam inúteis. <span class="text-rose-600 font-semibold">Se esquecer a senha, não há recuperação</span> — por isso um backup é exigido ao ativar.</p>

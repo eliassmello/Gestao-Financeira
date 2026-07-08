@@ -44,7 +44,9 @@
             categories: { despesas: [], receitas: [] },
             orcamentos: {},
             comprasParceladas: [],
+            recorrencias: [],
             limiteDiasNegativos: 10,
+            notificarVencimentos: false,
             ultimoBackup: null,
             backupAdiadoAte: null
         };
@@ -93,6 +95,8 @@
             appState.categories = appState.categories || { despesas: [], receitas: [] };
             appState.orcamentos = appState.orcamentos || {};
             appState.comprasParceladas = appState.comprasParceladas || [];
+            appState.recorrencias = appState.recorrencias || [];
+            if (appState.notificarVencimentos === undefined) appState.notificarVencimentos = false;
             if (appState.limiteDiasNegativos === undefined || appState.limiteDiasNegativos === null) appState.limiteDiasNegativos = 10;
             if (appState.ultimoBackup === undefined) appState.ultimoBackup = null;
             if (appState.backupAdiadoAte === undefined) appState.backupAdiadoAte = null;
@@ -184,6 +188,8 @@
                     appState.categories = confObj.categories || { despesas: [], receitas: [] };
                     appState.orcamentos = confObj.orcamentos || {};
                     appState.comprasParceladas = confObj.comprasParceladas || [];
+                    appState.recorrencias = confObj.recorrencias || [];
+                    appState.notificarVencimentos = !!confObj.notificarVencimentos;
                     appState.limiteDiasNegativos = (confObj.limiteDiasNegativos !== undefined && confObj.limiteDiasNegativos !== null) ? confObj.limiteDiasNegativos : 10;
                     appState.ultimoBackup = confObj.ultimoBackup || null;
                     appState.backupAdiadoAte = confObj.backupAdiadoAte || null;
@@ -213,7 +219,7 @@
                 }
                 // Modo padrão (texto puro) — inalterado
                 await db.transaction('rw', db.transacoes, db.cartao, db.previsoes, db.investimentos, db.config, async () => {
-                    await db.config.put({ id: 'global', saldoInicial: appState.saldoInicial, categories: appState.categories, orcamentos: appState.orcamentos, comprasParceladas: appState.comprasParceladas, limiteDiasNegativos: appState.limiteDiasNegativos, contas: appState.contas, ultimoBackup: appState.ultimoBackup, backupAdiadoAte: appState.backupAdiadoAte });
+                    await db.config.put({ id: 'global', saldoInicial: appState.saldoInicial, categories: appState.categories, orcamentos: appState.orcamentos, comprasParceladas: appState.comprasParceladas, recorrencias: appState.recorrencias, notificarVencimentos: appState.notificarVencimentos, limiteDiasNegativos: appState.limiteDiasNegativos, contas: appState.contas, ultimoBackup: appState.ultimoBackup, backupAdiadoAte: appState.backupAdiadoAte });
                     await db.transacoes.clear(); if(appState.transactions.length > 0) await db.transacoes.bulkPut(appState.transactions);
                     await db.cartao.clear(); if(appState.ccTransactions.length > 0) await db.cartao.bulkPut(appState.ccTransactions);
                     await db.previsoes.clear(); if(appState.futureTransactions.length > 0) await db.previsoes.bulkPut(appState.futureTransactions);
@@ -241,6 +247,130 @@
             }).catch(e => alert("Erro ao salvar no banco de dados."));
         }
 
+
+        // ===== Lançamentos recorrentes (regras que geram previsões automaticamente) =====
+        // Cada regra: { id, descricao, tipo, valor, categoria, freq('mensal'|'semanal'|'anual'),
+        //   dia(1-31), diaSemana(0-6), mesAno(1-12), inicio('YYYY-MM-DD'), fim('YYYY-MM-DD'|null), ativo }
+        // São materializadas como previsões (futureTransactions) com recorrenciaId, de hoje até
+        // ~12 meses à frente. Recorrências já conciliadas (✔) são preservadas.
+        const HORIZONTE_RECORRENCIA_MESES = 12;
+
+        function _dataBRde(d) {
+            return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+        }
+        // Datas de ocorrência de uma regra no intervalo [ini, fim] (objetos Date)
+        function _ocorrenciasRecorrencia(rec, ini, fimH) {
+            const out = [];
+            const inicioRegra = rec.inicio ? new Date(dataCompleta(rec.inicio) + 'T00:00:00') : ini;
+            const fimRegra = rec.fim ? new Date(dataCompleta(rec.fim) + 'T23:59:59') : fimH;
+            const de = new Date(Math.max(ini.getTime(), inicioRegra.getTime()));
+            const ate = new Date(Math.min(fimH.getTime(), fimRegra.getTime()));
+            if (de > ate) return out;
+            if (rec.freq === 'semanal') {
+                const alvo = Number(rec.diaSemana) || 0;
+                const c = new Date(de); c.setHours(0, 0, 0, 0);
+                while (c.getDay() !== alvo) c.setDate(c.getDate() + 1);
+                for (; c <= ate; c.setDate(c.getDate() + 7)) out.push(new Date(c));
+            } else if (rec.freq === 'anual') {
+                const dia = Math.min(31, Math.max(1, Number(rec.dia) || 1));
+                const mes = Math.min(12, Math.max(1, Number(rec.mesAno) || 1));
+                for (let y = de.getFullYear(); y <= ate.getFullYear(); y++) {
+                    const ult = new Date(y, mes, 0).getDate();
+                    const d = new Date(y, mes - 1, Math.min(dia, ult));
+                    if (d >= de && d <= ate) out.push(d);
+                }
+            } else { // mensal (padrão)
+                const dia = Math.min(31, Math.max(1, Number(rec.dia) || 1));
+                let y = de.getFullYear(), m = de.getMonth();
+                while (true) {
+                    const ult = new Date(y, m + 1, 0).getDate();
+                    const d = new Date(y, m, Math.min(dia, ult));
+                    if (d > ate) break;
+                    if (d >= de) out.push(d);
+                    m++; if (m > 11) { m = 0; y++; }
+                }
+            }
+            return out;
+        }
+
+        // (Re)gera as previsões das recorrências ativas, preservando as já conciliadas.
+        // Retorna true se algo mudou (para persistir).
+        function gerarLancamentosRecorrentes() {
+            const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+            const fimH = new Date(hoje); fimH.setMonth(fimH.getMonth() + HORIZONTE_RECORRENCIA_MESES);
+            const desejadas = {}; // id -> objeto previsão
+            for (const rec of (appState.recorrencias || [])) {
+                if (!rec.ativo) continue;
+                const valor = Number(rec.valor) || 0;
+                if (valor <= 0 || !rec.descricao) continue;
+                for (const d of _ocorrenciasRecorrencia(rec, hoje, fimH)) {
+                    const chave = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+                    const id = `rec_${rec.id}_${chave}`;
+                    desejadas[id] = {
+                        id, data: _dataBRde(d), tipo: rec.tipo, valor,
+                        descricao: rec.descricao, categoria: rec.categoria || '',
+                        investimentoId: '', recorrenciaId: rec.id
+                    };
+                }
+            }
+            let mudou = false;
+            const idsRec = new Set();
+            // Atualiza/insere as desejadas (mantendo conciliadas intactas)
+            const porId = {};
+            for (const f of appState.futureTransactions) if (f.id) porId[f.id] = f;
+            for (const id in desejadas) {
+                idsRec.add(id);
+                const nova = desejadas[id];
+                const existente = porId[id];
+                if (!existente) { appState.futureTransactions.push(nova); mudou = true; }
+                else if (!existente.conciliado) {
+                    if (existente.valor !== nova.valor || existente.descricao !== nova.descricao || existente.categoria !== nova.categoria || existente.tipo !== nova.tipo) {
+                        Object.assign(existente, nova); mudou = true;
+                    }
+                }
+            }
+            // Remove previsões recorrentes órfãs (regra apagada/alterada) que não foram conciliadas
+            const antes = appState.futureTransactions.length;
+            appState.futureTransactions = appState.futureTransactions.filter(f => {
+                if (!f.recorrenciaId) return true;
+                if (f.conciliado) return true;
+                return idsRec.has(f.id);
+            });
+            if (appState.futureTransactions.length !== antes) mudou = true;
+            return mudou;
+        }
+
+        // ===== Importação OFX (Open Financial Exchange) =====
+        // Extrai os blocos <STMTTRN> (formato tolerante, sem exigir XML estrito).
+        function parseOFX(texto) {
+            const txns = [];
+            const blocos = String(texto).split(/<STMTTRN>/i).slice(1);
+            for (const b of blocos) {
+                const tag = (t) => { const m = b.match(new RegExp('<' + t + '>([^<\\r\\n]*)', 'i')); return m ? m[1].trim() : ''; };
+                const dt = tag('DTPOSTED').replace(/[^0-9]/g, '');
+                if (dt.length < 8) continue;
+                const dataBR = `${dt.slice(6, 8)}/${dt.slice(4, 6)}/${dt.slice(0, 4)}`;
+                let amtStr = tag('TRNAMT').replace(/\s/g, '');
+                if (amtStr.includes(',') && !amtStr.includes('.')) amtStr = amtStr.replace(',', '.');
+                const amt = parseFloat(amtStr);
+                if (isNaN(amt) || amt === 0) continue;
+                const memo = (tag('MEMO') || tag('NAME') || 'Lançamento').replace(/&amp;/g, '&');
+                txns.push({ data: dataBR, descricao: memo, credito: amt > 0 ? amt : 0, debito: amt < 0 ? Math.abs(amt) : 0, fitid: tag('FITID') });
+            }
+            return txns;
+        }
+
+        // ===== Contas a vencer (para banner/notificação) =====
+        // Previsões de SAÍDA pendentes com vencimento entre hoje e hoje+dias.
+        function contasAVencer(dias) {
+            const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+            const limite = new Date(hoje); limite.setDate(limite.getDate() + (dias || 3));
+            return (appState.futureTransactions || []).filter(f => {
+                if (f.conciliado || f.tipo !== 'debito') return false;
+                const d = converterDataBRParaDate(f.data); d.setHours(0, 0, 0, 0);
+                return d >= hoje && d <= limite;
+            }).sort((a, b) => converterDataBRParaDate(a.data) - converterDataBRParaDate(b.data));
+        }
 
         // Retorna uma cópia da lista de categorias em ordem alfabética (pt-BR, ignora acentos/maiúsculas)
         function sortedCats(arr) {
@@ -1313,6 +1443,7 @@
             if (!appState.categories) appState.categories = { despesas: [], receitas: [] };
             if (!appState.orcamentos) appState.orcamentos = {};
             if (!appState.comprasParceladas) appState.comprasParceladas = [];
+            if (!appState.recorrencias) appState.recorrencias = [];
             if (appState.limiteDiasNegativos === undefined || appState.limiteDiasNegativos === null) appState.limiteDiasNegativos = 10;
             if (!appState.contas) appState.contas = [];
             garantirContas();
