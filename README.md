@@ -60,6 +60,7 @@ Aplicativo de orçamento pessoal que roda direto no navegador, funciona **offlin
 
 ### 📈 Investimentos
 - **Resumo de patrimônio** por moeda: **BRL, USD e EUR**, além dos **aportes do mês** filtrado.
+- **💰 Patrimônio Líquido (BRL)**: quando há compras em **Quitação**, aparece um cartão com o patrimônio em reais **menos o saldo devedor** das parcelas ainda em aberto a partir do mês da Fotografia — o quanto sobraria se você quitasse as dívidas.
 - **"Fotografia do patrimônio"**: veja o saldo consolidado em qualquer mês/ano.
 - Cadastro de vários investimentos (nome, instituição e moeda).
 - **Histórico/evolução** de cada investimento com saldo anterior, aporte, taxa, rendimento, resgate e saldo final, em **data dia/mês/ano**.
@@ -91,13 +92,15 @@ Aplicativo de orçamento pessoal que roda direto no navegador, funciona **offlin
 
 ### 📆 Calendário Financeiro
 - Visão de mês em grade com as **entradas e saídas previstas** de cada dia (agendamentos + recorrências). Navegue entre meses e clique num dia para ver os lançamentos; recorrentes aparecem com 🔁.
+- Ao clicar num dia, além dos lançamentos daquele dia, o painel mostra o **saldo previsto até aquela data** (Caixa de Partida de hoje + todas as previsões pendentes até o dia).
 
 ### 🔔 Notificações de contas a vencer
 - Um **banner no topo** avisa sobre saídas previstas que vencem nos **próximos 3 dias**. Em **Config**, você pode autorizar **notificações do sistema** (aparecem ao abrir o app).
 
 ### ⚙️ Configurações
-- **Backup completo** dos dados: **exportar** e **restaurar** em arquivo **.json** (inclui as contas e os orçamentos).
+- A aba é organizada em: **Saldo inicial**, **Notificações**, **Categorias**, **Regras de categorização** e uma caixa **🔐 Segurança** (senha do app, backups e zona de perigo) reunida no final.
 - Cadastro e exclusão de **categorias** de despesa e de receita.
+- **🏷️ Regras de categorização editáveis**: crie regras *"se a descrição contém X → categoria Y"* (por tipo). Elas têm **prioridade** ao categorizar importações (extratos, faturas, OFX) e podem ser **aplicadas de uma vez** aos lançamentos que ainda estão sem categoria.
 - **Orçamento mensal por categoria de despesa**: informe um limite (R$) ao lado de cada categoria para acompanhá-la no painel 🎯 do Dashboard; deixe em branco para não acompanhar.
 - O **saldo inicial** é definido por conta na aba Conta Corrente (atalho disponível aqui).
 - **Zona de Perigo**: zerar todo o banco de dados.

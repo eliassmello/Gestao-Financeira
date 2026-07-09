@@ -175,7 +175,7 @@
                 if (tabId === 'investimentos') renderInvestimentos();
                 if (tabId === 'quitacao') renderQuitacao();
                 if (tabId === 'calendario') renderCalendario();
-                if (tabId === 'config') { renderCategoriesTab(); safeRun(atualizarInfoUltimoBackup); safeRun(renderCardSenha); safeRun(atualizarCardNotif); safeRun(renderCardAutoBkp); }
+                if (tabId === 'config') { renderCategoriesTab(); safeRun(renderRegrasCategoria); safeRun(atualizarInfoUltimoBackup); safeRun(renderCardSenha); safeRun(atualizarCardNotif); safeRun(renderCardAutoBkp); }
             } catch(err) {}
         }
 
@@ -905,7 +905,8 @@
             const btn = document.getElementById('btn-submit-futuro'); btn.innerText = "Salvar Editado"; 
             btn.className = "w-full bg-emerald-600 text-white rounded-md p-2 text-sm font-bold hover:bg-emerald-700 transition";
             document.getElementById('btn-cancelar-edicao').classList.remove('hidden');
-            document.getElementById('form-previsao-container').scrollIntoView({behavior: 'smooth', block: 'center'});
+            const det = document.getElementById('details-previsao'); if (det) det.open = true;
+            det ? det.scrollIntoView({behavior: 'smooth', block: 'center'}) : null;
         }
 
 
@@ -2009,6 +2010,23 @@
             document.getElementById('total-eur').innerHTML = '€ ' + formatCurrencyNumber(totals.EUR);
             document.getElementById('total-aportes').innerHTML = 'R$ ' + formatCurrencyNumber(totalAportesMes);
 
+            // Patrimônio Líquido (BRL) = total BRL − saldo devedor das compras em Quitação a partir do mês
+            const cardLiq = document.getElementById('card-patrimonio-liquido');
+            if (cardLiq) {
+                const divida = saldoDevedorQuitacaoDesde(filterMonth || '');
+                if (divida > 0.005) {
+                    const liquido = totals.BRL - divida;
+                    const elLiq = document.getElementById('patrimonio-liquido');
+                    elLiq.innerHTML = 'R$ ' + formatCurrencyNumber(liquido);
+                    elLiq.className = 'text-2xl font-bold ' + (liquido >= 0 ? 'text-white' : 'text-rose-300');
+                    document.getElementById('patrimonio-liquido-sub').innerText =
+                        `Dívida em aberto (Quitação): − R$ ${formatCurrencyNumber(divida)}${filterMonth ? ' a partir de ' + filterMonth.split('-').reverse().join('/') : ''}`;
+                    cardLiq.classList.remove('hidden');
+                } else {
+                    cardLiq.classList.add('hidden');
+                }
+            }
+
             if (currentSelection !== 'novo' && appState.investimentos.some(i => i.id === currentSelection)) {
                 exibirDetalheInvestimento(currentSelection);
             } else {
@@ -2379,19 +2397,6 @@
             if (sup) sup.classList.toggle('hidden', fsaDisponivel());
             const pasta = document.getElementById('autobkp-pasta');
             if (pasta) pasta.innerText = (autoBkpCfg && autoBkpCfg.dirNome) ? autoBkpCfg.dirNome : 'nenhuma';
-            const s = document.getElementById('autobkp-senha');
-            const ss = document.getElementById('autobkp-salvar-senha');
-            const nota = document.getElementById('autobkp-senha-nota');
-            if (criptoAtivada) {
-                // proteção ligada => usa a senha mestra do app; campo próprio fica desativado
-                if (s) { s.disabled = true; s.value = ''; s.placeholder = 'usando a senha do app'; }
-                if (ss) { ss.disabled = true; ss.checked = false; }
-                if (nota) nota.classList.remove('hidden');
-            } else {
-                if (s) { s.disabled = false; s.placeholder = 'em branco = .json simples'; if (autoBkpCfg && autoBkpCfg.salvarSenha) s.value = autoBkpCfg.senha || ''; }
-                if (ss) { ss.disabled = false; ss.checked = !!(autoBkpCfg && autoBkpCfg.salvarSenha); }
-                if (nota) nota.classList.add('hidden');
-            }
             const at = document.getElementById('autobkp-ativo'); if (at) at.checked = !!(autoBkpCfg && autoBkpCfg.ativo);
             const rt = document.getElementById('autobkp-restaurar'); if (rt) rt.checked = !!(autoBkpCfg && autoBkpCfg.restaurarAoAbrir);
             const st = document.getElementById('autobkp-status');
@@ -2406,12 +2411,8 @@
 
         function lerCamposAutoBkp() {
             autoBkpCfg = autoBkpCfg || {};
-            const s = document.getElementById('autobkp-senha');
-            const ss = document.getElementById('autobkp-salvar-senha');
             const at = document.getElementById('autobkp-ativo');
             const rt = document.getElementById('autobkp-restaurar');
-            if (ss) autoBkpCfg.salvarSenha = ss.checked;
-            if (s) autoBkpCfg.senha = s.value || '';
             if (at) autoBkpCfg.ativo = at.checked;
             if (rt) autoBkpCfg.restaurarAoAbrir = rt.checked;
         }
@@ -2564,6 +2565,7 @@
                 recC.innerHTML = ''; 
                 for (let c of sortedCats(appState.categories.receitas)) { recC.innerHTML += `<li class="flex justify-between py-2"><span class="text-slate-600">${escapeHtml(c)}</span><button onclick="deleteCategory('receitas', '${c.replace(/'/g, "\\'")}')" class="text-rose-500 font-bold">&times;</button></li>`; }
             }
+            safeRun(atualizarCategoriasRegra);
         }
 
 
@@ -2591,6 +2593,58 @@
             if (v > 0) appState.orcamentos[cat] = v;
             else delete appState.orcamentos[cat];
             saveData();
+        }
+
+
+        // ===== Regras de categorização editáveis =====
+        function atualizarCategoriasRegra() {
+            const tipo = document.getElementById('regra-tipo')?.value === 'receita' ? 'receitas' : 'despesas';
+            const sel = document.getElementById('regra-categoria'); if (!sel) return;
+            const atual = sel.value;
+            const cats = (appState.categories[tipo] || []).slice().sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }));
+            sel.innerHTML = cats.map(c => `<option value="${c.replace(/"/g, '&quot;')}">${escapeHtml(c)}</option>`).join('');
+            if (cats.includes(atual)) sel.value = atual;
+        }
+
+        function renderRegrasCategoria() {
+            atualizarCategoriasRegra();
+            const box = document.getElementById('lista-regras'); if (!box) return;
+            const regras = appState.regrasCategoria || [];
+            if (!regras.length) { box.innerHTML = '<p class="text-xs text-slate-400">Nenhuma regra ainda. As importações seguem usando o histórico e as palavras-chave padrão.</p>'; return; }
+            box.innerHTML = regras.map((r, i) => `
+                <div class="flex items-center justify-between gap-2 bg-slate-50 border border-slate-100 rounded-lg px-3 py-2">
+                    <span class="text-sm text-slate-700">contém <b>“${escapeHtml(r.texto)}”</b> → <span class="${r.tipo === 'receita' ? 'text-emerald-600' : 'text-rose-600'} font-semibold">${escapeHtml(r.categoria)}</span> <span class="text-[10px] text-slate-400">(${r.tipo === 'receita' ? 'receita' : 'despesa'})</span></span>
+                    <button onclick="excluirRegraCategoria(${i})" title="Excluir regra" class="text-rose-500 hover:bg-rose-50 border rounded p-1 text-xs">🗑️</button>
+                </div>`).join('');
+        }
+
+        function salvarRegraCategoria() {
+            const texto = (document.getElementById('regra-texto')?.value || '').trim();
+            const tipo = document.getElementById('regra-tipo')?.value === 'receita' ? 'receita' : 'despesa';
+            const categoria = document.getElementById('regra-categoria')?.value || '';
+            if (!texto) { alert("Digite o texto que a descrição deve conter (ex.: uber, ifood)."); return; }
+            if (!categoria) { alert("Cadastre e escolha uma categoria para a regra (crie categorias acima, se preciso)."); return; }
+            appState.regrasCategoria = appState.regrasCategoria || [];
+            appState.regrasCategoria.push({ texto, tipo, categoria });
+            const inp = document.getElementById('regra-texto'); if (inp) inp.value = '';
+            saveData(); renderRegrasCategoria();
+        }
+
+        function excluirRegraCategoria(i) {
+            if (!appState.regrasCategoria || !appState.regrasCategoria[i]) return;
+            appState.regrasCategoria.splice(i, 1);
+            saveData(); renderRegrasCategoria();
+        }
+
+        function aplicarRegrasExistentes() {
+            let n = 0;
+            const tryset = (t, isDeb) => { if (t.categoria) return; const c = findBestCategoryMatch(t.descricao, isDeb); if (c) { t.categoria = c; n++; } };
+            for (const t of (appState.transactions || [])) tryset(t, (Number(t.debito) || 0) > 0);
+            for (const t of (appState.ccTransactions || [])) tryset(t, (Number(t.debito) || 0) > 0);
+            for (const t of (appState.futureTransactions || [])) { if (t.conciliado) continue; tryset(t, t.tipo === 'debito'); }
+            saveData();
+            renderRegrasCategoria();
+            alert(n > 0 ? `${n} lançamento(s) sem categoria foram categorizados pelas regras/histórico.` : "Nenhum lançamento sem categoria foi identificado pelas regras.");
         }
 
 
@@ -2657,10 +2711,23 @@
             if (!lista) return;
             if (!calDiaSel) { tit.innerText = 'Selecione um dia'; lista.innerHTML = '<p class="text-slate-400 py-2">Clique num dia do calendário para ver os lançamentos previstos.</p>'; return; }
             tit.innerText = `Lançamentos previstos — ${calDiaSel}`;
+
+            // Saldo projetado ATÉ o dia selecionado (Caixa de Partida + previsões pendentes até a data)
+            const dSel = converterDataBRParaDate(calDiaSel);
+            let saldoDia = getSaldoAtualReal();
+            for (const f of appState.futureTransactions) {
+                if (f.conciliado) continue;
+                if (converterDataBRParaDate(f.data) <= dSel) { if (f.tipo === 'debito') saldoDia -= Number(f.valor) || 0; else saldoDia += Number(f.valor) || 0; }
+            }
+            const corSaldo = saldoDia >= 0 ? 'text-indigo-700' : 'text-rose-600';
+            let html = `<div class="flex justify-between items-center bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-2 mb-3">
+                            <span class="text-xs font-bold text-indigo-700 uppercase">Saldo previsto até ${calDiaSel}</span>
+                            <span class="font-bold ${corSaldo} whitespace-nowrap">${formatCurrency(saldoDia)}</span>
+                        </div>`;
+
             const itens = appState.futureTransactions.filter(f => !f.conciliado && f.data === calDiaSel)
                 .sort((a, b) => (a.tipo === b.tipo ? 0 : a.tipo === 'credito' ? -1 : 1));
-            if (!itens.length) { lista.innerHTML = '<p class="text-slate-400 py-2">Nada previsto neste dia.</p>'; return; }
-            let html = '';
+            if (!itens.length) { html += '<p class="text-slate-400 py-2">Nada previsto neste dia.</p>'; lista.innerHTML = html; return; }
             for (const f of itens) {
                 const isDeb = f.tipo === 'debito';
                 html += `
@@ -2818,7 +2885,7 @@
                     criptoAtivada = false; chaveSessao = null; criptoSalt = null; senhaSessao = null;
                     db.seguro.clear().catch(() => {});
                     db.config.delete('cripto').catch(() => {});
-                    appState = { saldoInicial: 0, contas: [], transactions: [], ccTransactions: [], futureTransactions: [], investimentos: [], categories: { despesas: ["Outros"], receitas: ["Outros"] }, orcamentos: {}, comprasParceladas: [], recorrencias: [], limiteDiasNegativos: 10, notificarVencimentos: false };
+                    appState = { saldoInicial: 0, contas: [], transactions: [], ccTransactions: [], futureTransactions: [], investimentos: [], categories: { despesas: ["Outros"], receitas: ["Outros"] }, orcamentos: {}, comprasParceladas: [], recorrencias: [], regrasCategoria: [], limiteDiasNegativos: 10, notificarVencimentos: false };
                     garantirContas(); renderContasUI(); preencherFormConta();
                     alert("O banco de dados foi completamente zerado. Defina uma nova senha para continuar.");
                     mostrarTelaCriarSenha();

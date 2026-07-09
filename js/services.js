@@ -49,6 +49,7 @@
             orcamentos: {},
             comprasParceladas: [],
             recorrencias: [],
+            regrasCategoria: [],
             limiteDiasNegativos: 10,
             notificarVencimentos: false,
             ultimoBackup: null,
@@ -100,6 +101,7 @@
             appState.orcamentos = appState.orcamentos || {};
             appState.comprasParceladas = appState.comprasParceladas || [];
             appState.recorrencias = appState.recorrencias || [];
+            appState.regrasCategoria = appState.regrasCategoria || [];
             if (appState.notificarVencimentos === undefined) appState.notificarVencimentos = false;
             if (appState.limiteDiasNegativos === undefined || appState.limiteDiasNegativos === null) appState.limiteDiasNegativos = 10;
             if (appState.ultimoBackup === undefined) appState.ultimoBackup = null;
@@ -195,6 +197,7 @@
                     appState.orcamentos = confObj.orcamentos || {};
                     appState.comprasParceladas = confObj.comprasParceladas || [];
                     appState.recorrencias = confObj.recorrencias || [];
+                    appState.regrasCategoria = confObj.regrasCategoria || [];
                     appState.notificarVencimentos = !!confObj.notificarVencimentos;
                     appState.limiteDiasNegativos = (confObj.limiteDiasNegativos !== undefined && confObj.limiteDiasNegativos !== null) ? confObj.limiteDiasNegativos : 10;
                     appState.ultimoBackup = confObj.ultimoBackup || null;
@@ -225,7 +228,7 @@
                 }
                 // Modo padrão (texto puro) — inalterado
                 await db.transaction('rw', db.transacoes, db.cartao, db.previsoes, db.investimentos, db.config, async () => {
-                    await db.config.put({ id: 'global', saldoInicial: appState.saldoInicial, categories: appState.categories, orcamentos: appState.orcamentos, comprasParceladas: appState.comprasParceladas, recorrencias: appState.recorrencias, notificarVencimentos: appState.notificarVencimentos, limiteDiasNegativos: appState.limiteDiasNegativos, contas: appState.contas, ultimoBackup: appState.ultimoBackup, backupAdiadoAte: appState.backupAdiadoAte });
+                    await db.config.put({ id: 'global', saldoInicial: appState.saldoInicial, categories: appState.categories, orcamentos: appState.orcamentos, comprasParceladas: appState.comprasParceladas, recorrencias: appState.recorrencias, regrasCategoria: appState.regrasCategoria, notificarVencimentos: appState.notificarVencimentos, limiteDiasNegativos: appState.limiteDiasNegativos, contas: appState.contas, ultimoBackup: appState.ultimoBackup, backupAdiadoAte: appState.backupAdiadoAte });
                     await db.transacoes.clear(); if(appState.transactions.length > 0) await db.transacoes.bulkPut(appState.transactions);
                     await db.cartao.clear(); if(appState.ccTransactions.length > 0) await db.cartao.bulkPut(appState.ccTransactions);
                     await db.previsoes.clear(); if(appState.futureTransactions.length > 0) await db.previsoes.bulkPut(appState.futureTransactions);
@@ -399,6 +402,15 @@
             if(!descricao) return '';
             const desc = String(descricao).toLowerCase();
             const cats = (isDebito ? appState.categories.despesas : appState.categories.receitas) || [];
+
+            // 0) Regras definidas pelo usuário (prioridade máxima)
+            const regras = appState.regrasCategoria || [];
+            for (const r of regras) {
+                if (!r || !r.texto || !r.categoria) continue;
+                const regraEhDebito = (r.tipo !== 'receita');   // 'despesa' (ou ausente) => débito
+                if (regraEhDebito !== !!isDebito) continue;
+                if (desc.includes(String(r.texto).toLowerCase())) return r.categoria;
+            }
 
             // 1) Aprende com o histórico: reutiliza a categoria mais frequente de descrições parecidas já categorizadas
             const alvo = normalizeDesc(descricao);
@@ -1162,6 +1174,29 @@
         }
 
 
+        // Saldo devedor em aberto das compras em Quitação a partir de um mês (YYYY-MM):
+        // soma as parcelas projetadas restantes cujo vencimento cai naquele mês ou depois.
+        // Sem mês informado, soma todas as parcelas restantes.
+        function saldoDevedorQuitacaoDesde(mesAnoYYYYMM) {
+            let total = 0;
+            for (const compra of (appState.comprasParceladas || [])) {
+                try {
+                    if (!compra || !compra.mesPrimeira) continue;
+                    const plano = planoDaCompra(compra);
+                    if (!plano.restantes) continue;
+                    const sim = simularQuitacao(plano);
+                    for (const l of sim.linhas) {
+                        const dataBR = dataParcelaQuitacao(compra.mesPrimeira, compra.dia, l.k);
+                        const p = dataBR.split('/');
+                        const ym = `${p[2]}-${p[1]}`;
+                        if (!mesAnoYYYYMM || ym >= mesAnoYYYYMM) total += Number(l.parcela) || 0;
+                    }
+                } catch (e) { /* compra com dados incompletos: ignora */ }
+            }
+            return total;
+        }
+
+
         function nomeCurtoInvestimento(investimentoId) {
             const inv = appState.investimentos.find(x => x.id === investimentoId);
             return inv ? inv.nome : '(removido)';
@@ -1566,6 +1601,7 @@
             if (!appState.orcamentos) appState.orcamentos = {};
             if (!appState.comprasParceladas) appState.comprasParceladas = [];
             if (!appState.recorrencias) appState.recorrencias = [];
+            if (!appState.regrasCategoria) appState.regrasCategoria = [];
             if (appState.limiteDiasNegativos === undefined || appState.limiteDiasNegativos === null) appState.limiteDiasNegativos = 10;
             if (!appState.contas) appState.contas = [];
             garantirContas();
