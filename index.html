@@ -290,10 +290,17 @@
                 </div>
             </details>
 
-            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 relative" id="form-previsao-container">
-                <div id="editing-badge" class="hidden absolute -top-3 left-4 bg-emerald-500 text-white text-[10px] font-bold px-2 py-1 rounded shadow-sm">MODO EDIÇÃO</div>
-                <h2 class="font-bold text-slate-700 text-sm mb-3">Agendar ou Editar Previsão</h2>
-                
+            <details id="details-previsao" class="bg-white rounded-xl shadow-sm border border-slate-200 group relative">
+                <div id="editing-badge" class="hidden absolute -top-3 left-4 bg-emerald-500 text-white text-[10px] font-bold px-2 py-1 rounded shadow-sm z-10">MODO EDIÇÃO</div>
+                <summary class="flex justify-between items-center p-5 cursor-pointer select-none">
+                    <div>
+                        <h2 class="font-bold text-slate-700 text-sm">➕ Agendar ou Editar Previsão</h2>
+                        <p class="text-xs text-slate-400">Lance uma entrada/saída futura ou edite um agendamento existente.</p>
+                    </div>
+                    <span class="text-slate-400 text-xs group-open:hidden">▼ abrir</span>
+                    <span class="text-slate-400 text-xs hidden group-open:inline">▲ fechar</span>
+                </summary>
+                <div class="px-5 pb-5 border-t border-slate-100 pt-4">
                 <form id="futureForm" onsubmit="addFutureTransaction(event)" class="flex flex-col gap-3">
                     <div class="flex flex-col md:flex-row gap-3 items-end">
                         <div class="w-full md:w-36">
@@ -335,7 +342,8 @@
                         </div>
                     </div>
                 </form>
-            </div>
+                </div>
+            </details>
 
             <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
                 <div class="flex flex-col md:flex-row justify-between items-center border-b border-slate-100 pb-4 mb-4 gap-4">
@@ -610,6 +618,19 @@
                 </div>
             </div>
 
+            <div id="card-patrimonio-liquido" class="hidden bg-slate-800 p-5 rounded-xl text-white shadow-sm">
+                <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+                    <div>
+                        <p class="text-xs font-semibold text-slate-300 uppercase">Patrimônio Líquido (BRL)</p>
+                        <p class="text-[11px] text-slate-400 max-w-xl">Patrimônio Total BRL menos o <b>saldo devedor</b> das compras em <b>Quitação</b> a partir do mês da Fotografia.</p>
+                    </div>
+                    <div class="text-left sm:text-right shrink-0">
+                        <p id="patrimonio-liquido" class="text-2xl font-bold">R$ 0,00</p>
+                        <p id="patrimonio-liquido-sub" class="text-[11px] text-slate-400"></p>
+                    </div>
+                </div>
+            </div>
+
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100 h-fit space-y-4">
                     <h2 class="font-bold text-slate-700 text-base border-b pb-2">Investimento Específico</h2>
@@ -851,52 +872,18 @@
         </section>
 
         <section id="tab-config" class="tab-content hidden space-y-6">
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100 space-y-2">
-                    <h2 class="font-bold text-slate-700 text-lg">Saldo Inicial das Contas</h2>
-                    <p class="text-sm text-slate-500 pb-2">O saldo inicial agora é definido <b>por conta corrente</b>. Crie, renomeie, ajuste o saldo inicial e escolha quais contas refletem no Dashboard/Previsão na aba <b>🏦 Conta Corrente</b>.</p>
-                    <button onclick="switchTab('extrato')" class="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-indigo-700">Gerenciar Contas Correntes</button>
-                </div>
-
-                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100 flex flex-col justify-center">
-                    <h2 class="font-bold text-slate-700 text-lg mb-1">Backup Completo</h2>
-                    <p class="text-sm text-slate-500 mb-4">O backup é <b>criptografado (.pib)</b> com a <b>senha do app</b> — a mesma que você usa para abrir. A restauração usa essa senha automaticamente (e ainda reconhece backups <b>.json</b> antigos). <span class="text-rose-600">Se esquecer a senha, não há recuperação.</span></p>
-                    <div class="flex gap-3 flex-wrap">
-                        <button onclick="exportDataProtegido()" class="flex-1 bg-emerald-700 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-emerald-800 transition text-center whitespace-nowrap">💾 Salvar backup</button>
-                        <label class="flex-1 bg-slate-200 text-slate-700 px-4 py-2 rounded-md text-sm font-bold hover:bg-slate-300 cursor-pointer transition text-center whitespace-nowrap">
-                            📂 Restaurar backup
-                            <input type="file" accept=".json,.pib" onchange="importData(event)" class="hidden">
-                        </label>
-                    </div>
-                    <p id="info-ultimo-backup" class="text-xs font-bold text-slate-400 mt-3"></p>
-                </div>
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100 space-y-2">
+                <h2 class="font-bold text-slate-700 text-lg">Saldo Inicial das Contas</h2>
+                <p class="text-sm text-slate-500 pb-2">O saldo inicial agora é definido <b>por conta corrente</b>. Crie, renomeie, ajuste o saldo inicial e escolha quais contas refletem no Dashboard/Previsão na aba <b>🏦 Conta Corrente</b>.</p>
+                <button onclick="switchTab('extrato')" class="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-indigo-700">Gerenciar Contas Correntes</button>
             </div>
 
             <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-                <h2 class="font-bold text-slate-700 text-lg mb-1">📁 Backup automático em pasta (desktop)</h2>
-                <p class="text-sm text-slate-500 mb-3">Grava o backup numa <b>pasta fixa</b> do computador a cada alteração e, ao abrir o app, oferece <b>restaurar</b> se a pasta tiver dados mais recentes (sempre com confirmação). Apontando para uma pasta do <b>Google Drive / OneDrive / Dropbox</b>, vira uma sincronização entre máquinas. <b>Só funciona em navegadores de desktop baseados no Chrome/Edge</b> e o navegador pede <b>uma autorização por sessão</b>. Estas preferências são deste aparelho e <b>não entram no backup</b>.</p>
-                <p id="autobkp-suporte" class="hidden text-sm font-semibold text-amber-600 mb-3">⚠️ Seu navegador não suporta este recurso (comum em Firefox, Safari e celulares). Use o backup manual acima.</p>
-                <div class="space-y-3">
-                    <div class="flex items-center gap-3 flex-wrap">
-                        <button onclick="escolherPastaBackup()" class="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-indigo-700 transition">📂 Escolher pasta</button>
-                        <span class="text-sm text-slate-600">Pasta atual: <b id="autobkp-pasta">nenhuma</b></span>
-                    </div>
-                    <div class="flex items-center gap-2 flex-wrap">
-                        <label class="text-sm text-slate-600">Senha (opcional):</label>
-                        <input type="password" id="autobkp-senha" onchange="salvarConfigAutoBkp()" placeholder="em branco = .json simples" class="text-sm border border-slate-200 rounded-md p-1.5 outline-none focus:ring-1 focus:ring-indigo-500">
-                        <label class="text-xs text-slate-500 flex items-center gap-1"><input type="checkbox" id="autobkp-salvar-senha" onchange="salvarConfigAutoBkp()"> salvar senha neste aparelho</label>
-                    </div>
-                    <p id="autobkp-senha-nota" class="hidden text-xs font-semibold text-emerald-700">🔒 A Proteção por Senha está ligada — o backup automático usa a <b>mesma senha do app</b> (você não precisa preencher nada aqui).</p>
-                    <p class="text-xs text-rose-600">Preencher a senha grava o arquivo <b>criptografado (.pib)</b>. Marcar "salvar senha" guarda-a em texto neste navegador — mais prático, menos seguro. Sem senha salva, o app pede a senha ao restaurar.</p>
-                    <div class="flex flex-col gap-1.5">
-                        <label class="text-sm text-slate-700 flex items-center gap-2"><input type="checkbox" id="autobkp-ativo" onchange="salvarConfigAutoBkp()"> Salvar backup automaticamente nesta pasta a cada alteração</label>
-                        <label class="text-sm text-slate-700 flex items-center gap-2"><input type="checkbox" id="autobkp-restaurar" onchange="salvarConfigAutoBkp()"> Ao abrir, restaurar da pasta se for mais recente (com confirmação)</label>
-                    </div>
-                    <div class="flex items-center gap-3 flex-wrap">
-                        <button onclick="autoBackupAgora()" class="bg-slate-800 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-slate-900 transition">💾 Fazer backup na pasta agora</button>
-                        <p id="autobkp-status" class="text-xs font-bold text-slate-400"></p>
-                    </div>
-                </div>
+                <h2 class="font-bold text-slate-700 text-lg mb-1">🔔 Notificações de contas a vencer</h2>
+                <p class="text-sm text-slate-500 mb-3">Avisa sobre <b>saídas previstas</b> que vencem nos próximos 3 dias. O aviso aparece sempre num banner no topo do app; se você autorizar, também vira uma <b>notificação do sistema</b> quando você abre o app.</p>
+                <p id="notif-status" class="text-sm mb-3"></p>
+                <button id="btn-notif-ativar" onclick="ativarNotificacoesUI()" class="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-indigo-700 transition">Ativar notificações do sistema</button>
+                <button id="btn-notif-desativar" onclick="desativarNotificacoesUI()" class="hidden bg-amber-500 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-amber-600 transition">Desativar</button>
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -918,31 +905,90 @@
                     <ul id="list-cat-receitas" class="divide-y divide-slate-100 text-sm max-h-[350px] overflow-y-auto pr-2"></ul>
                 </div>
             </div>
-            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100 mt-6">
-                <h2 class="font-bold text-slate-700 text-lg mb-1">🔔 Notificações de contas a vencer</h2>
-                <p class="text-sm text-slate-500 mb-3">Avisa sobre <b>saídas previstas</b> que vencem nos próximos 3 dias. O aviso aparece sempre num banner no topo do app; se você autorizar, também vira uma <b>notificação do sistema</b> quando você abre o app.</p>
-                <p id="notif-status" class="text-sm mb-3"></p>
-                <button id="btn-notif-ativar" onclick="ativarNotificacoesUI()" class="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-indigo-700 transition">Ativar notificações do sistema</button>
-                <button id="btn-notif-desativar" onclick="desativarNotificacoesUI()" class="hidden bg-amber-500 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-amber-600 transition">Desativar</button>
-            </div>
 
-            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100 mt-6">
-                <h2 class="font-bold text-slate-700 text-lg mb-1">🔒 Senha do app</h2>
-                <p class="text-sm text-slate-500 mb-3">A criptografia é <b>sempre ativa</b>: o app pede esta senha ao abrir, guarda seus dados cifrados no navegador e usa a <b>mesma senha</b> em todos os backups (manual e automático em pasta). Você pode alterá-la abaixo. <span class="text-rose-600 font-semibold">Se esquecer a senha, não há recuperação</span> — anote-a e mantenha um backup em local seguro.</p>
-                <div class="flex items-center gap-2 flex-wrap">
-                    <label class="text-sm text-slate-600">Senha:</label>
-                    <input type="password" id="config-senha" class="text-sm border border-slate-200 rounded-md p-1.5 outline-none focus:ring-1 focus:ring-indigo-500" autocomplete="off">
-                    <label class="text-xs text-slate-500 flex items-center gap-1"><input type="checkbox" id="config-senha-mostrar" onchange="toggleMostrarSenhaConfig()"> mostrar</label>
-                    <button onclick="salvarSenhaConfig()" class="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-indigo-700 transition">Salvar senha</button>
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+                <h2 class="font-bold text-slate-700 text-lg mb-1">🏷️ Regras de categorização</h2>
+                <p class="text-sm text-slate-500 mb-3">Crie regras <b>“se a descrição contém X → categoria Y”</b>. Elas têm <b>prioridade</b> na hora de categorizar importações (extratos, faturas, OFX). Use o botão abaixo para aplicá-las também aos lançamentos <b>sem categoria</b> já existentes.</p>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-2 items-end">
+                    <div class="md:col-span-2">
+                        <label class="block text-[10px] font-semibold text-slate-500 uppercase mb-1">Se a descrição contém</label>
+                        <input type="text" id="regra-texto" placeholder="Ex.: uber, ifood, posto..." class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-semibold text-slate-500 uppercase mb-1">Tipo</label>
+                        <select id="regra-tipo" onchange="atualizarCategoriasRegra()" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
+                            <option value="despesa">Despesa (-)</option>
+                            <option value="receita">Receita (+)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-semibold text-slate-500 uppercase mb-1">Categoria</label>
+                        <select id="regra-categoria" class="w-full text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500"></select>
+                    </div>
                 </div>
+                <div class="flex flex-wrap gap-2 mt-3">
+                    <button onclick="salvarRegraCategoria()" class="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-indigo-700 transition">➕ Adicionar regra</button>
+                    <button onclick="aplicarRegrasExistentes()" class="bg-slate-700 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-slate-800 transition">🔄 Aplicar aos lançamentos sem categoria</button>
+                </div>
+                <div id="lista-regras" class="mt-4 space-y-2"></div>
             </div>
 
-            <div class="mt-8 border-t border-slate-200 pt-6">
-                <h3 class="text-lg font-semibold text-rose-600 mb-2">Zona de Perigo</h3>
-                <p class="text-sm text-slate-500 mb-4">Atenção: Esta ação apagará todo o seu histórico, transações e saldo no IndexedDB.</p>
-                <button onclick="resetarBancoDeDados()" class="bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 rounded shadow transition font-medium text-sm">
-                    Zerar Todo o Banco de Dados
-                </button>
+            <div class="bg-slate-50 border-2 border-slate-200 rounded-xl p-5 sm:p-6">
+                <h2 class="font-bold text-slate-800 text-xl mb-1 flex items-center gap-2">🔐 Segurança</h2>
+                <p class="text-sm text-slate-500 mb-5">Senha do app, backups e ações destrutivas.</p>
+                <div class="space-y-6">
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+                        <h3 class="font-bold text-slate-700 text-lg mb-1">🔒 Senha do app</h3>
+                        <p class="text-sm text-slate-500 mb-3">A criptografia é <b>sempre ativa</b>: o app pede esta senha ao abrir, guarda seus dados cifrados no navegador e usa a <b>mesma senha</b> em todos os backups (manual e automático em pasta). Você pode alterá-la abaixo. <span class="text-rose-600 font-semibold">Se esquecer a senha, não há recuperação</span> — anote-a e mantenha um backup em local seguro.</p>
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <label class="text-sm text-slate-600">Senha:</label>
+                            <input type="password" id="config-senha" class="text-sm border border-slate-200 rounded-md p-1.5 outline-none focus:ring-1 focus:ring-indigo-500" autocomplete="off">
+                            <label class="text-xs text-slate-500 flex items-center gap-1"><input type="checkbox" id="config-senha-mostrar" onchange="toggleMostrarSenhaConfig()"> mostrar</label>
+                            <button onclick="salvarSenhaConfig()" class="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-indigo-700 transition">Salvar senha</button>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+                        <h3 class="font-bold text-slate-700 text-lg mb-1">Backup Completo</h3>
+                        <p class="text-sm text-slate-500 mb-4">O backup é <b>criptografado (.pib)</b> com a <b>senha do app</b> — a mesma que você usa para abrir. A restauração usa essa senha automaticamente (e ainda reconhece backups <b>.json</b> antigos). <span class="text-rose-600">Se esquecer a senha, não há recuperação.</span></p>
+                        <div class="flex gap-3 flex-wrap">
+                            <button onclick="exportDataProtegido()" class="flex-1 bg-emerald-700 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-emerald-800 transition text-center whitespace-nowrap">💾 Salvar backup</button>
+                            <label class="flex-1 bg-slate-200 text-slate-700 px-4 py-2 rounded-md text-sm font-bold hover:bg-slate-300 cursor-pointer transition text-center whitespace-nowrap">
+                                📂 Restaurar backup
+                                <input type="file" accept=".json,.pib" onchange="importData(event)" class="hidden">
+                            </label>
+                        </div>
+                        <p id="info-ultimo-backup" class="text-xs font-bold text-slate-400 mt-3"></p>
+                    </div>
+
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+                        <h3 class="font-bold text-slate-700 text-lg mb-1">📁 Backup automático em pasta (desktop)</h3>
+                        <p class="text-sm text-slate-500 mb-3">Grava o backup numa <b>pasta fixa</b> do computador a cada alteração e, ao abrir o app, oferece <b>restaurar</b> se a pasta tiver dados mais recentes (sempre com confirmação). O arquivo é gravado <b>criptografado (.pib) com a senha do app</b>. Apontando para uma pasta do <b>Google Drive / OneDrive / Dropbox</b>, vira uma sincronização entre máquinas. <b>Só funciona em navegadores de desktop baseados no Chrome/Edge</b> e o navegador pede <b>uma autorização por sessão</b>. A pasta escolhida é deste aparelho e <b>não entra no backup</b>.</p>
+                        <p id="autobkp-suporte" class="hidden text-sm font-semibold text-amber-600 mb-3">⚠️ Seu navegador não suporta este recurso (comum em Firefox, Safari e celulares). Use o backup manual acima.</p>
+                        <div class="space-y-3">
+                            <div class="flex items-center gap-3 flex-wrap">
+                                <button onclick="escolherPastaBackup()" class="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-indigo-700 transition">📂 Escolher pasta</button>
+                                <span class="text-sm text-slate-600">Pasta atual: <b id="autobkp-pasta">nenhuma</b></span>
+                            </div>
+                            <div class="flex flex-col gap-1.5">
+                                <label class="text-sm text-slate-700 flex items-center gap-2"><input type="checkbox" id="autobkp-ativo" onchange="salvarConfigAutoBkp()"> Salvar backup automaticamente nesta pasta a cada alteração</label>
+                                <label class="text-sm text-slate-700 flex items-center gap-2"><input type="checkbox" id="autobkp-restaurar" onchange="salvarConfigAutoBkp()"> Ao abrir, restaurar da pasta se for mais recente (com confirmação)</label>
+                            </div>
+                            <div class="flex items-center gap-3 flex-wrap">
+                                <button onclick="autoBackupAgora()" class="bg-slate-800 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-slate-900 transition">💾 Fazer backup na pasta agora</button>
+                                <p id="autobkp-status" class="text-xs font-bold text-slate-400"></p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white border border-rose-200 rounded-xl p-6">
+                        <h3 class="text-lg font-semibold text-rose-600 mb-2">Zona de Perigo</h3>
+                        <p class="text-sm text-slate-500 mb-4">Atenção: Esta ação apagará todo o seu histórico, transações e saldo no IndexedDB.</p>
+                        <button onclick="resetarBancoDeDados()" class="bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 rounded shadow transition font-medium text-sm">
+                            Zerar Todo o Banco de Dados
+                        </button>
+                    </div>
+                </div>
             </div>
         </section>
 
