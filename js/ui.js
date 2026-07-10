@@ -66,6 +66,8 @@
 
             // Rola o horizonte das recorrências (gera novas ocorrências que entraram nos 12 meses)
             try { if (gerarLancamentosRecorrentes()) await saveToDB(); } catch(e) {}
+            // Sincroniza as parcelas dos cartões na Previsão
+            try { if (sincronizarParcelasCartao()) await saveToDB(); } catch(e) {}
 
             // Backup automático em pasta (desktop): tenta sincronizar ao abrir. Se a
             // permissão da pasta ainda não foi concedida nesta sessão, mostra um banner
@@ -207,6 +209,7 @@
             });
             const deletados = lenAntes - appState.ccTransactions.length;
             if(deletados > 0) {
+                sincronizarParcelasCartao();
                 saveData();
                 alert(`Foram apagados ${deletados} lançamentos do Cartão "${getCartaoAtivo() ? getCartaoAtivo().nome : ''}" com vencimento em ${mes}/${ano}.`);
                 document.getElementById('delete-fatura-mes').value = '';
@@ -1957,7 +1960,7 @@
         }
 
 
-        function apagarLinhaCartao(id) { if(confirm("Tem certeza que deseja apagar esta transação do cartão?")) { appState.ccTransactions = appState.ccTransactions.filter(t => t.id !== id); saveData(); } }
+        function apagarLinhaCartao(id) { if(confirm("Tem certeza que deseja apagar esta transação do cartão?")) { appState.ccTransactions = appState.ccTransactions.filter(t => t.id !== id); sincronizarParcelasCartao(); saveData(); } }
 
 
         // ===== Múltiplos cartões =====
@@ -1992,6 +1995,7 @@
             appState.cartoes.push({ id, nome, diaVencimento: 10 });
             garantirCategoria('despesas', nome);
             cartaoSelecionadoId = id;
+            sincronizarParcelasCartao();
             saveData();
             renderCartoesUI(); updateFilterMesCartaoLight(); renderTransactionsCartao(); safeRun(renderCategoriesTab);
         }
@@ -2008,6 +2012,7 @@
                 ativo.nome = novoNome;
             }
             if (!isNaN(dia) && dia >= 1 && dia <= 31) ativo.diaVencimento = dia;
+            sincronizarParcelasCartao();
             saveData();
             renderCartoesUI(); safeRun(renderCategoriesTab);
             alert("Cartão atualizado.");
@@ -2021,6 +2026,9 @@
             appState.ccTransactions = appState.ccTransactions.filter(t => (t.cartaoId || null) !== ativo.id);
             appState.cartoes = appState.cartoes.filter(c => c.id !== ativo.id);
             cartaoSelecionadoId = appState.cartoes[0].id;
+            // remove também as previsões de parcelas geradas para o cartão excluído
+            appState.futureTransactions = appState.futureTransactions.filter(f => !(f.origemCartaoId === ativo.id));
+            sincronizarParcelasCartao();
             saveData();
             renderCartoesUI(); updateFilterMesCartaoLight(); renderTransactionsCartao();
         }

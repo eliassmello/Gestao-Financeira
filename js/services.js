@@ -555,7 +555,8 @@
                 updateFutureCategoriesDropdown(); updatePrevSumDropdown();
                 if (addedCount > 0) alert(`Foram importados ${addedCount} lançamentos do Cartão com sucesso.`);
                 else alert("Nenhum lançamento foi importado. Eles já existem ou o arquivo está vazio.");
-                
+
+                sincronizarParcelasCartao();
                 e.target.value = ''; saveData();
             } catch (err) { alert("Erro ao processar o arquivo: " + err.message); e.target.value = ''; }
         }
@@ -1013,6 +1014,51 @@
                 }
             }
             return porMes;
+        }
+
+
+        function _mesAnoDe(dataBR) { const p = String(dataBR || '').split('/'); return p.length === 3 ? `${p[2]}-${p[1]}` : ''; }
+
+        // Sincroniza as PARCELAS de TODOS os cartões na Previsão: para cada cartão e cada
+        // mês futuro, cria uma saída com o total das parcelas daquele mês, na data de
+        // vencimento do cartão (categoria = nome do cartão). Idempotente — regenera as
+        // previsões de cartão não conciliadas e preserva as já conciliadas (efetivadas).
+        // Retorna true se algo mudou (para o chamador salvar).
+        function sincronizarParcelasCartao() {
+            const conciliadas = new Set(
+                appState.futureTransactions
+                    .filter(f => f.origemCartaoId && f.conciliado)
+                    .map(f => `${f.origemCartaoId}|${_mesAnoDe(f.data)}`)
+            );
+            const desejadas = [];
+            for (const cartao of (appState.cartoes || [])) {
+                const porMes = calcularParcelamentosFuturos(cartao.id);
+                const dia = Math.min(Math.max(parseInt(cartao.diaVencimento, 10) || 10, 1), 31);
+                for (const nStr in porMes) {
+                    const n = parseInt(nStr, 10);
+                    const ano = Math.floor((n - 1) / 12), mes = ((n - 1) % 12) + 1;
+                    const total = porMes[nStr].reduce((s, p) => s + (Number(p.valor) || 0), 0);
+                    if (total <= 0.005) continue;
+                    const chave = `${cartao.id}|${ano}-${String(mes).padStart(2, '0')}`;
+                    if (conciliadas.has(chave)) continue;  // já efetivada: não regenera
+                    const ultimoDia = new Date(ano, mes, 0).getDate();
+                    const d = Math.min(dia, ultimoDia);
+                    const dataBR = `${String(d).padStart(2, '0')}/${String(mes).padStart(2, '0')}/${ano}`;
+                    desejadas.push({
+                        id: `cartao_${cartao.id}_${ano}${String(mes).padStart(2, '0')}`,
+                        data: dataBR, tipo: 'debito', valor: Math.round(total * 100) / 100,
+                        descricao: `Fatura ${cartao.nome} (parcelas)`, categoria: cartao.nome,
+                        investimentoId: '', origemCartaoId: cartao.id
+                    });
+                }
+            }
+            const atuais = appState.futureTransactions.filter(f => f.origemCartaoId && !f.conciliado);
+            const sig = (arr) => arr.map(f => `${f.origemCartaoId}|${f.data}|${f.valor}|${f.descricao}`).sort().join(';');
+            if (sig(atuais) === sig(desejadas)) return false;
+            appState.futureTransactions = appState.futureTransactions
+                .filter(f => !(f.origemCartaoId && !f.conciliado))
+                .concat(desejadas);
+            return true;
         }
 
 
