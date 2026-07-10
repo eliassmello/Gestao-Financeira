@@ -158,16 +158,22 @@
                 <div class="relative w-full" style="height:280px"><canvas id="chartEvolucao"></canvas></div>
             </div>
 
-            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-                <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-1 border-b pb-2 mb-4">
+            <details class="bg-white rounded-xl shadow-sm border border-slate-100 group" open>
+                <summary class="flex justify-between items-center gap-2 p-6 cursor-pointer select-none">
                     <div>
                         <h3 class="text-base font-bold text-slate-700">🎯 Orçamento por Categoria</h3>
                         <p id="orcamento-nota" class="text-xs text-slate-400">Gasto do período vs. limite mensal definido em ⚙️ Config</p>
                     </div>
-                    <span id="orcamento-resumo" class="text-sm font-semibold text-slate-500"></span>
+                    <div class="flex items-center gap-3 shrink-0">
+                        <span id="orcamento-resumo" class="text-sm font-semibold text-slate-500"></span>
+                        <span class="text-slate-400 text-xs group-open:hidden">▼ abrir</span>
+                        <span class="text-slate-400 text-xs hidden group-open:inline">▲ fechar</span>
+                    </div>
+                </summary>
+                <div class="px-6 pb-6">
+                    <div id="lista-orcamento" class="space-y-3 max-h-[320px] overflow-y-auto pr-2"></div>
                 </div>
-                <div id="lista-orcamento" class="space-y-3 max-h-[320px] overflow-y-auto pr-2"></div>
-            </div>
+            </details>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-col items-center relative">
@@ -286,7 +292,7 @@
                             <button onclick="salvarRecorrencia()" class="w-full bg-indigo-600 text-white rounded-md p-2 text-sm font-bold hover:bg-indigo-700 transition">➕ Adicionar</button>
                         </div>
                     </div>
-                    <div id="lista-recorrencias" class="mt-4 space-y-2"></div>
+                    <div id="lista-recorrencias" class="mt-4 space-y-2 max-h-[352px] overflow-y-auto pr-1"></div>
                 </div>
             </details>
 
@@ -345,18 +351,22 @@
                 </div>
             </details>
 
-            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-                <div class="flex flex-col md:flex-row justify-between items-center border-b border-slate-100 pb-4 mb-4 gap-4">
+            <details class="bg-white rounded-xl shadow-sm border border-slate-100 group" open>
+                <summary class="flex justify-between items-center gap-4 p-6 cursor-pointer select-none">
                     <div>
                         <h2 class="font-bold text-slate-700 text-xl">Cronograma da Conta Corrente</h2>
                         <p class="text-sm text-slate-500 mt-1">Lançamentos futuros que impactarão seu saldo.</p>
                     </div>
-                    <div class="bg-sky-50 px-6 py-3 rounded-xl border border-sky-100 text-right">
-                        <span class="block text-xs font-bold text-sky-600 uppercase mb-1">Caixa de Partida (Hoje)</span>
-                        <span id="prev-saldo-atual" class="font-bold text-slate-800 text-2xl">R$ 0,00</span>
+                    <div class="flex items-center gap-4 shrink-0">
+                        <div class="bg-sky-50 px-4 py-2 rounded-xl border border-sky-100 text-right">
+                            <span class="block text-[10px] font-bold text-sky-600 uppercase">Caixa de Partida (Hoje)</span>
+                            <span id="prev-saldo-atual" class="font-bold text-slate-800 text-lg">R$ 0,00</span>
+                        </div>
+                        <span class="text-slate-400 text-xs group-open:hidden">▼ abrir</span>
+                        <span class="text-slate-400 text-xs hidden group-open:inline">▲ fechar</span>
                     </div>
-                </div>
-                
+                </summary>
+                <div class="px-6 pb-6">
                 <div class="flex gap-2 items-center mb-2">
                     <div class="w-3 h-3 rounded-full bg-amber-200 border border-amber-400 shrink-0"></div>
                     <span class="text-xs font-medium text-slate-500">Linhas amarelas indicam previsões que já venceram hoje ou no passado. Quando o valor real cair no banco, clique em <b class="text-emerald-600">✔ Efetivar</b> para informar o valor realizado — a previsão sai do cronograma e vai para o painel <b>Previsto × Realizado</b>.</span>
@@ -394,23 +404,29 @@
                         <tbody id="lista-previsao-cronologica" class="divide-y divide-slate-100 bg-white"></tbody>
                     </table>
                 </div>
-            </div>
+                </div>
+            </details>
 
-            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-                <div class="flex flex-col md:flex-row justify-between md:items-center gap-4 border-b border-slate-100 pb-4 mb-4">
+            <details class="bg-white rounded-xl shadow-sm border border-slate-100 group" open>
+                <summary class="flex justify-between items-center gap-4 p-6 cursor-pointer select-none">
                     <div>
                         <h2 class="font-bold text-slate-700 text-xl">✅ Previsto × Realizado</h2>
                         <p class="text-sm text-slate-500 mt-1">Previsões efetivadas com o botão ✔ do cronograma. <b>Diferença positiva = melhor que o previsto</b> (gastou menos ou recebeu mais).</p>
                     </div>
-                    <div class="flex items-center gap-2 bg-slate-50 p-2 rounded-lg border border-slate-100 shrink-0">
-                        <label class="text-sm font-bold text-slate-600">Mês:</label>
-                        <input type="month" id="pr-month-filter" onchange="renderPrevistoRealizado()" class="text-sm border border-slate-300 rounded-md p-1.5 outline-none text-indigo-700 font-semibold focus:ring-1 focus:ring-indigo-500">
+                    <div class="flex items-center gap-3 shrink-0">
+                        <span class="text-slate-400 text-xs group-open:hidden">▼ abrir</span>
+                        <span class="text-slate-400 text-xs hidden group-open:inline">▲ fechar</span>
                     </div>
+                </summary>
+                <div class="px-6 pb-6">
+                <div class="flex items-center gap-2 bg-slate-50 p-2 rounded-lg border border-slate-100 w-fit mb-4">
+                    <label class="text-sm font-bold text-slate-600">Mês:</label>
+                    <input type="month" id="pr-month-filter" onchange="renderPrevistoRealizado()" class="text-sm border border-slate-300 rounded-md p-1.5 outline-none text-indigo-700 font-semibold focus:ring-1 focus:ring-indigo-500">
                 </div>
                 <div id="pr-cards" class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4"></div>
-                <div class="overflow-x-auto rounded-lg border border-slate-100">
+                <div class="overflow-auto max-h-[18rem] rounded-lg border border-slate-100">
                     <table class="w-full text-left text-sm text-slate-600">
-                        <thead class="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
+                        <thead class="bg-slate-50 text-slate-700 font-bold border-b border-slate-200 sticky top-0 z-10">
                             <tr>
                                 <th class="p-3 whitespace-nowrap">Data Prevista</th>
                                 <th class="p-3">Descrição</th>
@@ -425,7 +441,8 @@
                     </table>
                 </div>
                 <div id="pr-por-categoria" class="mt-4"></div>
-            </div>
+                </div>
+            </details>
         </section>
 
         <section id="tab-extrato" class="tab-content hidden space-y-6">
@@ -829,20 +846,28 @@
                     <h3 class="text-sm font-bold text-slate-500 mb-4">Saldo projetado do investimento × parcelas</h3>
                     <div class="relative w-full" style="height:260px"><canvas id="chartQuitacao"></canvas></div>
                 </div>
-                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-                    <div class="border-b pb-2 mb-3">
-                        <h3 class="text-base font-bold text-slate-700">Projeção mês a mês</h3>
-                        <p id="quitacao-tabela-nota" class="text-xs text-slate-400 mt-1">Edite <b>Correção</b> e <b>Aporte</b> de cada mês; a projeção recalcula em cascata.</p>
+                <details class="bg-white rounded-xl shadow-sm border border-slate-100 group" open>
+                    <summary class="flex justify-between items-center gap-2 p-6 cursor-pointer select-none">
+                        <div>
+                            <h3 class="text-base font-bold text-slate-700">Projeção mês a mês</h3>
+                            <p id="quitacao-tabela-nota" class="text-xs text-slate-400 mt-1">Edite <b>Correção</b> e <b>Aporte</b> de cada mês; a projeção recalcula em cascata.</p>
+                        </div>
+                        <div class="flex items-center gap-3 shrink-0">
+                            <span class="text-slate-400 text-xs group-open:hidden">▼ abrir</span>
+                            <span class="text-slate-400 text-xs hidden group-open:inline">▲ fechar</span>
+                        </div>
+                    </summary>
+                    <div class="px-6 pb-6">
+                        <div class="overflow-auto max-h-[36rem] rounded-lg border border-slate-100">
+                            <table class="w-full text-left text-sm text-slate-600">
+                                <thead class="bg-slate-50 text-slate-700 font-bold border-b border-slate-200 sticky top-0 z-10">
+                                    <tr id="quitacao-tabela-head"></tr>
+                                </thead>
+                                <tbody id="quitacao-tabela" class="divide-y divide-slate-100 bg-white"></tbody>
+                            </table>
+                        </div>
                     </div>
-                    <div class="overflow-auto max-h-[36rem] rounded-lg border border-slate-100">
-                        <table class="w-full text-left text-sm text-slate-600">
-                            <thead class="bg-slate-50 text-slate-700 font-bold border-b border-slate-200 sticky top-0 z-10">
-                                <tr id="quitacao-tabela-head"></tr>
-                            </thead>
-                            <tbody id="quitacao-tabela" class="divide-y divide-slate-100 bg-white"></tbody>
-                        </table>
-                    </div>
-                </div>
+                </details>
             </div>
         </section>
 
@@ -887,27 +912,47 @@
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100 space-y-4">
-                    <h2 class="font-bold text-rose-600 text-base border-b pb-2 flex justify-between items-center"><span>Categorias de Despesa</span><span class="text-xs font-medium text-slate-400">Orçamento mensal (R$)</span></h2>
-                    <p class="text-xs text-slate-400">Defina um limite mensal por categoria para acompanhar no painel <b>🎯 Orçamento por Categoria</b> do Dashboard. Deixe em branco para não acompanhar.</p>
-                    <div class="flex gap-2">
-                        <input type="text" id="new-cat-despesa" placeholder="Nova despesa..." class="flex-1 text-sm border border-slate-200 rounded-md p-2 outline-none">
-                        <button onclick="addCategory('despesas')" class="bg-rose-500 text-white px-3 py-2 rounded-md text-sm font-bold hover:bg-rose-600">+</button>
+                <details class="bg-white rounded-xl shadow-sm border border-slate-100 group" open>
+                    <summary class="flex justify-between items-center gap-2 p-6 cursor-pointer select-none">
+                        <h2 class="font-bold text-rose-600 text-base">Categorias de Despesa</h2>
+                        <span class="text-slate-400 text-xs group-open:hidden">▼ abrir</span>
+                        <span class="text-slate-400 text-xs hidden group-open:inline">▲ fechar</span>
+                    </summary>
+                    <div class="px-6 pb-6 space-y-4">
+                        <p class="text-xs text-slate-400">Defina um limite mensal por categoria (coluna <b>Orçamento mensal R$</b>) para acompanhar no painel <b>🎯 Orçamento por Categoria</b> do Dashboard. Deixe em branco para não acompanhar.</p>
+                        <div class="flex gap-2">
+                            <input type="text" id="new-cat-despesa" placeholder="Nova despesa..." class="flex-1 text-sm border border-slate-200 rounded-md p-2 outline-none">
+                            <button onclick="addCategory('despesas')" class="bg-rose-500 text-white px-3 py-2 rounded-md text-sm font-bold hover:bg-rose-600">+</button>
+                        </div>
+                        <ul id="list-cat-despesas" class="divide-y divide-slate-100 text-sm max-h-[172px] overflow-y-auto pr-2"></ul>
                     </div>
-                    <ul id="list-cat-despesas" class="divide-y divide-slate-100 text-sm max-h-[172px] overflow-y-auto pr-2"></ul>
-                </div>
-                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100 space-y-4">
-                    <h2 class="font-bold text-emerald-600 text-base border-b pb-2 flex justify-between items-center"><span>Categorias de Receita</span></h2>
-                    <div class="flex gap-2">
-                        <input type="text" id="new-cat-receita" placeholder="Nova receita..." class="flex-1 text-sm border border-slate-200 rounded-md p-2 outline-none">
-                        <button onclick="addCategory('receitas')" class="bg-emerald-500 text-white px-3 py-2 rounded-md text-sm font-bold hover:bg-emerald-600">+</button>
+                </details>
+                <details class="bg-white rounded-xl shadow-sm border border-slate-100 group" open>
+                    <summary class="flex justify-between items-center gap-2 p-6 cursor-pointer select-none">
+                        <h2 class="font-bold text-emerald-600 text-base">Categorias de Receita</h2>
+                        <span class="text-slate-400 text-xs group-open:hidden">▼ abrir</span>
+                        <span class="text-slate-400 text-xs hidden group-open:inline">▲ fechar</span>
+                    </summary>
+                    <div class="px-6 pb-6 space-y-4">
+                        <div class="flex gap-2">
+                            <input type="text" id="new-cat-receita" placeholder="Nova receita..." class="flex-1 text-sm border border-slate-200 rounded-md p-2 outline-none">
+                            <button onclick="addCategory('receitas')" class="bg-emerald-500 text-white px-3 py-2 rounded-md text-sm font-bold hover:bg-emerald-600">+</button>
+                        </div>
+                        <ul id="list-cat-receitas" class="divide-y divide-slate-100 text-sm max-h-[172px] overflow-y-auto pr-2"></ul>
                     </div>
-                    <ul id="list-cat-receitas" class="divide-y divide-slate-100 text-sm max-h-[172px] overflow-y-auto pr-2"></ul>
-                </div>
+                </details>
             </div>
 
-            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-                <h2 class="font-bold text-slate-700 text-lg mb-1">🏷️ Regras de categorização</h2>
+            <details class="bg-white rounded-xl shadow-sm border border-slate-100 group" open>
+                <summary class="flex justify-between items-center gap-2 p-6 cursor-pointer select-none">
+                    <div>
+                        <h2 class="font-bold text-slate-700 text-lg">🏷️ Regras de categorização</h2>
+                        <p class="text-xs text-slate-400 mt-1">Regras “descrição contém X → categoria Y” com prioridade nas importações.</p>
+                    </div>
+                    <span class="text-slate-400 text-xs group-open:hidden">▼ abrir</span>
+                    <span class="text-slate-400 text-xs hidden group-open:inline">▲ fechar</span>
+                </summary>
+                <div class="px-6 pb-6">
                 <p class="text-sm text-slate-500 mb-3">Crie regras <b>“se a descrição contém X → categoria Y”</b>. Elas têm <b>prioridade</b> na hora de categorizar importações (extratos, faturas, OFX). Use o botão abaixo para aplicá-las também aos lançamentos <b>sem categoria</b> já existentes.</p>
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-2 items-end">
                     <div class="md:col-span-2">
@@ -931,7 +976,8 @@
                     <button onclick="aplicarRegrasExistentes()" class="bg-slate-700 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-slate-800 transition">🔄 Aplicar aos lançamentos sem categoria</button>
                 </div>
                 <div id="lista-regras" class="mt-4 space-y-2 max-h-[180px] overflow-y-auto pr-1"></div>
-            </div>
+                </div>
+            </details>
 
             <div class="bg-slate-50 border-2 border-slate-200 rounded-xl p-5 sm:p-6">
                 <h2 class="font-bold text-slate-800 text-xl mb-1 flex items-center gap-2">🔐 Segurança</h2>

@@ -2687,18 +2687,31 @@
             const hoje = new Date(); const ehHoje = (d) => hoje.getDate() === d && hoje.getMonth() === calMes && hoje.getFullYear() === calAno;
             const primeiroDiaSemana = new Date(calAno, calMes, 1).getDay();
             const diasNoMes = new Date(calAno, calMes + 1, 0).getDate();
+            // Saldo projetado ao fim de cada dia (Caixa de Partida + previsões pendentes até o dia).
+            // Dias com saldo negativo são pintados de vermelho.
+            const saldoBaseCal = getSaldoAtualReal();
+            const futsPendCal = appState.futureTransactions.filter(f => !f.conciliado).map(f => ({ t: converterDataBRParaDate(f.data).getTime(), deb: f.tipo === 'debito', v: Number(f.valor) || 0 }));
+            const saldoNoDia = (d) => {
+                const fim = new Date(calAno, calMes, d, 23, 59, 59).getTime();
+                let s = saldoBaseCal;
+                for (const f of futsPendCal) { if (f.t <= fim) s += f.deb ? -f.v : f.v; }
+                return s;
+            };
             let html = '';
             for (let i = 0; i < primeiroDiaSemana; i++) html += `<div></div>`;
             for (let d = 1; d <= diasNoMes; d++) {
                 const ev = mapa[d];
                 const dataBR = `${String(d).padStart(2,'0')}/${String(calMes+1).padStart(2,'0')}/${calAno}`;
                 const sel = calDiaSel === dataBR;
-                const base = ehHoje(d) ? 'border-indigo-500 border-2' : 'border-slate-100';
+                const saldo = saldoNoDia(d);
+                const neg = saldo < -0.005;
+                let base = neg ? 'bg-rose-100 border-rose-300' : (ehHoje(d) ? 'border-indigo-500 border-2' : 'border-slate-100');
                 html += `
-                    <button onclick="selecionarDiaCalendario('${dataBR}')" class="min-h-[62px] text-left border ${base} ${sel ? 'ring-2 ring-indigo-400' : ''} rounded-lg p-1.5 hover:bg-slate-50 transition flex flex-col">
-                        <span class="text-xs font-bold ${ehHoje(d) ? 'text-indigo-600' : 'text-slate-500'}">${d}</span>
+                    <button onclick="selecionarDiaCalendario('${dataBR}')" title="Saldo previsto: ${formatCurrency(saldo)}" class="min-h-[62px] text-left border ${base} ${sel ? 'ring-2 ring-indigo-400' : ''} rounded-lg p-1.5 hover:bg-slate-50 transition flex flex-col">
+                        <span class="text-xs font-bold ${neg ? 'text-rose-700' : (ehHoje(d) ? 'text-indigo-600' : 'text-slate-500')}">${d}</span>
                         ${ev && ev.entradas ? `<span class="text-[10px] text-emerald-600 font-semibold leading-tight">+${formatCurrencyNumber(ev.entradas)}</span>` : ''}
                         ${ev && ev.saidas ? `<span class="text-[10px] text-rose-600 font-semibold leading-tight">-${formatCurrencyNumber(ev.saidas)}</span>` : ''}
+                        ${neg ? `<span class="text-[9px] text-rose-700 font-bold leading-tight mt-auto">⚠ ${formatCurrencyNumber(saldo)}</span>` : ''}
                     </button>`;
             }
             grade.innerHTML = html;
