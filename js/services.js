@@ -41,6 +41,7 @@
         let appState = {
             saldoInicial: 0,
             contas: [],
+            cartoes: [],
             transactions: [],
             ccTransactions: [],
             futureTransactions: [],
@@ -76,6 +77,8 @@
 
         let contaSelecionadaId = null;
 
+        let cartaoSelecionadoId = null;
+
 
         function debounce(key, fn, delay = 300) {
             if (debounceTimers[key]) clearTimeout(debounceTimers[key]);
@@ -102,6 +105,7 @@
             appState.comprasParceladas = appState.comprasParceladas || [];
             appState.recorrencias = appState.recorrencias || [];
             appState.regrasCategoria = appState.regrasCategoria || [];
+            appState.cartoes = appState.cartoes || [];
             if (appState.notificarVencimentos === undefined) appState.notificarVencimentos = false;
             if (appState.limiteDiasNegativos === undefined || appState.limiteDiasNegativos === null) appState.limiteDiasNegativos = 10;
             if (appState.ultimoBackup === undefined) appState.ultimoBackup = null;
@@ -173,6 +177,7 @@
                     if (blob) { appState = await _decifrarEstado(chaveSessao, blob); }
                     _defaultsAppState();
                     garantirContas();
+                    garantirCartoes();
                     return;
                 }
                 const count = await db.config.count();
@@ -203,12 +208,14 @@
                     appState.ultimoBackup = confObj.ultimoBackup || null;
                     appState.backupAdiadoAte = confObj.backupAdiadoAte || null;
                     appState.contas = confObj.contas || [];
+                    appState.cartoes = confObj.cartoes || [];
                     appState.transactions = tr || [];
                     appState.ccTransactions = cr || [];
                     appState.futureTransactions = pr || [];
                     appState.investimentos = inv || [];
                 }
                 garantirContas();
+                garantirCartoes();
             } catch(e) { console.error("Erro ao carregar banco IndexedDB", e); }
         }
 
@@ -228,7 +235,7 @@
                 }
                 // Modo padrão (texto puro) — inalterado
                 await db.transaction('rw', db.transacoes, db.cartao, db.previsoes, db.investimentos, db.config, async () => {
-                    await db.config.put({ id: 'global', saldoInicial: appState.saldoInicial, categories: appState.categories, orcamentos: appState.orcamentos, comprasParceladas: appState.comprasParceladas, recorrencias: appState.recorrencias, regrasCategoria: appState.regrasCategoria, notificarVencimentos: appState.notificarVencimentos, limiteDiasNegativos: appState.limiteDiasNegativos, contas: appState.contas, ultimoBackup: appState.ultimoBackup, backupAdiadoAte: appState.backupAdiadoAte });
+                    await db.config.put({ id: 'global', saldoInicial: appState.saldoInicial, categories: appState.categories, orcamentos: appState.orcamentos, comprasParceladas: appState.comprasParceladas, recorrencias: appState.recorrencias, regrasCategoria: appState.regrasCategoria, notificarVencimentos: appState.notificarVencimentos, limiteDiasNegativos: appState.limiteDiasNegativos, contas: appState.contas, cartoes: appState.cartoes, ultimoBackup: appState.ultimoBackup, backupAdiadoAte: appState.backupAdiadoAte });
                     await db.transacoes.clear(); if(appState.transactions.length > 0) await db.transacoes.bulkPut(appState.transactions);
                     await db.cartao.clear(); if(appState.ccTransactions.length > 0) await db.cartao.bulkPut(appState.ccTransactions);
                     await db.previsoes.clear(); if(appState.futureTransactions.length > 0) await db.previsoes.bulkPut(appState.futureTransactions);
@@ -523,13 +530,16 @@
                     
                     const realUniqueId = 'cc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9) + '_' + i;
                     
+                    const cartaoAtivoId = getCartaoAtivo() ? getCartaoAtivo().id : cartaoSelecionadoId;
                     const exists = existentesAntes.some(t =>
+                        (t.cartaoId || null) === (cartaoAtivoId || null) &&
                         t.descricao === descricaoFinal && t.dataCompra === dataOriginalCompraCompleta && Math.abs((t.debito || t.credito) - valor) < 0.01
                     );
                     if (!exists) {
-                        appState.ccTransactions.push({ 
-                            id: realUniqueId, data: dataVencimentoReal, dataCompra: dataOriginalCompraCompleta, 
-                            descricao: descricaoFinal, credito: credito, debito: debito, categoria: finalCat || '', isDuplicate: false 
+                        appState.ccTransactions.push({
+                            id: realUniqueId, data: dataVencimentoReal, dataCompra: dataOriginalCompraCompleta,
+                            descricao: descricaoFinal, credito: credito, debito: debito, categoria: finalCat || '', isDuplicate: false,
+                            cartaoId: (getCartaoAtivo() ? getCartaoAtivo().id : (cartaoSelecionadoId || null))
                         });
                         addedCount++;
                     }
@@ -970,10 +980,11 @@
         // projeta as parcelas restantes. Compras repetidas em faturas consecutivas
         // (ex.: 3/12 em junho e 4/12 em julho) são deduplicadas pela descrição + total
         // de parcelas + valor, mantendo a ocorrência mais recente.
-        function calcularParcelamentosFuturos() {
+        function calcularParcelamentosFuturos(cartaoId) {
             const RE_PARC = /parc\w*\.?\s*(\d{1,3})\s*\/\s*(\d{1,3})/i;
             const compras = {};
             for (let t of appState.ccTransactions) {
+                if (cartaoId && (t.cartaoId || null) !== cartaoId) continue;
                 const val = Number(t.debito) || 0;
                 if (val <= 0) continue;
                 const m = String(t.descricao || '').match(RE_PARC);
@@ -1350,6 +1361,64 @@
         }
 
 
+        // ===== Cartões (múltiplos) =====
+        function getCartaoById(id) { return (appState.cartoes || []).find(c => c.id === id) || null; }
+        function getCartaoAtivo() { return getCartaoById(cartaoSelecionadoId) || (appState.cartoes || [])[0] || null; }
+
+        // Dia de vencimento mais comum entre as faturas já importadas (para o cartão migrado)
+        function _diaVencimentoMaisComum() {
+            const cont = {};
+            for (const t of (appState.ccTransactions || [])) {
+                const p = String(t.data || '').split('/');
+                if (p.length === 3) { const d = parseInt(p[0], 10); if (d >= 1 && d <= 31) cont[d] = (cont[d] || 0) + 1; }
+            }
+            let best = null, bestN = 0;
+            for (const d in cont) if (cont[d] > bestN) { best = parseInt(d, 10); bestN = cont[d]; }
+            return best;
+        }
+
+        // Migração aditiva e segura: garante ao menos um cartão, marca "cartão atual" no
+        // legado, atribui cartaoId a toda transação de cartão e deixa o nome do cartão
+        // presente nas categorias de despesa (ajuda a sincronização das parcelas).
+        function garantirCartoes() {
+            if (!Array.isArray(appState.cartoes)) appState.cartoes = [];
+            if (appState.cartoes.length === 0) {
+                appState.cartoes.push({
+                    id: 'cartao_atual',
+                    nome: 'cartão atual',
+                    diaVencimento: _diaVencimentoMaisComum() || 10
+                });
+            }
+            const idPadrao = appState.cartoes[0].id;
+            for (const t of (appState.ccTransactions || [])) {
+                if (!t.cartaoId || !appState.cartoes.some(c => c.id === t.cartaoId)) t.cartaoId = idPadrao;
+            }
+            if (!cartaoSelecionadoId || !appState.cartoes.some(c => c.id === cartaoSelecionadoId)) {
+                cartaoSelecionadoId = idPadrao;
+            }
+            for (const c of appState.cartoes) garantirCategoria('despesas', c.nome);
+        }
+
+        // Renomeia uma categoria propagando para lançamentos, orçamentos, recorrências e regras.
+        function renomearCategoria(tipo, antigo, novo) {
+            antigo = String(antigo || '').trim(); novo = String(novo || '').trim();
+            if (!antigo || !novo || antigo === novo) return;
+            if (!appState.categories[tipo]) appState.categories[tipo] = [];
+            const arr = appState.categories[tipo];
+            const i = arr.indexOf(antigo);
+            if (i >= 0) { if (arr.includes(novo)) arr.splice(i, 1); else arr[i] = novo; }
+            else if (!arr.includes(novo)) arr.push(novo);
+            if (appState.orcamentos && appState.orcamentos[antigo] !== undefined) {
+                appState.orcamentos[novo] = appState.orcamentos[antigo];
+                delete appState.orcamentos[antigo];
+            }
+            const upd = (list) => { for (const t of (list || [])) if (t.categoria === antigo) t.categoria = novo; };
+            upd(appState.transactions); upd(appState.ccTransactions); upd(appState.futureTransactions);
+            for (const r of (appState.recorrencias || [])) if (r.categoria === antigo) r.categoria = novo;
+            for (const rg of (appState.regrasCategoria || [])) if (rg.categoria === antigo) rg.categoria = novo;
+        }
+
+
         function getSaldoConta(contaId) {
             const c = getContaById(contaId);
             if (!c) return 0;
@@ -1605,9 +1674,11 @@
             if (!appState.comprasParceladas) appState.comprasParceladas = [];
             if (!appState.recorrencias) appState.recorrencias = [];
             if (!appState.regrasCategoria) appState.regrasCategoria = [];
+            if (!appState.cartoes) appState.cartoes = [];
             if (appState.limiteDiasNegativos === undefined || appState.limiteDiasNegativos === null) appState.limiteDiasNegativos = 10;
             if (!appState.contas) appState.contas = [];
             garantirContas();
+            garantirCartoes();
             const elSi = document.getElementById('input-saldo-inicial');
             if (elSi) elSi.value = Number(appState.saldoInicial || 0).toFixed(2);
             renderContasUI(); preencherFormConta();

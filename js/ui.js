@@ -105,6 +105,7 @@
             
             safeRun(renderContasUI);
             safeRun(preencherFormConta);
+            safeRun(renderCartoesUI);
             safeRun(atualizarLembreteBackup);
             safeRun(atualizarInfoUltimoBackup);
             updateFilterMesBancoLight();
@@ -149,7 +150,7 @@
 
         function updateFilterMesBancoLight() { preencherFiltroMeses('filterMesBanco', appState.transactions.filter(x => x.contaId === contaSelecionadaId)); }
 
-        function updateFilterMesCartaoLight() { preencherFiltroMeses('filterMesCartao', appState.ccTransactions); }
+        function updateFilterMesCartaoLight() { preencherFiltroMeses('filterMesCartao', appState.ccTransactions.filter(t => (t.cartaoId || null) === cartaoSelecionadoId)); }
 
 
         function switchTab(tabId) {
@@ -171,7 +172,7 @@
                 if (tabId === 'dashboard') renderRelatorio();
                 if (tabId === 'previsao') renderPrevisao();
                 if (tabId === 'extrato') { renderContasUI(); preencherFormConta(); renderTransactionsBanco(); }
-                if (tabId === 'cartao') renderTransactionsCartao();
+                if (tabId === 'cartao') { safeRun(renderCartoesUI); renderTransactionsCartao(); }
                 if (tabId === 'investimentos') renderInvestimentos();
                 if (tabId === 'quitacao') renderQuitacao();
                 if (tabId === 'calendario') renderCalendario();
@@ -200,13 +201,14 @@
             const targetSuffix = `${mes}/${ano}`;
             const lenAntes = appState.ccTransactions.length;
             appState.ccTransactions = appState.ccTransactions.filter(t => {
+                if ((t.cartaoId || null) !== cartaoSelecionadoId) return true; // só a fatura do cartão ativo
                 if(!t.data) return true;
                 return !t.data.endsWith(targetSuffix);
             });
             const deletados = lenAntes - appState.ccTransactions.length;
             if(deletados > 0) {
                 saveData();
-                alert(`Foram apagados ${deletados} lançamentos do Cartão com vencimento em ${mes}/${ano}.`);
+                alert(`Foram apagados ${deletados} lançamentos do Cartão "${getCartaoAtivo() ? getCartaoAtivo().nome : ''}" com vencimento em ${mes}/${ano}.`);
                 document.getElementById('delete-fatura-mes').value = '';
             } else { alert(`Nenhum lançamento encontrado em ${mes}/${ano}.`); }
         }
@@ -1094,7 +1096,7 @@
             const cont = document.getElementById('lista-parcelamentos');
             const totalEl = document.getElementById('parc-total-futuro');
             if (!cont) return;
-            const porMes = calcularParcelamentosFuturos();
+            const porMes = calcularParcelamentosFuturos(cartaoSelecionadoId);
             const meses = Object.keys(porMes).map(Number).sort((a,b) => a - b);
             if (meses.length === 0) {
                 cont.innerHTML = `<p class="text-sm text-slate-400">Nenhum parcelamento futuro identificado nas faturas importadas.</p>`;
@@ -1895,7 +1897,7 @@
             const totalValor = document.getElementById('totalizadorCartaoValor');
             const totalBruto = document.getElementById('totalizadorCartaoBruto');
 
-            let filtered = appState.ccTransactions;
+            let filtered = appState.ccTransactions.filter(t => (t.cartaoId || null) === cartaoSelecionadoId);
             if (filter === 'pendentes') filtered = filtered.filter(t => !t.categoria);
             if (filterMes !== 'todos') {
                 const alvo = mesAnoNum(filterMes);
@@ -1956,6 +1958,72 @@
 
 
         function apagarLinhaCartao(id) { if(confirm("Tem certeza que deseja apagar esta transação do cartão?")) { appState.ccTransactions = appState.ccTransactions.filter(t => t.id !== id); saveData(); } }
+
+
+        // ===== Múltiplos cartões =====
+        function renderCartoesUI() {
+            const chips = document.getElementById('cartoes-chips');
+            if (chips) {
+                chips.innerHTML = (appState.cartoes || []).map(c => {
+                    const ativo = c.id === cartaoSelecionadoId;
+                    return `<button onclick="selecionarCartao('${c.id}')" class="px-3 py-1.5 rounded-full text-xs font-bold border transition ${ativo ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}">💳 ${escapeHtml(c.nome)}</button>`;
+                }).join('') || '<span class="text-xs text-slate-400">Nenhum cartão.</span>';
+            }
+            const ativo = getCartaoAtivo();
+            const nome = document.getElementById('cartao-nome'); if (nome && ativo) nome.value = ativo.nome;
+            const dia = document.getElementById('cartao-dia-venc'); if (dia && ativo) dia.value = ativo.diaVencimento || '';
+            // preenche o dia da fatura a importar com o vencimento do cartão ativo
+            const fatDia = document.getElementById('fatura-dia');
+            if (fatDia && ativo && !fatDia.value) fatDia.value = ativo.diaVencimento || '';
+        }
+
+        function selecionarCartao(id) {
+            if (!getCartaoById(id)) return;
+            cartaoSelecionadoId = id;
+            renderCartoesUI();
+            updateFilterMesCartaoLight();
+            renderTransactionsCartao();
+        }
+
+        function novoCartao() {
+            const nome = (prompt("Nome do novo cartão:", "Novo cartão") || '').trim();
+            if (!nome) return;
+            const id = 'cartao_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+            appState.cartoes.push({ id, nome, diaVencimento: 10 });
+            garantirCategoria('despesas', nome);
+            cartaoSelecionadoId = id;
+            saveData();
+            renderCartoesUI(); updateFilterMesCartaoLight(); renderTransactionsCartao(); safeRun(renderCategoriesTab);
+        }
+
+        function salvarCartaoAtivo() {
+            const ativo = getCartaoAtivo(); if (!ativo) return;
+            const novoNome = (document.getElementById('cartao-nome')?.value || '').trim();
+            const dia = parseInt(document.getElementById('cartao-dia-venc')?.value, 10);
+            if (!novoNome) { alert("Informe um nome para o cartão."); return; }
+            if (novoNome !== ativo.nome) {
+                // renomear -> propaga na tabela de categorias e nos lançamentos
+                if (appState.cartoes.some(c => c !== ativo && c.nome === novoNome)) { alert("Já existe um cartão com esse nome."); return; }
+                renomearCategoria('despesas', ativo.nome, novoNome);
+                ativo.nome = novoNome;
+            }
+            if (!isNaN(dia) && dia >= 1 && dia <= 31) ativo.diaVencimento = dia;
+            saveData();
+            renderCartoesUI(); safeRun(renderCategoriesTab);
+            alert("Cartão atualizado.");
+        }
+
+        function excluirCartao() {
+            if ((appState.cartoes || []).length <= 1) { alert("É preciso manter ao menos um cartão."); return; }
+            const ativo = getCartaoAtivo(); if (!ativo) return;
+            const n = appState.ccTransactions.filter(t => (t.cartaoId || null) === ativo.id).length;
+            if (!confirm(`Excluir o cartão "${ativo.nome}"?${n ? `\n\nOs ${n} lançamento(s) deste cartão também serão apagados.` : ''}`)) return;
+            appState.ccTransactions = appState.ccTransactions.filter(t => (t.cartaoId || null) !== ativo.id);
+            appState.cartoes = appState.cartoes.filter(c => c.id !== ativo.id);
+            cartaoSelecionadoId = appState.cartoes[0].id;
+            saveData();
+            renderCartoesUI(); updateFilterMesCartaoLight(); renderTransactionsCartao();
+        }
 
 
         function renderInvestimentos() {
@@ -2898,8 +2966,8 @@
                     criptoAtivada = false; chaveSessao = null; criptoSalt = null; senhaSessao = null;
                     db.seguro.clear().catch(() => {});
                     db.config.delete('cripto').catch(() => {});
-                    appState = { saldoInicial: 0, contas: [], transactions: [], ccTransactions: [], futureTransactions: [], investimentos: [], categories: { despesas: ["Outros"], receitas: ["Outros"] }, orcamentos: {}, comprasParceladas: [], recorrencias: [], regrasCategoria: [], limiteDiasNegativos: 10, notificarVencimentos: false };
-                    garantirContas(); renderContasUI(); preencherFormConta();
+                    appState = { saldoInicial: 0, contas: [], cartoes: [], transactions: [], ccTransactions: [], futureTransactions: [], investimentos: [], categories: { despesas: ["Outros"], receitas: ["Outros"] }, orcamentos: {}, comprasParceladas: [], recorrencias: [], regrasCategoria: [], limiteDiasNegativos: 10, notificarVencimentos: false };
+                    garantirContas(); garantirCartoes(); renderContasUI(); preencherFormConta(); renderCartoesUI();
                     alert("O banco de dados foi completamente zerado. Defina uma nova senha para continuar.");
                     mostrarTelaCriarSenha();
                 }

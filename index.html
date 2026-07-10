@@ -533,9 +533,32 @@
 
         <section id="tab-cartao" class="tab-content hidden space-y-6">
             <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+                <div class="flex justify-between items-center mb-3">
+                    <div>
+                        <h2 class="font-bold text-slate-700 text-base">💳 Meus Cartões</h2>
+                        <p class="text-[11px] text-slate-400">Cada cartão tem nome e dia de vencimento próprios. Selecione um cartão para ver/importar a fatura dele. O nome do cartão também vira uma <b>categoria de despesa</b>.</p>
+                    </div>
+                    <button onclick="novoCartao()" class="bg-indigo-600 text-white px-3 py-1.5 rounded-md text-xs font-bold hover:bg-indigo-700 transition whitespace-nowrap">+ Novo cartão</button>
+                </div>
+                <div id="cartoes-chips" class="flex flex-wrap gap-2 mb-3"></div>
+                <div class="flex flex-wrap items-end gap-3 border-t border-slate-100 pt-3">
+                    <div>
+                        <label class="block text-[10px] font-semibold text-slate-500 uppercase mb-1">Nome do cartão ativo</label>
+                        <input type="text" id="cartao-nome" class="text-sm border border-slate-200 rounded-md p-1.5 outline-none focus:ring-1 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-semibold text-slate-500 uppercase mb-1">Dia de vencimento</label>
+                        <input type="number" id="cartao-dia-venc" min="1" max="31" class="w-24 text-sm border border-slate-200 rounded-md p-1.5 outline-none focus:ring-1 focus:ring-indigo-500">
+                    </div>
+                    <button onclick="salvarCartaoAtivo()" class="bg-slate-800 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-slate-900 transition">Salvar</button>
+                    <button onclick="excluirCartao()" class="bg-rose-500 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-rose-600 transition">Excluir cartão</button>
+                </div>
+            </div>
+
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
                 <div class="flex flex-col lg:flex-row gap-4 lg:items-end">
                     <div class="bg-amber-50 p-3 rounded-lg border border-amber-100 flex flex-wrap items-end gap-3">
-                        <h3 class="w-full text-xs font-bold text-amber-800">1. Dados da fatura a importar</h3>
+                        <h3 class="w-full text-xs font-bold text-amber-800">1. Dados da fatura a importar (cartão ativo)</h3>
                         <div>
                             <label class="block text-[10px] font-semibold text-slate-500 uppercase mb-1">Mês da Fatura</label>
                             <input type="month" id="fatura-mes" class="text-sm border border-slate-200 rounded-md p-1.5 outline-none focus:ring-1 focus:ring-amber-500 bg-white">
