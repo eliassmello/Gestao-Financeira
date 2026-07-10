@@ -1030,12 +1030,13 @@
                     .filter(f => f.origemCartaoId && f.conciliado)
                     .map(f => `${f.origemCartaoId}|${_mesAnoDe(f.data)}`)
             );
-            // Abatimento: previsões de saída (recorrências ou manuais) com categoria = nome
-            // do cartão, por mês, representam o pagamento fixo da fatura e são descontadas
-            // das parcelas daquele mês (para não contar em dobro).
+            // Abatimento: apenas LANÇAMENTOS RECORRENTES (recorrenciaId) de saída com
+            // categoria = nome do cartão representam o pagamento fixo da fatura e são
+            // descontados das parcelas daquele mês (para não contar em dobro). Agendamentos
+            // avulsos ou categorias coincidentes NÃO abatem — evita esconder as parcelas.
             const abatePorCatMes = {};
             for (const f of appState.futureTransactions) {
-                if (f.origemCartaoId || f.conciliado) continue;
+                if (!f.recorrenciaId || f.origemCartaoId || f.conciliado) continue;
                 if (f.tipo !== 'debito' || !f.categoria) continue;
                 const ym = _mesAnoDe(f.data); if (!ym) continue;
                 const k = f.categoria + '|' + ym;
