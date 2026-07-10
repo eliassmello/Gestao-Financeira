@@ -93,6 +93,7 @@ Aplicativo de orçamento pessoal que roda direto no navegador, funciona **offlin
 ### 📆 Calendário Financeiro
 - Visão de mês em grade com as **entradas e saídas previstas** de cada dia (agendamentos + recorrências). Navegue entre meses e clique num dia para ver os lançamentos; recorrentes aparecem com 🔁.
 - Ao clicar num dia, além dos lançamentos daquele dia, o painel mostra o **saldo previsto até aquela data** (Caixa de Partida de hoje + todas as previsões pendentes até o dia).
+- Os **dias com saldo previsto negativo** ficam **pintados de vermelho** na grade (com o valor projetado), destacando quando a conta entraria no vermelho.
 
 ### 🔔 Notificações de contas a vencer
 - Um **banner no topo** avisa sobre saídas previstas que vencem nos **próximos 3 dias**. Em **Config**, você pode autorizar **notificações do sistema** (aparecem ao abrir o app).
