@@ -1574,7 +1574,10 @@
                 const magic = new TextEncoder().encode("FIN1");
                 const out = new Uint8Array(4 + 1 + 16 + 12 + cipher.length);
                 out.set(magic, 0); out[4] = flag; out.set(salt, 5); out.set(iv, 21); out.set(cipher, 33);
-                _baixarBackup(new Blob([out], { type: "application/octet-stream" }), `backup_financeiro_${new Date().toISOString().split('T')[0]}.pib`);
+                const nome = `backup_financeiro_${new Date().toISOString().split('T')[0]}.pib`;
+                // Se há pasta de backup configurada, grava o arquivo nela; senão, baixa pelo navegador.
+                const salvouNaPasta = await _salvarBackupNaPastaSeConfig(out, nome);
+                if (!salvouNaPasta) _baixarBackup(new Blob([out], { type: "application/octet-stream" }), nome);
                 saveData();
             } catch (err) { alert("Falha ao gerar o backup protegido."); }
         }
@@ -1740,6 +1743,21 @@
             if (criptoAtivada && senhaSessao) return senhaSessao;
             return (autoBkpCfg && autoBkpCfg.senha) ? autoBkpCfg.senha : '';
         }
+
+        // Grava um backup manual na pasta configurada (se houver e for autorizada).
+        // Retorna true se gravou na pasta; false para o chamador cair no download normal.
+        async function _salvarBackupNaPastaSeConfig(bytes, nome) {
+            if (!autoBkpHandle) return false;
+            if (!(await verificarPermissaoPasta(true))) return false;
+            try {
+                const fh = await autoBkpHandle.getFileHandle(nome, { create: true });
+                const w = await fh.createWritable();
+                await w.write(bytes); await w.close();
+                alert(`Backup salvo na pasta "${(autoBkpCfg && autoBkpCfg.dirNome) || 'de backup'}":\n${nome}`);
+                return true;
+            } catch (e) { return false; }
+        }
+
 
         // Grava o backup na pasta configurada. interativo=true permite pedir permissão.
         async function autoBackupSalvar(interativo) {
