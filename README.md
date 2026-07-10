@@ -53,6 +53,7 @@ Aplicativo de orçamento pessoal que roda direto no navegador, funciona **offlin
 ### 💳 Cartão de Crédito
 - **💳 Múltiplos cartões**: cadastre vários cartões, cada um com **nome** e **dia de vencimento** próprios. Selecione o cartão ativo pelos "chips" para ver/importar a fatura dele; a lista de lançamentos e os parcelamentos passam a ser **por cartão**. O nome do cartão também é criado como **categoria de despesa** (renomear o cartão propaga para a categoria e para os lançamentos). O cartão que já existia é migrado automaticamente para **"cartão atual"** (renomeável).
 - **🔁 Parcelas na Previsão**: as parcelas futuras de **todos os cartões** são lançadas automaticamente na **Previsão**, uma saída por cartão por mês (o total das parcelas daquele mês) na **data de vencimento do cartão**. Sincroniza sozinho quando a lista de parcelamentos muda; previsões já **efetivadas** (✔) são preservadas.
+- **Recorrência do cartão abate as parcelas**: se você criar uma **recorrência (ou previsão) com a categoria = nome do cartão** (o pagamento fixo da fatura), o valor dela naquele mês é **descontado das parcelas** — evitando contar em dobro. Se cobrir tudo, a previsão de parcelas do mês desaparece.
 - **Importação de fatura** (**.txt, .csv** ou **.pdf**), informando o **mês da fatura** e o **dia de vencimento**, no **cartão ativo**.
 - **Fatura em PDF**: reconhece automaticamente o layout do **Santander** (seções *Despesas / Parcelamentos / Pagamento e Demais Créditos*) e da **Caixa/CEF** (seção *Demonstrativo* com a coluna *Crédito/Débito*). Em ambos, os **parcelamentos** ("N DE N" ou "N/N") vão para o campo Parcela, os **créditos/estornos** entram como entradas e as **compras internacionais** importam o valor em **R$** (o valor em US$ é ignorado). Faturas com mais de um portador (cartões adicionais) são importadas juntas; reimportar a mesma fatura não duplica os lançamentos.
 - Lançamentos **agrupados por fatura (mês de vencimento)**, da mais recente para a mais antiga, com **cabeçalho por fatura** (nº de lançamentos e total líquido); dentro de cada fatura, ordenados pela **data da compra**.
@@ -128,7 +129,7 @@ Aplicativo de orçamento pessoal que roda direto no navegador, funciona **offlin
 - **IndexedDB** através da biblioteca **Dexie.js** para armazenamento local.
 - **Chart.js** para os gráficos do Dashboard.
 - **Tailwind CSS** para a interface, com **🌙 modo escuro** (botão no cabeçalho; a preferência é lembrada).
-- **Listas paginadas**: Conta Corrente e Cartão mostram até 300 lançamentos por vez, com botão **"Mostrar mais"** — assim anos de importações não travam o navegador.
+- **Listas virtualizadas**: as listas grandes (Conta Corrente e Cartão) usam `content-visibility` — o navegador **só renderiza as linhas visíveis** na tela, mantendo a rolagem fluida mesmo com milhares de lançamentos (com paginação de reserva em 1000 itens + "Mostrar mais").
 - 100% **client-side**: nenhum dado sai do seu computador.
 
 ---

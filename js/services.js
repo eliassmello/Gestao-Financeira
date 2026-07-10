@@ -1030,6 +1030,17 @@
                     .filter(f => f.origemCartaoId && f.conciliado)
                     .map(f => `${f.origemCartaoId}|${_mesAnoDe(f.data)}`)
             );
+            // Abatimento: previsões de saída (recorrências ou manuais) com categoria = nome
+            // do cartão, por mês, representam o pagamento fixo da fatura e são descontadas
+            // das parcelas daquele mês (para não contar em dobro).
+            const abatePorCatMes = {};
+            for (const f of appState.futureTransactions) {
+                if (f.origemCartaoId || f.conciliado) continue;
+                if (f.tipo !== 'debito' || !f.categoria) continue;
+                const ym = _mesAnoDe(f.data); if (!ym) continue;
+                const k = f.categoria + '|' + ym;
+                abatePorCatMes[k] = (abatePorCatMes[k] || 0) + (Number(f.valor) || 0);
+            }
             const desejadas = [];
             for (const cartao of (appState.cartoes || [])) {
                 const porMes = calcularParcelamentosFuturos(cartao.id);
@@ -1039,14 +1050,18 @@
                     const ano = Math.floor((n - 1) / 12), mes = ((n - 1) % 12) + 1;
                     const total = porMes[nStr].reduce((s, p) => s + (Number(p.valor) || 0), 0);
                     if (total <= 0.005) continue;
-                    const chave = `${cartao.id}|${ano}-${String(mes).padStart(2, '0')}`;
+                    const ym = `${ano}-${String(mes).padStart(2, '0')}`;
+                    const chave = `${cartao.id}|${ym}`;
                     if (conciliadas.has(chave)) continue;  // já efetivada: não regenera
+                    const abate = abatePorCatMes[`${cartao.nome}|${ym}`] || 0;
+                    const liquido = total - abate;
+                    if (liquido <= 0.005) continue;        // recorrência/pagamento já cobre as parcelas
                     const ultimoDia = new Date(ano, mes, 0).getDate();
                     const d = Math.min(dia, ultimoDia);
                     const dataBR = `${String(d).padStart(2, '0')}/${String(mes).padStart(2, '0')}/${ano}`;
                     desejadas.push({
                         id: `cartao_${cartao.id}_${ano}${String(mes).padStart(2, '0')}`,
-                        data: dataBR, tipo: 'debito', valor: Math.round(total * 100) / 100,
+                        data: dataBR, tipo: 'debito', valor: Math.round(liquido * 100) / 100,
                         descricao: `Fatura ${cartao.nome} (parcelas)`, categoria: cartao.nome,
                         investimentoId: '', origemCartaoId: cartao.id
                     });

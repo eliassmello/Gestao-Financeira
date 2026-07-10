@@ -19,6 +19,10 @@
          <html> tem a classe .dark. As cores semânticas (verde/vermelho/indigo dos
          valores) permanecem, apenas mais legíveis sobre o fundo escuro. -->
     <style>
+        /* Virtualização leve: o navegador só renderiza (layout/paint) as linhas visíveis
+           na tela; as fora da viewport são puladas, mantendo a rolagem fluida em listas
+           grandes (Cartão e Conta Corrente). contain-intrinsic-size reserva a altura. */
+        .virt-row { content-visibility: auto; contain-intrinsic-size: auto 64px; }
         .dark body { background-color: #0f172a; color: #e2e8f0; }
         .dark .bg-white { background-color: #1e293b !important; }
         .dark .bg-slate-50 { background-color: #0f172a !important; }

@@ -829,6 +829,7 @@
             };
             appState.recorrencias.push(rec);
             gerarLancamentosRecorrentes();
+            sincronizarParcelasCartao();
             document.getElementById('rec-desc').value = ''; document.getElementById('rec-valor').value = '';
             saveData();
             renderRecorrencias();
@@ -838,6 +839,7 @@
             const r = appState.recorrencias.find(x => x.id === id); if (!r) return;
             r.ativo = !r.ativo;
             gerarLancamentosRecorrentes();
+            sincronizarParcelasCartao();
             saveData(); renderRecorrencias();
         }
         function excluirRecorrencia(id) {
@@ -845,6 +847,7 @@
             if (!confirm(`Excluir a recorrência "${r.descricao}"?\nAs previsões futuras dela (não conciliadas) serão removidas do cronograma.`)) return;
             appState.recorrencias = appState.recorrencias.filter(x => x.id !== id);
             gerarLancamentosRecorrentes();
+            sincronizarParcelasCartao();
             saveData(); renderRecorrencias();
         }
         function renderRecorrencias() {
@@ -1813,7 +1816,7 @@
         function linhaTransacaoHtml(t, dataHtml, corValor, tipo, fnApagar) {
             const isDeb = t.debito > 0; const val = isDeb ? t.debito : t.credito;
             return `
-                <div class="flex flex-col md:flex-row justify-between p-4 border-b ${t.isDuplicate ? 'bg-yellow-100 hover:bg-yellow-200 border-yellow-300' : 'hover:bg-slate-50'}">
+                <div class="virt-row flex flex-col md:flex-row justify-between p-4 border-b ${t.isDuplicate ? 'bg-yellow-100 hover:bg-yellow-200 border-yellow-300' : 'hover:bg-slate-50'}">
                     <div class="flex-1 grid grid-cols-3 md:grid-cols-4 gap-2 items-center">
                         ${dataHtml}
                         <span class="text-sm text-slate-700 truncate col-span-2" title="${escapeHtml(t.descricao)}">${escapeHtml(t.descricao)}</span>
@@ -1831,7 +1834,7 @@
         // Renderiza no máximo LIMITE_LISTA linhas por vez; acima disso mostra um rodapé
         // "Mostrar mais" que amplia o limite. Evita travar o navegador com anos de
         // lançamentos. O limite volta ao padrão sempre que o filtro/conta muda.
-        const LIMITE_LISTA = 300;
+        const LIMITE_LISTA = 1000;
         let _bancoAte = LIMITE_LISTA, _bancoSig = null;
         let _cartaoAte = LIMITE_LISTA, _cartaoSig = null;
         function mostrarMaisBanco() { _bancoAte += LIMITE_LISTA; renderTransactionsBanco(); }
