@@ -166,7 +166,7 @@
                     </div>
                     <span id="orcamento-resumo" class="text-sm font-semibold text-slate-500"></span>
                 </div>
-                <div id="lista-orcamento" class="space-y-3"></div>
+                <div id="lista-orcamento" class="space-y-3 max-h-[320px] overflow-y-auto pr-2"></div>
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -379,9 +379,9 @@
                     <button onclick="excluirPrevisoesPorCategoria()" class="bg-rose-500 text-white px-3 py-1.5 rounded-md text-xs font-bold hover:bg-rose-600 transition">Excluir</button>
                 </div>
 
-                <div class="overflow-x-auto rounded-lg border border-slate-100">
+                <div class="overflow-auto max-h-[30rem] rounded-lg border border-slate-100">
                     <table class="w-full text-left text-sm text-slate-600">
-                        <thead class="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
+                        <thead class="bg-slate-50 text-slate-700 font-bold border-b border-slate-200 sticky top-0 z-10">
                             <tr>
                                 <th class="p-4 whitespace-nowrap">Data Prevista</th>
                                 <th class="p-4">Descrição</th>
@@ -834,9 +834,9 @@
                         <h3 class="text-base font-bold text-slate-700">Projeção mês a mês</h3>
                         <p id="quitacao-tabela-nota" class="text-xs text-slate-400 mt-1">Edite <b>Correção</b> e <b>Aporte</b> de cada mês; a projeção recalcula em cascata.</p>
                     </div>
-                    <div class="overflow-x-auto rounded-lg border border-slate-100">
+                    <div class="overflow-auto max-h-[36rem] rounded-lg border border-slate-100">
                         <table class="w-full text-left text-sm text-slate-600">
-                            <thead class="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
+                            <thead class="bg-slate-50 text-slate-700 font-bold border-b border-slate-200 sticky top-0 z-10">
                                 <tr id="quitacao-tabela-head"></tr>
                             </thead>
                             <tbody id="quitacao-tabela" class="divide-y divide-slate-100 bg-white"></tbody>
@@ -894,7 +894,7 @@
                         <input type="text" id="new-cat-despesa" placeholder="Nova despesa..." class="flex-1 text-sm border border-slate-200 rounded-md p-2 outline-none">
                         <button onclick="addCategory('despesas')" class="bg-rose-500 text-white px-3 py-2 rounded-md text-sm font-bold hover:bg-rose-600">+</button>
                     </div>
-                    <ul id="list-cat-despesas" class="divide-y divide-slate-100 text-sm max-h-[350px] overflow-y-auto pr-2"></ul>
+                    <ul id="list-cat-despesas" class="divide-y divide-slate-100 text-sm max-h-[172px] overflow-y-auto pr-2"></ul>
                 </div>
                 <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100 space-y-4">
                     <h2 class="font-bold text-emerald-600 text-base border-b pb-2 flex justify-between items-center"><span>Categorias de Receita</span></h2>
@@ -902,7 +902,7 @@
                         <input type="text" id="new-cat-receita" placeholder="Nova receita..." class="flex-1 text-sm border border-slate-200 rounded-md p-2 outline-none">
                         <button onclick="addCategory('receitas')" class="bg-emerald-500 text-white px-3 py-2 rounded-md text-sm font-bold hover:bg-emerald-600">+</button>
                     </div>
-                    <ul id="list-cat-receitas" class="divide-y divide-slate-100 text-sm max-h-[350px] overflow-y-auto pr-2"></ul>
+                    <ul id="list-cat-receitas" class="divide-y divide-slate-100 text-sm max-h-[172px] overflow-y-auto pr-2"></ul>
                 </div>
             </div>
 
@@ -930,7 +930,7 @@
                     <button onclick="salvarRegraCategoria()" class="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-indigo-700 transition">➕ Adicionar regra</button>
                     <button onclick="aplicarRegrasExistentes()" class="bg-slate-700 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-slate-800 transition">🔄 Aplicar aos lançamentos sem categoria</button>
                 </div>
-                <div id="lista-regras" class="mt-4 space-y-2"></div>
+                <div id="lista-regras" class="mt-4 space-y-2 max-h-[180px] overflow-y-auto pr-1"></div>
             </div>
 
             <div class="bg-slate-50 border-2 border-slate-200 rounded-xl p-5 sm:p-6">
