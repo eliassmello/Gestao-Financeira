@@ -588,6 +588,25 @@
                     </div>
                 </div>
                 <div id="lista-parcelamentos" class="space-y-2 max-h-64 overflow-y-auto pr-2"></div>
+
+                <div class="mt-5 pt-4 border-t border-slate-100">
+                    <div class="flex justify-between items-center mb-2 gap-3">
+                        <div class="min-w-0">
+                            <h3 class="font-bold text-slate-700 text-sm">🔁 Despesas Recorrentes do Cartão</h3>
+                            <p class="text-[11px] text-slate-400">Contas fixas que caem <b>todo mês</b> no cartão ativo (assinaturas, seguros etc.) — <b>não são parcelas</b>. Entram na Previsão e são <b>abatidas do valor do cartão</b> junto com as parcelas.</p>
+                        </div>
+                        <div class="bg-rose-50 px-3 py-1.5 rounded-lg border border-rose-100 text-right shrink-0">
+                            <span class="block text-[10px] font-bold text-rose-600 uppercase">Total/mês</span>
+                            <span id="desp-cartao-total" class="font-bold text-rose-600 text-sm">R$ 0,00</span>
+                        </div>
+                    </div>
+                    <div class="flex flex-col sm:flex-row gap-2 mb-3">
+                        <input type="text" id="desp-cartao-desc" placeholder="Descrição (ex.: Claude Anthropic)" class="flex-1 text-sm border border-slate-200 rounded-md p-2 outline-none focus:border-indigo-400">
+                        <input type="number" id="desp-cartao-valor" step="0.01" min="0" placeholder="Valor" class="w-full sm:w-32 text-sm border border-slate-200 rounded-md p-2 outline-none focus:border-indigo-400">
+                        <button onclick="adicionarDespesaCartao()" class="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-indigo-700 whitespace-nowrap">+ Adicionar</button>
+                    </div>
+                    <ul id="lista-despesas-cartao" class="divide-y divide-slate-50 text-sm border border-slate-100 rounded-lg max-h-40 overflow-y-auto"></ul>
+                </div>
             </div>
 
             <div class="bg-rose-50 p-4 rounded-xl shadow-sm border border-rose-100 flex flex-col md:flex-row items-center justify-between gap-4">
