@@ -1144,6 +1144,56 @@
         }
 
 
+        // ===== Despesas recorrentes do cartão (assinaturas, seguros etc.) =====
+        function renderDespesasCartao() {
+            const ul = document.getElementById('lista-despesas-cartao');
+            const totalEl = document.getElementById('desp-cartao-total');
+            if (!ul) return;
+            const itens = (appState.despesasCartao || []).filter(d => d.cartaoId === cartaoSelecionadoId);
+            const total = itens.reduce((s, d) => s + (Number(d.valor) || 0), 0);
+            if (totalEl) totalEl.innerText = formatCurrency(total);
+            if (itens.length === 0) {
+                ul.innerHTML = `<li class="px-4 py-3 text-xs text-slate-400">Nenhuma despesa recorrente cadastrada para este cartão.</li>`;
+                return;
+            }
+            ul.innerHTML = itens.map(d => `
+                <li class="flex justify-between items-center px-4 py-2 gap-2">
+                    <span class="text-slate-600 truncate mr-2">${escapeHtml(d.descricao)}</span>
+                    <span class="flex items-center gap-3 shrink-0">
+                        <span class="text-rose-600 font-medium whitespace-nowrap">${formatCurrency(Number(d.valor) || 0)}</span>
+                        <button onclick="excluirDespesaCartao('${d.id}')" title="Excluir" class="text-slate-300 hover:text-rose-600 font-bold">✕</button>
+                    </span>
+                </li>`).join('');
+        }
+
+        function adicionarDespesaCartao() {
+            const ativo = getCartaoAtivo();
+            if (!ativo) { alert("Cadastre um cartão primeiro."); return; }
+            const descEl = document.getElementById('desp-cartao-desc');
+            const valEl = document.getElementById('desp-cartao-valor');
+            const descricao = (descEl?.value || '').trim();
+            const valor = Math.round((parseFloat(valEl?.value) || 0) * 100) / 100;
+            if (!descricao) { alert("Informe a descrição da despesa."); return; }
+            if (!(valor > 0)) { alert("Informe um valor maior que zero."); return; }
+            appState.despesasCartao.push({
+                id: 'dc_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+                cartaoId: ativo.id, descricao, valor
+            });
+            if (descEl) descEl.value = '';
+            if (valEl) valEl.value = '';
+            sincronizarParcelasCartao();
+            saveData();
+            renderDespesasCartao();
+        }
+
+        function excluirDespesaCartao(id) {
+            appState.despesasCartao = (appState.despesasCartao || []).filter(d => d.id !== id);
+            sincronizarParcelasCartao();
+            saveData();
+            renderDespesasCartao();
+        }
+
+
         function adicionarFonteQuitacao() {
             const sel = document.getElementById('qp-add-investimento');
             const inv = appState.investimentos.find(i => i.id === sel.value);
@@ -1898,6 +1948,7 @@
             const container = document.getElementById('transactionsContainerCartao');
             ativarSelectsPreguicosos('transactionsContainerCartao');
             safeRun(renderParcelamentosFuturos);
+            safeRun(renderDespesasCartao);
             const filter = document.getElementById('filterSelectCartao') ? document.getElementById('filterSelectCartao').value : 'todos';
             const filterMesEl = document.getElementById('filterMesCartao');
             const filterMes = filterMesEl ? filterMesEl.value : 'todos';
@@ -2033,6 +2084,7 @@
             const n = appState.ccTransactions.filter(t => (t.cartaoId || null) === ativo.id).length;
             if (!confirm(`Excluir o cartão "${ativo.nome}"?${n ? `\n\nOs ${n} lançamento(s) deste cartão também serão apagados.` : ''}`)) return;
             appState.ccTransactions = appState.ccTransactions.filter(t => (t.cartaoId || null) !== ativo.id);
+            appState.despesasCartao = (appState.despesasCartao || []).filter(d => d.cartaoId !== ativo.id);
             appState.cartoes = appState.cartoes.filter(c => c.id !== ativo.id);
             cartaoSelecionadoId = appState.cartoes[0].id;
             // remove também as previsões de parcelas geradas para o cartão excluído
@@ -2986,7 +3038,7 @@
                     criptoAtivada = false; chaveSessao = null; criptoSalt = null; senhaSessao = null;
                     db.seguro.clear().catch(() => {});
                     db.config.delete('cripto').catch(() => {});
-                    appState = { saldoInicial: 0, contas: [], cartoes: [], transactions: [], ccTransactions: [], futureTransactions: [], investimentos: [], categories: { despesas: ["Outros"], receitas: ["Outros"] }, orcamentos: {}, comprasParceladas: [], recorrencias: [], regrasCategoria: [], limiteDiasNegativos: 10, notificarVencimentos: false };
+                    appState = { saldoInicial: 0, contas: [], cartoes: [], despesasCartao: [], transactions: [], ccTransactions: [], futureTransactions: [], investimentos: [], categories: { despesas: ["Outros"], receitas: ["Outros"] }, orcamentos: {}, comprasParceladas: [], recorrencias: [], regrasCategoria: [], limiteDiasNegativos: 10, notificarVencimentos: false };
                     garantirContas(); garantirCartoes(); renderContasUI(); preencherFormConta(); renderCartoesUI();
                     alert("O banco de dados foi completamente zerado. Defina uma nova senha para continuar.");
                     mostrarTelaCriarSenha();

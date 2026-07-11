@@ -42,6 +42,7 @@
             saldoInicial: 0,
             contas: [],
             cartoes: [],
+            despesasCartao: [],
             transactions: [],
             ccTransactions: [],
             futureTransactions: [],
@@ -106,6 +107,7 @@
             appState.recorrencias = appState.recorrencias || [];
             appState.regrasCategoria = appState.regrasCategoria || [];
             appState.cartoes = appState.cartoes || [];
+            appState.despesasCartao = appState.despesasCartao || [];
             if (appState.notificarVencimentos === undefined) appState.notificarVencimentos = false;
             if (appState.limiteDiasNegativos === undefined || appState.limiteDiasNegativos === null) appState.limiteDiasNegativos = 10;
             if (appState.ultimoBackup === undefined) appState.ultimoBackup = null;
@@ -209,6 +211,7 @@
                     appState.backupAdiadoAte = confObj.backupAdiadoAte || null;
                     appState.contas = confObj.contas || [];
                     appState.cartoes = confObj.cartoes || [];
+                    appState.despesasCartao = confObj.despesasCartao || [];
                     appState.transactions = tr || [];
                     appState.ccTransactions = cr || [];
                     appState.futureTransactions = pr || [];
@@ -235,7 +238,7 @@
                 }
                 // Modo padrão (texto puro) — inalterado
                 await db.transaction('rw', db.transacoes, db.cartao, db.previsoes, db.investimentos, db.config, async () => {
-                    await db.config.put({ id: 'global', saldoInicial: appState.saldoInicial, categories: appState.categories, orcamentos: appState.orcamentos, comprasParceladas: appState.comprasParceladas, recorrencias: appState.recorrencias, regrasCategoria: appState.regrasCategoria, notificarVencimentos: appState.notificarVencimentos, limiteDiasNegativos: appState.limiteDiasNegativos, contas: appState.contas, cartoes: appState.cartoes, ultimoBackup: appState.ultimoBackup, backupAdiadoAte: appState.backupAdiadoAte });
+                    await db.config.put({ id: 'global', saldoInicial: appState.saldoInicial, categories: appState.categories, orcamentos: appState.orcamentos, comprasParceladas: appState.comprasParceladas, recorrencias: appState.recorrencias, regrasCategoria: appState.regrasCategoria, notificarVencimentos: appState.notificarVencimentos, limiteDiasNegativos: appState.limiteDiasNegativos, contas: appState.contas, cartoes: appState.cartoes, despesasCartao: appState.despesasCartao, ultimoBackup: appState.ultimoBackup, backupAdiadoAte: appState.backupAdiadoAte });
                     await db.transacoes.clear(); if(appState.transactions.length > 0) await db.transacoes.bulkPut(appState.transactions);
                     await db.cartao.clear(); if(appState.ccTransactions.length > 0) await db.cartao.bulkPut(appState.ccTransactions);
                     await db.previsoes.clear(); if(appState.futureTransactions.length > 0) await db.previsoes.bulkPut(appState.futureTransactions);
@@ -1020,11 +1023,27 @@
 
         function _mesAnoDe(dataBR) { const p = String(dataBR || '').split('/'); return p.length === 3 ? `${p[2]}-${p[1]}` : ''; }
 
-        // Sincroniza as PARCELAS de TODOS os cartões na Previsão: para cada cartão e cada
-        // mês futuro, cria uma saída com o total das parcelas daquele mês, na data de
-        // vencimento do cartão (categoria = nome do cartão). Idempotente — regenera as
-        // previsões de cartão não conciliadas e preserva as já conciliadas (efetivadas).
-        // Retorna true se algo mudou (para o chamador salvar).
+        // Despesas RECORRENTES do cartão (assinaturas, seguros etc. — não são parcelas):
+        // repetem todo mês. Retorna { numMes(ano*12+mes) -> total } do mês atual até o
+        // horizonte, para o cartão informado.
+        function _despesasRecorrentesCartaoPorMes(cartaoId) {
+            const totalMes = (appState.despesasCartao || [])
+                .filter(d => d.cartaoId === cartaoId)
+                .reduce((s, d) => s + (Number(d.valor) || 0), 0);
+            const out = {};
+            if (totalMes <= 0.005) return out;
+            const hoje = new Date();
+            const baseNum = hoje.getFullYear() * 12 + (hoje.getMonth() + 1);
+            for (let i = 0; i <= HORIZONTE_RECORRENCIA_MESES; i++) out[baseNum + i] = totalMes;
+            return out;
+        }
+
+        // Sincroniza as PARCELAS + DESPESAS RECORRENTES de TODOS os cartões na Previsão:
+        // para cada cartão e cada mês futuro, cria uma saída com o total (parcelas do mês +
+        // despesas recorrentes fixas), na data de vencimento do cartão (categoria = nome do
+        // cartão). Esse total também é abatido do lançamento recorrente de mesmo nome.
+        // Idempotente — regenera as previsões de cartão não conciliadas e preserva as já
+        // conciliadas (efetivadas). Retorna true se algo mudou (para o chamador salvar).
         function sincronizarParcelasCartao() {
             const conciliadas = new Set(
                 appState.futureTransactions
@@ -1034,21 +1053,27 @@
             const desejadas = [];
             for (const cartao of (appState.cartoes || [])) {
                 const porMes = calcularParcelamentosFuturos(cartao.id);
+                const despMes = _despesasRecorrentesCartaoPorMes(cartao.id);
                 const dia = Math.min(Math.max(parseInt(cartao.diaVencimento, 10) || 10, 1), 31);
-                for (const nStr in porMes) {
+                const meses = new Set([...Object.keys(porMes), ...Object.keys(despMes)]);
+                for (const nStr of meses) {
                     const n = parseInt(nStr, 10);
                     const ano = Math.floor((n - 1) / 12), mes = ((n - 1) % 12) + 1;
-                    const total = porMes[nStr].reduce((s, p) => s + (Number(p.valor) || 0), 0);
+                    const totalParc = (porMes[nStr] || []).reduce((s, p) => s + (Number(p.valor) || 0), 0);
+                    const totalDesp = despMes[nStr] || 0;
+                    const total = totalParc + totalDesp;
                     if (total <= 0.005) continue;
                     const ym = `${ano}-${String(mes).padStart(2, '0')}`;
                     if (conciliadas.has(`${cartao.id}|${ym}`)) continue;  // já efetivada: não regenera
                     const ultimoDia = new Date(ano, mes, 0).getDate();
                     const d = Math.min(dia, ultimoDia);
                     const dataBR = `${String(d).padStart(2, '0')}/${String(mes).padStart(2, '0')}/${ano}`;
+                    const temParc = totalParc > 0.005, temDesp = totalDesp > 0.005;
+                    const rotulo = (temParc && temDesp) ? 'parcelas + recorrentes' : (temDesp ? 'recorrentes' : 'parcelas');
                     desejadas.push({
                         id: `cartao_${cartao.id}_${ano}${String(mes).padStart(2, '0')}`,
                         data: dataBR, tipo: 'debito', valor: Math.round(total * 100) / 100,
-                        descricao: `Fatura ${cartao.nome} (parcelas)`, categoria: cartao.nome,
+                        descricao: `Fatura ${cartao.nome} (${rotulo})`, categoria: cartao.nome,
                         investimentoId: '', origemCartaoId: cartao.id
                     });
                 }
@@ -1785,6 +1810,7 @@
             if (!appState.recorrencias) appState.recorrencias = [];
             if (!appState.regrasCategoria) appState.regrasCategoria = [];
             if (!appState.cartoes) appState.cartoes = [];
+            if (!appState.despesasCartao) appState.despesasCartao = [];
             if (appState.limiteDiasNegativos === undefined || appState.limiteDiasNegativos === null) appState.limiteDiasNegativos = 10;
             if (!appState.contas) appState.contas = [];
             garantirContas();
