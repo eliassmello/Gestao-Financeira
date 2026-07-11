@@ -146,3 +146,4 @@ Aplicativo de orçamento pessoal que roda direto no navegador, funciona **offlin
 | Os dados sumiram | Verifique se está no mesmo navegador/perfil; restaure um backup |
 | Quero recomeçar do zero | Config → Zona de Perigo → Zerar banco de dados (faça backup antes!) |
 | Importação não reconheceu o arquivo | Confirme o formato: extrato `.ofx/.xls/.xlsx/.csv`, cartão `.txt/.csv` |
+| Datas do extrato `.csv` vinham um mês/dia atrás | Corrigido: o `.csv` agora é lido no formato pt-BR **dd/mm/aaaa**, sem interpretação americana |
