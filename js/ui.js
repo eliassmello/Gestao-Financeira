@@ -264,15 +264,21 @@
                     r.readAsText(file, 'UTF-8');
                     return;
                 }
+                // CSV: lê os valores como texto puro (raw), sem deixar o SheetJS "adivinhar"
+                // datas. Isso evita o bug de nacionalização em que uma data pt-BR dd/mm/aaaa
+                // com dia <= 12 (ex.: 05/09) era interpretada como mês/dia (americano) e, no
+                // fuso do Brasil (UTC-3), acabava um mês/dia atrás (05/09 -> 05/08). Assim a
+                // data chega ao parser abaixo exatamente como está no arquivo.
+                const isCsv = (file.name || '').toLowerCase().endsWith('.csv');
                 const reader = new FileReader();
                 reader.onload = function(evt) {
                     try {
                         const data = new Uint8Array(evt.target.result);
-                        const workbook = XLSX.read(data, { type: 'array' });
+                        const workbook = XLSX.read(data, isCsv ? { type: 'array', raw: true } : { type: 'array' });
                         const firstSheetName = workbook.SheetNames[0];
                         const worksheet = workbook.Sheets[firstSheetName];
-                        
-                        const json = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false, dateNF: 'dd/mm/yyyy' });
+
+                        const json = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: isCsv, dateNF: 'dd/mm/yyyy' });
                         
                         let headerRowIndex = -1;
                         let finalIdxData = -1, finalIdxDesc = -1, finalIdxValor = -1, finalIdxCredito = -1, finalIdxDebito = -1, finalIdxCat = -1;
@@ -319,7 +325,7 @@
                             let dataRaw = row[finalIdxData];
                             if (!dataRaw) continue;
                             
-                            let dataStr = String(dataRaw).trim();
+                            let dataStr = String(dataRaw).trim().split(' ')[0];  // descarta hora, se houver
                             if (dataStr.match(/^\d{4}-\d{2}-\d{2}/)) {
                                 const p = dataStr.split('T')[0].split('-');
                                 dataStr = `${p[2]}/${p[1]}/${p[0]}`;
