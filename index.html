@@ -562,15 +562,12 @@
             <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
                 <div class="flex flex-col lg:flex-row gap-4 lg:items-end">
                     <div class="bg-amber-50 p-3 rounded-lg border border-amber-100 flex flex-wrap items-end gap-3">
-                        <h3 class="w-full text-xs font-bold text-amber-800">1. Dados da fatura a importar (cartão ativo)</h3>
+                        <h3 class="w-full text-xs font-bold text-amber-800">1. Mês da fatura a importar (cartão ativo)</h3>
                         <div>
                             <label class="block text-[10px] font-semibold text-slate-500 uppercase mb-1">Mês da Fatura</label>
                             <input type="month" id="fatura-mes" class="text-sm border border-slate-200 rounded-md p-1.5 outline-none focus:ring-1 focus:ring-amber-500 bg-white">
                         </div>
-                        <div>
-                            <label class="block text-[10px] font-semibold text-slate-500 uppercase mb-1">Dia do Venc.</label>
-                            <input type="number" id="fatura-dia" min="1" max="31" placeholder="Ex: 10" class="w-24 text-sm border border-slate-200 rounded-md p-1.5 outline-none focus:ring-1 focus:ring-amber-500 bg-white">
-                        </div>
+                        <p class="w-full text-[10px] text-slate-500">O <b>dia do vencimento</b> é o do cadastro do cartão ativo (<b id="fatura-dia-info">—</b>). Ajuste-o em <b>💳 Meus Cartões</b>.</p>
                     </div>
                     <div class="flex-1 min-w-0">
                         <h3 class="text-xs font-bold text-slate-700 mb-1">2. Importar Extrato (<b>.txt</b>, <b>.csv</b>) ou Fatura em <b>.pdf</b> (Santander ou Caixa)</h3>
@@ -924,11 +921,6 @@
         </section>
 
         <section id="tab-config" class="tab-content hidden space-y-6">
-            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100 space-y-2">
-                <h2 class="font-bold text-slate-700 text-lg">Saldo Inicial das Contas</h2>
-                <p class="text-sm text-slate-500 pb-2">O saldo inicial agora é definido <b>por conta corrente</b>. Crie, renomeie, ajuste o saldo inicial e escolha quais contas refletem no Dashboard/Previsão na aba <b>🏦 Conta Corrente</b>.</p>
-                <button onclick="switchTab('extrato')" class="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-indigo-700">Gerenciar Contas Correntes</button>
-            </div>
 
             <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
                 <h2 class="font-bold text-slate-700 text-lg mb-1">🔔 Notificações de contas a vencer</h2>

@@ -53,7 +53,8 @@ Aplicativo de orçamento pessoal que roda direto no navegador, funciona **offlin
 ### 💳 Cartão de Crédito
 - **💳 Múltiplos cartões**: cadastre vários cartões, cada um com **nome** e **dia de vencimento** próprios. Selecione o cartão ativo pelos "chips" para ver/importar a fatura dele; a lista de lançamentos e os parcelamentos passam a ser **por cartão**. O nome do cartão também é criado como **categoria de despesa** (renomear o cartão propaga para a categoria e para os lançamentos). O cartão que já existia é migrado automaticamente para **"cartão atual"** (renomeável).
 - **🔁 Parcelas na Previsão**: as parcelas futuras de **todos os cartões** são lançadas automaticamente na **Previsão**, uma saída por cartão por mês (o total das parcelas daquele mês) na **data de vencimento do cartão**. Sincroniza sozinho quando a lista de parcelamentos muda; previsões já **efetivadas** (✔) são preservadas.
-- **Importação de fatura** (**.txt, .csv** ou **.pdf**), informando o **mês da fatura** e o **dia de vencimento**, no **cartão ativo**.
+- **Desconto no pagamento recorrente**: se você tiver um **lançamento recorrente com a categoria = nome do cartão** (o pagamento da fatura), o total das **parcelas do mês é descontado desse lançamento** — as parcelas continuam **visíveis** e o total não conta em dobro (a recorrência mostra o "restante" da fatura).
+- **Importação de fatura** (**.txt, .csv** ou **.pdf**), informando apenas o **mês da fatura**, no **cartão ativo** — o **dia de vencimento vem do cadastro do cartão**.
 - **Fatura em PDF**: reconhece automaticamente o layout do **Santander** (seções *Despesas / Parcelamentos / Pagamento e Demais Créditos*) e da **Caixa/CEF** (seção *Demonstrativo* com a coluna *Crédito/Débito*). Em ambos, os **parcelamentos** ("N DE N" ou "N/N") vão para o campo Parcela, os **créditos/estornos** entram como entradas e as **compras internacionais** importam o valor em **R$** (o valor em US$ é ignorado). Faturas com mais de um portador (cartões adicionais) são importadas juntas; reimportar a mesma fatura não duplica os lançamentos.
 - Lançamentos **agrupados por fatura (mês de vencimento)**, da mais recente para a mais antiga, com **cabeçalho por fatura** (nº de lançamentos e total líquido); dentro de cada fatura, ordenados pela **data da compra**.
 - **💳 Parcelamentos Futuros do Cartão** fica nesta aba (quadro com rolagem própria, logo acima da Área de Risco): projeção das parcelas restantes ("Parc. N/M") das faturas importadas, mês a mês, com total comprometido.
@@ -101,7 +102,7 @@ Aplicativo de orçamento pessoal que roda direto no navegador, funciona **offlin
 - Um **banner no topo** avisa sobre saídas previstas que vencem nos **próximos 3 dias**. Em **Config**, você pode autorizar **notificações do sistema** (aparecem ao abrir o app).
 
 ### ⚙️ Configurações
-- A aba é organizada em: **Saldo inicial**, **Notificações**, **Categorias**, **Regras de categorização** e uma caixa **🔐 Segurança** (senha do app, backups e zona de perigo) reunida no final.
+- A aba é organizada em: **Notificações**, **Categorias**, **Regras de categorização** e uma caixa **🔐 Segurança** (senha do app, backups e zona de perigo) reunida no final. (O saldo inicial é definido por conta na aba **🏦 Conta Corrente**.)
 - Cadastro e exclusão de **categorias** de despesa e de receita.
 - **🏷️ Regras de categorização editáveis**: crie regras *"se a descrição contém X → categoria Y"* (por tipo). Elas têm **prioridade** ao categorizar importações (extratos, faturas, OFX) e podem ser **aplicadas de uma vez** aos lançamentos que ainda estão sem categoria.
 - **Orçamento mensal por categoria de despesa**: informe um limite (R$) ao lado de cada categoria para acompanhá-la no painel 🎯 do Dashboard; deixe em branco para não acompanhar.
