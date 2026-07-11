@@ -1052,13 +1052,44 @@
                     });
                 }
             }
+            let mudou = false;
             const atuais = appState.futureTransactions.filter(f => f.origemCartaoId && !f.conciliado);
             const sig = (arr) => arr.map(f => `${f.origemCartaoId}|${f.data}|${f.valor}|${f.descricao}`).sort().join(';');
-            if (sig(atuais) === sig(desejadas)) return false;
-            appState.futureTransactions = appState.futureTransactions
-                .filter(f => !(f.origemCartaoId && !f.conciliado))
-                .concat(desejadas);
-            return true;
+            if (sig(atuais) !== sig(desejadas)) {
+                appState.futureTransactions = appState.futureTransactions
+                    .filter(f => !(f.origemCartaoId && !f.conciliado))
+                    .concat(desejadas);
+                mudou = true;
+            }
+
+            // Desconto: o LANÇAMENTO RECORRENTE do cartão (categoria = nome do cartão),
+            // que representa o pagamento da fatura, tem seu valor reduzido pelas PARCELAS
+            // daquele mês. Assim as parcelas ficam visíveis e o total não conta em dobro
+            // (recorrência mostra o "restante" da fatura). Idempotente: parte sempre do
+            // valor-base da recorrência (rec.valor).
+            const nomesCartao = new Set((appState.cartoes || []).map(c => c.nome));
+            const parcPorNomeMes = {};
+            for (const d of desejadas) {
+                const ym = _mesAnoDe(d.data);
+                parcPorNomeMes[`${d.categoria}|${ym}`] = (parcPorNomeMes[`${d.categoria}|${ym}`] || 0) + d.valor;
+            }
+            const jaReduzido = new Set();
+            for (const f of appState.futureTransactions) {
+                if (!f.recorrenciaId || f.conciliado || f.origemCartaoId) continue;
+                if (!nomesCartao.has(f.categoria)) continue;
+                const rec = appState.recorrencias.find(r => r.id === f.recorrenciaId);
+                if (!rec) continue;
+                const base = Number(rec.valor) || 0;
+                const ym = _mesAnoDe(f.data);
+                const chave = `${f.categoria}|${ym}`;
+                let novo = base;
+                if (!jaReduzido.has(chave)) {  // desconta as parcelas só na 1ª ocorrência do mês
+                    jaReduzido.add(chave);
+                    novo = Math.max(0, Math.round((base - (parcPorNomeMes[chave] || 0)) * 100) / 100);
+                }
+                if (Math.abs((Number(f.valor) || 0) - novo) > 0.005) { f.valor = novo; mudou = true; }
+            }
+            return mudou;
         }
 
 

@@ -226,14 +226,18 @@
                 let anoFaturaCartao = "";
 
                 const fatMes = document.getElementById('fatura-mes').value;
-                const fatDia = document.getElementById('fatura-dia').value;
-                if (!fatMes || !fatDia) {
-                    alert("Informe o Mês da Fatura e o Dia do Vencimento ANTES de selecionar o arquivo.");
+                const cartaoAtivo = getCartaoAtivo();
+                if (!cartaoAtivo) { alert("Cadastre/selecione um cartão antes de importar a fatura."); e.target.value = ''; return; }
+                if (!fatMes) {
+                    alert("Informe o Mês da Fatura ANTES de selecionar o arquivo.");
                     e.target.value = ''; return;
                 }
+                const fatDia = Math.min(Math.max(parseInt(cartaoAtivo.diaVencimento, 10) || 10, 1), 31); // do cadastro do cartão
                 const [anoFat, mesFat] = fatMes.split('-');
-                anoFaturaCartao = anoFat; 
-                dataVencimentoFatura = `${String(fatDia).padStart(2, '0')}/${mesFat}/${anoFat}`;
+                anoFaturaCartao = anoFat;
+                const ultimoDiaMes = new Date(Number(anoFat), Number(mesFat), 0).getDate();
+                const diaVenc = Math.min(fatDia, ultimoDiaMes);
+                dataVencimentoFatura = `${String(diaVenc).padStart(2, '0')}/${mesFat}/${anoFat}`;
 
                 if ((file.name || '').toLowerCase().endsWith('.pdf')) {
                     importarPdfFaturaCartao(file, e, dataVencimentoFatura, anoFaturaCartao);
@@ -1978,9 +1982,9 @@
             const ativo = getCartaoAtivo();
             const nome = document.getElementById('cartao-nome'); if (nome && ativo) nome.value = ativo.nome;
             const dia = document.getElementById('cartao-dia-venc'); if (dia && ativo) dia.value = ativo.diaVencimento || '';
-            // preenche o dia da fatura a importar com o vencimento do cartão ativo
-            const fatDia = document.getElementById('fatura-dia');
-            if (fatDia && ativo && !fatDia.value) fatDia.value = ativo.diaVencimento || '';
+            // mostra, na importação, o dia de vencimento vindo do cadastro do cartão ativo
+            const fatDiaInfo = document.getElementById('fatura-dia-info');
+            if (fatDiaInfo) fatDiaInfo.innerText = ativo ? `dia ${ativo.diaVencimento || 10}` : '—';
         }
 
         function selecionarCartao(id) {
