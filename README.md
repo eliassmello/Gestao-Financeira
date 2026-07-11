@@ -66,6 +66,7 @@ Aplicativo de orçamento pessoal que roda direto no navegador, funciona **offlin
 - **💰 Patrimônio Líquido (BRL)**: quando há compras em **Quitação**, aparece um cartão com o patrimônio em reais **menos o saldo devedor** das parcelas ainda em aberto a partir do mês da Fotografia — o quanto sobraria se você quitasse as dívidas.
 - **"Fotografia do patrimônio"**: veja o saldo consolidado em qualquer mês/ano.
 - Cadastro de vários investimentos (nome, instituição e moeda).
+- **⏳ Liquidez (D+)**: informe quantos dias antes você precisa dar a **ordem de resgate** (D+0, D+3, D+15, D+30…). Sempre que houver um **Resgate** agendado na 📅 Previsão para esse investimento, o app cria automaticamente uma **linha-lembrete de valor R$ 0** essa quantidade de dias antes — para você lembrar de emitir a ordem de saque a tempo. O lembrete é recalculado sozinho se a data do resgate ou o D+ mudar.
 - **Histórico/evolução** de cada investimento com saldo anterior, aporte, taxa, rendimento, resgate e saldo final, em **data dia/mês/ano**.
 - **Cálculo de rendimento automático** em cascata:
   - Rendimento **mensal** (taxa anual ÷ 12) para lançamentos de fim de mês.

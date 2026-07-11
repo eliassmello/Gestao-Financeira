@@ -68,6 +68,8 @@
             try { if (gerarLancamentosRecorrentes()) await saveToDB(); } catch(e) {}
             // Sincroniza as parcelas dos cartões na Previsão
             try { if (sincronizarParcelasCartao()) await saveToDB(); } catch(e) {}
+            // Gera os lembretes de resgate (D+X) na Previsão
+            try { if (sincronizarLembretesResgate()) await saveToDB(); } catch(e) {}
 
             // Backup automático em pasta (desktop): tenta sincronizar ao abrir. Se a
             // permissão da pasta ainda não foi concedida nesta sessão, mostra um banner
@@ -2370,16 +2372,17 @@
             const banco = document.getElementById('inv-banco').value.trim();
             const moeda = document.getElementById('inv-moeda').value;
             const ignorarPatrimonio = document.getElementById('inv-ignorar-patrimonio').checked;
+            const diasResgate = Math.min(Math.max(parseInt(document.getElementById('inv-dias-resgate').value, 10) || 0, 0), 365);
 
             if (!nome || !banco) { alert("Preencha nome e instituição!"); return; }
             if (id === 'novo') {
                 const novoId = 'inv_' + Date.now();
                 const filterMonth = document.getElementById('inv-month-filter')?.value || new Date().toISOString().split('T')[0].substring(0,7);
-                appState.investimentos.push({ id: novoId, nome, banco, moeda, ignorarPatrimonio, valor: 0, valorInicial: 0, historico: [], data: filterMonth + "-01" });
+                appState.investimentos.push({ id: novoId, nome, banco, moeda, ignorarPatrimonio, diasResgate, valor: 0, valorInicial: 0, historico: [], data: filterMonth + "-01" });
                 document.getElementById('inv-select').value = novoId;
             } else {
                 const inv = appState.investimentos.find(i => i.id === id);
-                if (inv) { inv.nome = nome; inv.banco = banco; inv.moeda = moeda; inv.ignorarPatrimonio = ignorarPatrimonio; }
+                if (inv) { inv.nome = nome; inv.banco = banco; inv.moeda = moeda; inv.ignorarPatrimonio = ignorarPatrimonio; inv.diasResgate = diasResgate; }
             }
             saveData();
         }
@@ -2391,6 +2394,7 @@
                 document.getElementById('inv-nome').value = '';
                 document.getElementById('inv-banco').value = '';
                 document.getElementById('inv-ignorar-patrimonio').checked = false;
+                document.getElementById('inv-dias-resgate').value = '';
                 document.getElementById('inv-nome').disabled = false;
                 document.getElementById('inv-banco').disabled = false;
                 document.getElementById('investimentoHeader').classList.add('hidden');
@@ -2402,6 +2406,7 @@
                     document.getElementById('inv-banco').value = inv.banco;
                     document.getElementById('inv-moeda').value = inv.moeda;
                     document.getElementById('inv-ignorar-patrimonio').checked = inv.ignorarPatrimonio || false;
+                    document.getElementById('inv-dias-resgate').value = inv.diasResgate || '';
                     exibirDetalheInvestimento(id);
                 }
             }

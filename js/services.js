@@ -247,6 +247,7 @@
         
         function saveData() {
             _optsCache = {};
+            safeRun(sincronizarLembretesResgate);   // mantém os lembretes de resgate em dia
             saveToDB().then(() => {
                 cachedSaldoAtual = null;
                 updateSaldoDisplay();
@@ -1090,6 +1091,38 @@
                 if (Math.abs((Number(f.valor) || 0) - novo) > 0.005) { f.valor = novo; mudou = true; }
             }
             return mudou;
+        }
+
+
+        // Lembretes de resgate: para cada RESGATE previsto (Entrada refletida num
+        // investimento) cujo investimento tem "diasResgate" > 0, cria uma linha de
+        // lembrete na Previsão com valor R$ 0, "diasResgate" dias ANTES da data do
+        // resgate — para lembrar de dar a ordem de desaplicação. Idempotente: regenera
+        // os lembretes não conciliados e preserva os já conciliados.
+        function sincronizarLembretesResgate() {
+            const desejados = [];
+            for (const f of appState.futureTransactions) {
+                if (f.lembreteResgateDe || f.conciliado) continue;
+                if (!f.investimentoId || f.tipo !== 'credito') continue;  // resgate = Entrada refletida
+                const inv = appState.investimentos.find(i => i.id === f.investimentoId);
+                const dias = inv ? (parseInt(inv.diasResgate, 10) || 0) : 0;
+                if (dias <= 0) continue;
+                const dResg = converterDataBRParaDate(f.data);
+                const dLemb = new Date(dResg.getTime() - dias * 86400000);
+                const dataBR = `${String(dLemb.getDate()).padStart(2, '0')}/${String(dLemb.getMonth() + 1).padStart(2, '0')}/${dLemb.getFullYear()}`;
+                desejados.push({
+                    id: `lembrete_${f.id}`, data: dataBR, tipo: 'credito', valor: 0,
+                    descricao: `🔔 Ordem de resgate: ${inv.nome} — D+${dias} (resgate em ${f.data})`,
+                    categoria: '', investimentoId: '', lembreteResgateDe: f.id
+                });
+            }
+            const atuais = appState.futureTransactions.filter(f => f.lembreteResgateDe && !f.conciliado);
+            const sig = (arr) => arr.map(f => `${f.lembreteResgateDe}|${f.data}|${f.descricao}`).sort().join(';');
+            if (sig(atuais) === sig(desejados)) return false;
+            appState.futureTransactions = appState.futureTransactions
+                .filter(f => !(f.lembreteResgateDe && !f.conciliado))
+                .concat(desejados);
+            return true;
         }
 
 
