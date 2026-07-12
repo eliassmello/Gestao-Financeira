@@ -481,11 +481,21 @@
                 }
                 
                 let addedCount = 0;
-                // Deduplica contra o que JA existia antes desta importacao (evita
-                // reimportar a mesma fatura), mas preserva itens identicos dentro do
-                // proprio arquivo — comuns em faturas com mais de um portador, onde a
-                // mesma compra (loja/dia/valor) pode aparecer legitimamente em cada cartao.
-                const existentesAntes = appState.ccTransactions.slice();
+                // Deduplica por OCORRENCIA (multiset), nao por presenca: monta a contagem
+                // do que JA existia antes desta importacao. Cada lancamento novo "consome"
+                // uma ocorrencia existente identica (reimportacao da mesma fatura nao
+                // duplica); esgotada a contagem, os iguais seguintes sao adicionados. Assim
+                // uma fatura com o MESMO lancamento repetido de forma legitima (ex.: a mesma
+                // assinatura em dois cartoes/portadores) importa todas as ocorrencias e
+                // continua batendo com o total da fatura.
+                const chaveDedup = (cartaoId, desc, dataCompra, valor) =>
+                    `${cartaoId || ''}|${desc}|${dataCompra}|${(Math.round((Number(valor) || 0) * 100) / 100).toFixed(2)}`;
+                const contagemExistente = new Map();
+                for (const t of appState.ccTransactions) {
+                    const mag = (Number(t.debito) || 0) + (Number(t.credito) || 0);
+                    const k = chaveDedup(t.cartaoId || null, t.descricao, t.dataCompra, mag);
+                    contagemExistente.set(k, (contagemExistente.get(k) || 0) + 1);
+                }
                 for (let i = headerIndex + 1; i < lines.length; i++) {
                     const line = lines[i].trim();
                     if (!line) continue;
@@ -535,11 +545,12 @@
                     const realUniqueId = 'cc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9) + '_' + i;
                     
                     const cartaoAtivoId = getCartaoAtivo() ? getCartaoAtivo().id : cartaoSelecionadoId;
-                    const exists = existentesAntes.some(t =>
-                        (t.cartaoId || null) === (cartaoAtivoId || null) &&
-                        t.descricao === descricaoFinal && t.dataCompra === dataOriginalCompraCompleta && Math.abs((t.debito || t.credito) - valor) < 0.01
-                    );
-                    if (!exists) {
+                    const kDedup = chaveDedup(cartaoAtivoId || null, descricaoFinal, dataOriginalCompraCompleta, valor);
+                    const restante = contagemExistente.get(kDedup) || 0;
+                    if (restante > 0) {
+                        // Ja existe uma ocorrencia igual (reimportacao): consome e nao duplica.
+                        contagemExistente.set(kDedup, restante - 1);
+                    } else {
                         appState.ccTransactions.push({
                             id: realUniqueId, data: dataVencimentoReal, dataCompra: dataOriginalCompraCompleta,
                             descricao: descricaoFinal, credito: credito, debito: debito, categoria: finalCat || '', isDuplicate: false,
