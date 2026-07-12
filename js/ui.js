@@ -318,6 +318,20 @@
                         }
 
                         let addedCount = 0;
+                        // Dedup por OCORRENCIA (multiset): conta o que JA existia antes desta
+                        // importacao. Cada lancamento novo "consome" uma ocorrencia existente
+                        // identica (reimportar o mesmo extrato nao duplica); esgotada a contagem,
+                        // os iguais SEGUINTES sao adicionados — assim lancamentos legitimamente
+                        // repetidos no MESMO extrato (mesma data/valor/descricao) entram todos.
+                        const chaveDedupBco = (contaId, desc, data, valor) =>
+                            `${contaId || ''}|${desc}|${data}|${(Math.round((Number(valor) || 0) * 100) / 100).toFixed(2)}`;
+                        const contagemBco = new Map();
+                        for (const t of appState.transactions) {
+                            if (t.contaId !== contaSelecionadaId) continue;
+                            const mag = (Number(t.debito) || 0) + (Number(t.credito) || 0);
+                            const k = chaveDedupBco(t.contaId, t.descricao, t.data, mag);
+                            contagemBco.set(k, (contagemBco.get(k) || 0) + 1);
+                        }
                         for (let i = headerRowIndex + 1; i < json.length; i++) {
                             const row = json[i];
                             if (!row || !row.length) continue;
@@ -395,15 +409,13 @@
                             }
 
                             const realUniqueId = 'bco_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9) + '_' + i;
-                            
-                            const exists = appState.transactions.some(t =>
-                                t.contaId === contaSelecionadaId &&
-                                t.descricao === descricao &&
-                                t.data === dataStr &&
-                                Math.abs((t.debito || t.credito) - (debito || credito)) < 0.01
-                            );
 
-                            if (!exists) {
+                            const kBco = chaveDedupBco(contaSelecionadaId, descricao, dataStr, (debito || credito));
+                            const restanteBco = contagemBco.get(kBco) || 0;
+                            if (restanteBco > 0) {
+                                // Ja existia uma ocorrencia igual (reimportacao): consome e nao duplica.
+                                contagemBco.set(kBco, restanteBco - 1);
+                            } else {
                                 appState.transactions.push({
                                     id: realUniqueId, data: dataStr, descricao: descricao, contaId: contaSelecionadaId,
                                     credito: credito, debito: debito, categoria: finalCat || '', isDuplicate: false
@@ -439,19 +451,33 @@
                 const txns = parseOFX(texto);
                 if (!txns.length) { alert("Nenhum lançamento encontrado no arquivo OFX. Confira se é um extrato .ofx válido."); e.target.value = ''; return; }
                 const fitidsExistentes = new Set(appState.transactions.filter(t => t.contaId === contaSelecionadaId && t.fitid).map(t => t.fitid));
+                // Sem FITID: dedup por OCORRENCIA (multiset) dos ja existentes SEM fitid, para
+                // que lancamentos legitimamente iguais no mesmo extrato entrem todos e reimportar
+                // nao duplique. (Com FITID, o proprio id unico do banco ja diferencia.)
+                const chaveOfx = (data, desc, valor) => `${data}|${desc}|${(Math.round((Number(valor) || 0) * 100) / 100).toFixed(2)}`;
+                const contagemOfx = new Map();
+                for (const t of appState.transactions) {
+                    if (t.contaId !== contaSelecionadaId || t.fitid) continue;
+                    const mag = (Number(t.debito) || 0) + (Number(t.credito) || 0);
+                    const k = chaveOfx(t.data, t.descricao, mag);
+                    contagemOfx.set(k, (contagemOfx.get(k) || 0) + 1);
+                }
                 let addc = 0;
                 for (const tx of txns) {
-                    const dup = (tx.fitid && fitidsExistentes.has(tx.fitid)) || appState.transactions.some(t =>
-                        t.contaId === contaSelecionadaId && t.data === tx.data && t.descricao === tx.descricao &&
-                        Math.abs((t.debito || t.credito) - (tx.debito || tx.credito)) < 0.01);
-                    if (dup) continue;
+                    if (tx.fitid) {
+                        if (fitidsExistentes.has(tx.fitid)) continue;   // reimportacao (id unico do banco)
+                        fitidsExistentes.add(tx.fitid);
+                    } else {
+                        const k = chaveOfx(tx.data, tx.descricao, (tx.debito || tx.credito));
+                        const rest = contagemOfx.get(k) || 0;
+                        if (rest > 0) { contagemOfx.set(k, rest - 1); continue; }  // ja existia: consome
+                    }
                     const cat = findBestCategoryMatch(tx.descricao, tx.debito > 0);
                     appState.transactions.push({
                         id: 'ofx_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
                         data: tx.data, descricao: tx.descricao, contaId: contaSelecionadaId,
                         credito: tx.credito, debito: tx.debito, categoria: cat || '', fitid: tx.fitid || '', isDuplicate: false
                     });
-                    if (tx.fitid) fitidsExistentes.add(tx.fitid);
                     addc++;
                 }
                 updateFilterMesBancoLight(); updateFutureCategoriesDropdown(); updatePrevSumDropdown();

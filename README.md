@@ -46,7 +46,7 @@ Aplicativo de orçamento pessoal que roda direto no navegador, funciona **offlin
 - **Múltiplas contas correntes**, cada uma independente (ex.: Nubank, Itaú, Carteira), com **nome** e **saldo inicial próprios**.
 - **Conta ativa**: o seletor no topo define qual conta recebe as **importações** e cujos lançamentos são exibidos. Clique no nome de uma conta nos "chips" para torná-la ativa.
 - **Checkbox "Refletir no dashboard/previsão"** por conta: marque quais contas entram nas **totalizações do Dashboard** e na **Caixa de Partida da Previsão**. Os totais somam **todas as contas marcadas**.
-- **Importação de extrato bancário** (**.ofx, .xls, .xlsx, .csv**) direto na conta ativa, com detecção de duplicidade por conta.
+- **Importação de extrato bancário** (**.ofx, .xls, .xlsx, .csv**) direto na conta ativa, com detecção de duplicidade **por ocorrência**: lançamentos legitimamente **repetidos no mesmo extrato** (mesma data/descrição/valor — ex.: duas corridas iguais no dia) são **todos importados**, enquanto **reimportar o mesmo extrato não duplica**. Em **.ofx** com `FITID`, o identificador único do banco diferencia os lançamentos.
 - Filtros por **mês** e por **tipo** (entradas, saídas ou sem categoria) e **categorização** rápida.
 - Exclusão de **um mês específico** dentro da conta ativa; criação, renomeação e exclusão de contas.
 
