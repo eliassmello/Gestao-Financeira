@@ -980,7 +980,16 @@
         function deleteFutureTransaction(id) {
             if(confirm("Apagar este lançamento agendado?")) {
                 const item = appState.futureTransactions.find(f => f.id === id);
-                if (item) reverterReflexoInvestimento(item);
+                if (item) {
+                    if (item.lembreteResgateDe) {
+                        // Lembrete de resgate: registra a dispensa para NÃO regenerar
+                        const chave = item.chaveSupLembrete || `${item.lembreteResgateDe}`;
+                        if (!Array.isArray(appState.lembretesResgateSuprimidos)) appState.lembretesResgateSuprimidos = [];
+                        if (!appState.lembretesResgateSuprimidos.includes(chave)) appState.lembretesResgateSuprimidos.push(chave);
+                    } else {
+                        reverterReflexoInvestimento(item);
+                    }
+                }
                 appState.futureTransactions = appState.futureTransactions.filter(f => f.id !== id);
                 saveData();
             }
@@ -3044,7 +3053,7 @@
                     criptoAtivada = false; chaveSessao = null; criptoSalt = null; senhaSessao = null;
                     db.seguro.clear().catch(() => {});
                     db.config.delete('cripto').catch(() => {});
-                    appState = { saldoInicial: 0, contas: [], cartoes: [], despesasCartao: [], transactions: [], ccTransactions: [], futureTransactions: [], investimentos: [], categories: { despesas: ["Outros"], receitas: ["Outros"] }, orcamentos: {}, comprasParceladas: [], recorrencias: [], regrasCategoria: [], limiteDiasNegativos: 10, notificarVencimentos: false };
+                    appState = { saldoInicial: 0, contas: [], cartoes: [], despesasCartao: [], lembretesResgateSuprimidos: [], transactions: [], ccTransactions: [], futureTransactions: [], investimentos: [], categories: { despesas: ["Outros"], receitas: ["Outros"] }, orcamentos: {}, comprasParceladas: [], recorrencias: [], regrasCategoria: [], limiteDiasNegativos: 10, notificarVencimentos: false };
                     garantirContas(); garantirCartoes(); renderContasUI(); preencherFormConta(); renderCartoesUI();
                     alert("O banco de dados foi completamente zerado. Defina uma nova senha para continuar.");
                     mostrarTelaCriarSenha();

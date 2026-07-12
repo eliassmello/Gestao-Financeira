@@ -43,6 +43,7 @@
             contas: [],
             cartoes: [],
             despesasCartao: [],
+            lembretesResgateSuprimidos: [],
             transactions: [],
             ccTransactions: [],
             futureTransactions: [],
@@ -108,6 +109,7 @@
             appState.regrasCategoria = appState.regrasCategoria || [];
             appState.cartoes = appState.cartoes || [];
             appState.despesasCartao = appState.despesasCartao || [];
+            appState.lembretesResgateSuprimidos = appState.lembretesResgateSuprimidos || [];
             if (appState.notificarVencimentos === undefined) appState.notificarVencimentos = false;
             if (appState.limiteDiasNegativos === undefined || appState.limiteDiasNegativos === null) appState.limiteDiasNegativos = 10;
             if (appState.ultimoBackup === undefined) appState.ultimoBackup = null;
@@ -212,6 +214,7 @@
                     appState.contas = confObj.contas || [];
                     appState.cartoes = confObj.cartoes || [];
                     appState.despesasCartao = confObj.despesasCartao || [];
+                    appState.lembretesResgateSuprimidos = confObj.lembretesResgateSuprimidos || [];
                     appState.transactions = tr || [];
                     appState.ccTransactions = cr || [];
                     appState.futureTransactions = pr || [];
@@ -238,7 +241,7 @@
                 }
                 // Modo padrão (texto puro) — inalterado
                 await db.transaction('rw', db.transacoes, db.cartao, db.previsoes, db.investimentos, db.config, async () => {
-                    await db.config.put({ id: 'global', saldoInicial: appState.saldoInicial, categories: appState.categories, orcamentos: appState.orcamentos, comprasParceladas: appState.comprasParceladas, recorrencias: appState.recorrencias, regrasCategoria: appState.regrasCategoria, notificarVencimentos: appState.notificarVencimentos, limiteDiasNegativos: appState.limiteDiasNegativos, contas: appState.contas, cartoes: appState.cartoes, despesasCartao: appState.despesasCartao, ultimoBackup: appState.ultimoBackup, backupAdiadoAte: appState.backupAdiadoAte });
+                    await db.config.put({ id: 'global', saldoInicial: appState.saldoInicial, categories: appState.categories, orcamentos: appState.orcamentos, comprasParceladas: appState.comprasParceladas, recorrencias: appState.recorrencias, regrasCategoria: appState.regrasCategoria, notificarVencimentos: appState.notificarVencimentos, limiteDiasNegativos: appState.limiteDiasNegativos, contas: appState.contas, cartoes: appState.cartoes, despesasCartao: appState.despesasCartao, lembretesResgateSuprimidos: appState.lembretesResgateSuprimidos, ultimoBackup: appState.ultimoBackup, backupAdiadoAte: appState.backupAdiadoAte });
                     await db.transacoes.clear(); if(appState.transactions.length > 0) await db.transacoes.bulkPut(appState.transactions);
                     await db.cartao.clear(); if(appState.ccTransactions.length > 0) await db.cartao.bulkPut(appState.ccTransactions);
                     await db.previsoes.clear(); if(appState.futureTransactions.length > 0) await db.previsoes.bulkPut(appState.futureTransactions);
@@ -1172,7 +1175,14 @@
         // lembrete na Previsão com valor R$ 0, "diasResgate" dias ANTES da data do
         // resgate — para lembrar de dar a ordem de desaplicação. Idempotente: regenera
         // os lembretes não conciliados e preserva os já conciliados.
+        //
+        // Dois casos param de gerar o lembrete (para ele não ficar na Previsão à toa):
+        //  1) o usuário dispensou aquele aviso manualmente (apagou a linha) — a chave
+        //     `investimentoId|dataDoResgate` fica em lembretesResgateSuprimidos;
+        //  2) a data do RESGATE já passou (o resgate já ocorreu): o lembrete é inútil.
         function sincronizarLembretesResgate() {
+            const suprimidos = new Set(appState.lembretesResgateSuprimidos || []);
+            const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
             const desejados = [];
             for (const f of appState.futureTransactions) {
                 if (f.lembreteResgateDe || f.conciliado) continue;
@@ -1180,13 +1190,16 @@
                 const inv = appState.investimentos.find(i => i.id === f.investimentoId);
                 const dias = inv ? (parseInt(inv.diasResgate, 10) || 0) : 0;
                 if (dias <= 0) continue;
+                const chaveSup = `${f.investimentoId}|${f.data}`;
+                if (suprimidos.has(chaveSup)) continue;              // dispensado manualmente
                 const dResg = converterDataBRParaDate(f.data);
+                if (dResg < hoje) continue;                          // resgate já ocorreu: sem necessidade
                 const dLemb = new Date(dResg.getTime() - dias * 86400000);
                 const dataBR = `${String(dLemb.getDate()).padStart(2, '0')}/${String(dLemb.getMonth() + 1).padStart(2, '0')}/${dLemb.getFullYear()}`;
                 desejados.push({
                     id: `lembrete_${f.id}`, data: dataBR, tipo: 'credito', valor: 0,
                     descricao: `🔔 Ordem de resgate: ${inv.nome} — D+${dias} (resgate em ${f.data})`,
-                    categoria: '', investimentoId: '', lembreteResgateDe: f.id
+                    categoria: '', investimentoId: '', lembreteResgateDe: f.id, chaveSupLembrete: chaveSup
                 });
             }
             const atuais = appState.futureTransactions.filter(f => f.lembreteResgateDe && !f.conciliado);
@@ -1859,6 +1872,7 @@
             if (!appState.regrasCategoria) appState.regrasCategoria = [];
             if (!appState.cartoes) appState.cartoes = [];
             if (!appState.despesasCartao) appState.despesasCartao = [];
+            if (!appState.lembretesResgateSuprimidos) appState.lembretesResgateSuprimidos = [];
             if (appState.limiteDiasNegativos === undefined || appState.limiteDiasNegativos === null) appState.limiteDiasNegativos = 10;
             if (!appState.contas) appState.contas = [];
             garantirContas();
