@@ -118,15 +118,8 @@
                         <input type="month" id="dash-month-filter" onchange="debouncedRenderRelatorio()" class="text-sm border border-slate-300 rounded-md p-1.5 outline-none text-indigo-700 font-semibold focus:ring-1 focus:ring-indigo-500">
                     </div>
                     <div class="flex items-center gap-2">
-                        <label class="text-sm font-bold text-slate-600 ml-1 sm:ml-3">Período:</label>
-                        <select id="dash-range-filter" onchange="debouncedRenderRelatorio()" class="text-sm border border-slate-300 rounded-md p-1.5 outline-none text-indigo-700 font-semibold focus:ring-1 focus:ring-indigo-500">
-                            <option value="1">Apenas o mês</option>
-                            <option value="2">Últimos 2 meses</option>
-                            <option value="3">Últimos 3 meses</option>
-                            <option value="4">Últimos 4 meses</option>
-                            <option value="6">Últimos 6 meses</option>
-                            <option value="12">Últimos 12 meses</option>
-                        </select>
+                        <label class="text-sm font-bold text-slate-600 ml-1 sm:ml-3">Período (meses):</label>
+                        <input type="number" id="dash-range-filter" min="1" max="120" step="1" value="1" title="Quantos meses o relatório deve abranger, terminando no mês de Referência" oninput="debouncedRenderRelatorio()" class="w-20 text-sm border border-slate-300 rounded-md p-1.5 outline-none text-indigo-700 font-semibold focus:ring-1 focus:ring-indigo-500">
                     </div>
                 </div>
             </div>
