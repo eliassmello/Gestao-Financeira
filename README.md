@@ -22,7 +22,7 @@ Aplicativo de orçamento pessoal que roda direto no navegador, funciona **offlin
 
 ### 📊 Dashboard
 - Relatório mensal de **receitas e despesas** (Conta Corrente + Cartão).
-- Filtro por **mês de referência** e por **período** (último mês até 12 meses).
+- Filtro por **mês de referência** e por **período**: um campo editável onde você **digita quantos meses** o relatório deve abranger (terminando no mês de referência).
 - Cartões de resumo: **Saldo Real** (soma das contas marcadas), **Entradas**, **Saídas** e **Balanço do período**.
 - **Evolução Mensal**: gráfico de barras com Entradas × Saídas dos **últimos 12 meses** (terminando no mês de referência) e linha de **balanço** mês a mês.
 - **🎯 Orçamento por Categoria**: barras de progresso comparando o gasto do período com o **limite mensal** definido em Config — verde (ok), amarelo (a partir de 80%) e vermelho (estourou). Com período de vários meses, o limite é multiplicado pelo nº de meses.

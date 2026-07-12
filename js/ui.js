@@ -505,7 +505,8 @@
             }
 
             const rangeEl = document.getElementById('dash-range-filter');
-            const range = rangeEl ? (parseInt(rangeEl.value) || 1) : 1;
+            // Campo editável: nº de meses que o relatório abrange (>= 1). Vazio/0/negativo cai em 1.
+            const range = rangeEl ? Math.max(1, parseInt(rangeEl.value, 10) || 1) : 1;
             
             let transReais = appState.transactions.filter(t => contaIncluida(t.contaId));
             let transCartoes = appState.ccTransactions;
