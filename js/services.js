@@ -469,7 +469,7 @@
 
 
         // ===== Rotina de importacao do Cartao (mesma logica original, agora reutilizavel) =====
-        function processarConteudoCartao(content, e, dataVencimentoFatura, anoFaturaCartao) {
+        function processarConteudoCartao(content, e, dataVencimentoFatura, anoFaturaCartao, msgReconc) {
             try {
                 const lines = content.split(/\r?\n/);
                 let headerIndex = -1;
@@ -557,8 +557,9 @@
                 updateFilterMesCartaoLight();
                 
                 updateFutureCategoriesDropdown(); updatePrevSumDropdown();
-                if (addedCount > 0) alert(`Foram importados ${addedCount} lançamentos do Cartão com sucesso.`);
-                else alert("Nenhum lançamento foi importado. Eles já existem ou o arquivo está vazio.");
+                const sufixo = msgReconc || '';
+                if (addedCount > 0) alert(`Foram importados ${addedCount} lançamentos do Cartão com sucesso.` + sufixo);
+                else alert("Nenhum lançamento novo foi importado (já existem ou o arquivo está vazio)." + sufixo);
 
                 sincronizarParcelasCartao();
                 e.target.value = ''; saveData();
@@ -584,7 +585,8 @@
                 // Detecta o banco pelo conteudo: Caixa (CEF) tem layout proprio (secao
                 // "Demonstrativo" com coluna Credito/Debito); caso contrario, Santander.
                 const dataFallback = (dataVencimentoFatura || '').slice(0, 5); // "DD/MM"
-                const resultado = detectarFaturaCEF(linhas)
+                const ehCEF = detectarFaturaCEF(linhas);
+                const resultado = ehCEF
                     ? converterPdfFaturaCEFParaCsv(linhas, dataFallback)
                     : converterPdfFaturaParaCsv(linhas);
 
@@ -592,7 +594,25 @@
                     alert("Nenhum lancamento foi encontrado no PDF. Verifique se e uma fatura Santander (secoes 'Despesas', 'Parcelamentos' e 'Pagamento e Demais Creditos') ou Caixa (secao 'Demonstrativo') no layout esperado.");
                     e.target.value = ''; return;
                 }
-                processarConteudoCartao(resultado.csv, e, dataVencimentoFatura, anoFaturaCartao);
+
+                // Conferencia com o total declarado na fatura (Santander): compara a soma
+                // dos lancamentos reconhecidos com o "Total Despesas/Debitos" do Resumo.
+                // Avisa se houver diferenca (indicio de lancamento nao reconhecido).
+                let msgReconc = '';
+                if (!ehCEF) {
+                    const resumo = extrairResumoFaturaSantander(linhas);
+                    const fmt = (v) => 'R$ ' + (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                    if (resumo.despesas !== null) {
+                        const diff = (resultado.somaDespesas || 0) - resumo.despesas;
+                        if (Math.abs(diff) <= 0.02) {
+                            msgReconc = `\n\n✅ Conferência OK: despesas reconhecidas ${fmt(resultado.somaDespesas)} conferem com o total da fatura (${fmt(resumo.despesas)}).`;
+                            if (resumo.totalPagar !== null) msgReconc += `\nTotal a pagar da fatura: ${fmt(resumo.totalPagar)}.`;
+                        } else {
+                            msgReconc = `\n\n⚠️ Atenção: as despesas reconhecidas somam ${fmt(resultado.somaDespesas)}, mas a fatura declara ${fmt(resumo.despesas)} (diferença de ${fmt(Math.abs(diff))}). Pode haver lançamento não reconhecido — confira o PDF.`;
+                        }
+                    }
+                }
+                processarConteudoCartao(resultado.csv, e, dataVencimentoFatura, anoFaturaCartao, msgReconc);
             } catch (err) {
                 alert("Erro ao ler o PDF: " + err.message);
                 e.target.value = '';
@@ -654,83 +674,100 @@
         }
 
 
-        // Converte as linhas extraidas do PDF para o formato da rotina existente
+        // Converte as linhas extraidas do PDF para o formato da rotina existente.
+        //
+        // Classifica CADA linha pela propria estrutura (data + valor), sem depender do
+        // "modo" da secao — porque nas faturas com varios portadores as tabelas
+        // continuam em outra coluna/pagina trazendo apenas o cabecalho repetido
+        // ("Data Descricao Parcela R$ US$"), e marcos como "VALOR TOTAL", "JUROS E
+        // CUSTO EFETIVO" ou o cabecalho do portador (XXXX XXXX) deixavam o modo preso
+        // em "skip", fazendo o parser perder blocos inteiros de lancamentos.
+        // Regras: uma linha vira lancamento se comeca com (indicador opcional) + data
+        // DD/MM. O sinal do valor em R$ decide o tipo: negativo = Credito/estorno,
+        // positivo = Despesa. O pagamento da fatura anterior (DEB AUTOM/PAGAMENTO) e
+        // descartado. Lixo colado a direita (cabecalhos de outra coluna) e ignorado.
+        // Retorna tambem a soma de despesas/creditos para conferencia com o total da fatura.
         function converterPdfFaturaParaCsv(linhas) {
-            // Despesa avulsa: (opcional indicador "1 "/"2 "/"3 ") + data DD/MM + descricao + valor R$ (+ valor US$ opcional)
-            const RE_TRANSACAO = /^(?:\d\s+)?(\d{2}\/\d{2})\s+(.+?)\s+(-?\d{1,3}(?:\.\d{3})*,\d{2})(?:\s+-?\d{1,3}(?:\.\d{3})*,\d{2})?$/;
-            // Parcelamento: idem, porem com o campo Parcela (NN/NN) entre a descricao e o valor
-            const RE_PARCELAMENTO = /^(?:\d\s+)?(\d{2}\/\d{2})\s+(.+?)\s+(\d{2}\/\d{2})\s+(-?\d{1,3}(?:\.\d{3})*,\d{2})$/;
-            const RE_IOF = /^(?:\d\s+)?IOF DESPESA NO EXTERIOR\s+(-?\d{1,3}(?:\.\d{3})*,\d{2})$/;
+            const V = '-?\\d{1,3}(?:\\.\\d{3})*,\\d{2}';
+            // parcelada: [ind] DATA desc NN/NN R$ [US$] [lixo]
+            const RE_PARC = new RegExp('^(?:\\d\\s+)?(\\d{2}/\\d{2})\\s+(.+?)\\s+(\\d{2}/\\d{2})\\s+(' + V + ')(?:\\s+' + V + ')?(?:\\s+\\D.*)?$');
+            // avulsa: [ind] DATA desc R$ [US$] [lixo]
+            const RE_AV = new RegExp('^(?:\\d\\s+)?(\\d{2}/\\d{2})\\s+(.+?)\\s+(' + V + ')(?:\\s+' + V + ')?(?:\\s+\\D.*)?$');
+            const RE_IOF = new RegExp('^(?:\\d\\s+)?IOF DESPESA NO EXTERIOR\\s+(' + V + ')');
 
-            let modo = 'skip'; // 'despesa' | 'credito' | 'parcelamento' | 'skip'
-            let ultimaData = null;
-            let total = 0;
+            let total = 0, ultimaData = null;
+            let somaDespesas = 0, somaCreditos = 0;
             const saida = ['Tipo,Data,Descricao,Parcela,Valor'];
+
+            const ehPagamentoFatura = (descNorm) =>
+                descNorm.indexOf('DEB AUTOM') !== -1 || descNorm.indexOf('PAGAMENTO') !== -1;
+            const emitir = (tipo, data, desc, parcela, valor) => {
+                desc = String(desc).replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
+                saida.push([tipo, data, desc, parcela || '-', valor].join(','));
+                total++;
+            };
 
             for (const bruta of linhas) {
                 const linhaLimpa = bruta.replace(/\s+/g, ' ').trim();
                 const norm = normalizarTextoPdf(linhaLimpa);
 
-                // Cabecalhos de secao
-                if (norm === 'PAGAMENTO E DEMAIS CREDITOS') { modo = 'credito'; continue; }
-                if (norm === 'PARCELAMENTOS') { modo = 'parcelamento'; continue; }
-                if (norm === 'DESPESAS') { modo = 'despesa'; continue; }
-                if (norm.startsWith('RESUMO DA FATURA') || norm.startsWith('SALDO TOTAL CONSOLIDADO') || norm.startsWith('JUROS E CUSTO EFETIVO')) { modo = 'skip'; continue; }
-                if (norm.indexOf('XXXX XXXX') !== -1) { modo = 'skip'; continue; } // cabecalho de portador: aguarda proxima secao
-                if (modo === 'skip') continue;
-                if (norm.startsWith('VALOR TOTAL')) { modo = 'skip'; continue; }
-                if (norm.startsWith('COTACAO DOLAR')) continue;
-
-                // Parcelamentos: parcela (NN/NN) vai no campo Parcela; sao lancados como Despesa
-                if (modo === 'parcelamento') {
-                    const mp = linhaLimpa.match(RE_PARCELAMENTO);
-                    if (!mp) continue;
-                    const dataP = mp[1];
-                    const descP = mp[2].replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
-                    const parcelaP = mp[3];
-                    const valorP = valorPdfParaDecimal(mp[4]);
-                    if (valorP === null) continue;
-                    const valorNumP = parseFloat(valorP);
-                    if (valorNumP === 0) continue;
-                    saida.push(['Despesa', dataP, descP, parcelaP, Math.abs(valorNumP).toFixed(2)].join(','));
-                    total++;
-                    continue;
-                }
-
                 // IOF de despesa no exterior: linha sem data propria -> usa a data da compra anterior
                 const mIof = norm.match(RE_IOF);
-                if (mIof && modo === 'despesa' && ultimaData) {
+                if (mIof && ultimaData) {
                     const vIof = valorPdfParaDecimal(mIof[1]);
-                    if (vIof && parseFloat(vIof) !== 0) {
-                        saida.push(['Despesa', ultimaData, 'IOF DESPESA NO EXTERIOR', '-', vIof].join(','));
-                        total++;
+                    if (vIof && Math.abs(parseFloat(vIof)) > 0.005) {
+                        const v = Math.abs(parseFloat(vIof));
+                        emitir('Despesa', ultimaData, 'IOF DESPESA NO EXTERIOR', '-', v.toFixed(2));
+                        somaDespesas += v;
                     }
                     continue;
                 }
 
-                const m = linhaLimpa.match(RE_TRANSACAO);
+                // Parcelada tem prioridade (para capturar o campo NN/NN); senao, avulsa
+                let m = linhaLimpa.match(RE_PARC), parcela = null, data, desc, valStr;
+                if (m) { data = m[1]; desc = m[2]; parcela = m[3]; valStr = m[4]; }
+                else { m = linhaLimpa.match(RE_AV); if (m) { data = m[1]; desc = m[2]; valStr = m[3]; } }
                 if (!m) continue;
 
-                const data = m[1];
-                const descricao = m[2].replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
-                const valorDec = valorPdfParaDecimal(m[3]);
-                if (valorDec === null) continue;
-                const valorNum = parseFloat(valorDec);
-                if (valorNum === 0) continue;
+                const dec = valorPdfParaDecimal(valStr);
+                if (dec === null) continue;
+                const num = parseFloat(dec);
+                ultimaData = data;
+                if (Math.abs(num) < 0.005) continue; // 0,00 (ex.: anuidade zerada)
 
-                if (modo === 'credito') {
-                    const descNorm = normalizarTextoPdf(descricao);
-                    // pagamento da fatura anterior nao e importado como lancamento
-                    if (descNorm.indexOf('DEB AUTOM') !== -1 || descNorm.indexOf('PAGAMENTO') !== -1) { continue; }
-                    saida.push(['Credito', data, descricao, '-', Math.abs(valorNum).toFixed(2)].join(','));
-                    total++;
-                } else if (modo === 'despesa') {
-                    saida.push(['Despesa', data, descricao, '-', Math.abs(valorNum).toFixed(2)].join(','));
-                    ultimaData = data;
-                    total++;
+                const descNorm = normalizarTextoPdf(desc);
+                if (num < 0) {
+                    // Credito/estorno. O pagamento da fatura anterior nao e lancamento.
+                    if (ehPagamentoFatura(descNorm)) continue;
+                    emitir('Credito', data, desc, parcela, Math.abs(num).toFixed(2));
+                    somaCreditos += Math.abs(num);
+                } else {
+                    emitir('Despesa', data, desc, parcela, num.toFixed(2));
+                    somaDespesas += num;
                 }
             }
-            return { csv: saida.join('\n'), total: total };
+            return { csv: saida.join('\n'), total: total, somaDespesas: somaDespesas, somaCreditos: somaCreditos };
+        }
+
+
+        // Le o bloco "Resumo da Fatura" do Santander para conferencia: total de
+        // despesas/debitos (Brasil + Exterior), total de creditos e o total a pagar
+        // (Saldo Desta Fatura). Retorna null nos campos nao encontrados.
+        function extrairResumoFaturaSantander(linhas) {
+            const V = '(\\d{1,3}(?:\\.\\d{3})*,\\d{2})';
+            const pegar = (re) => {
+                for (const l of linhas) {
+                    const m = normalizarTextoPdf(l).match(re);
+                    if (m) return parseFloat(valorPdfParaDecimal(m[1]));
+                }
+                return null;
+            };
+            const despBrasil = pegar(new RegExp('TOTAL DESPESAS/DEBITOS NO BRASIL\\s+' + V));
+            const despExt = pegar(new RegExp('TOTAL DESPESAS/DEBITOS NO EXTERIOR\\s+' + V));
+            const creditos = pegar(new RegExp('TOTAL DE CREDITOS\\s+' + V));
+            const totalPagar = pegar(new RegExp('SALDO DESTA FATURA\\s+' + V));
+            const despesas = (despBrasil === null && despExt === null) ? null : (despBrasil || 0) + (despExt || 0);
+            return { despesas: despesas, creditos: creditos, totalPagar: totalPagar };
         }
 
 
