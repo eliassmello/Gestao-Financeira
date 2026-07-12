@@ -89,6 +89,7 @@ Aplicativo de orçamento pessoal que roda direto no navegador, funciona **offlin
 
 ### 🔍 Busca Global
 - Botão **🔍 Buscar** no topo: encontre lançamentos por **descrição, categoria ou valor** (ex.: `mercado`, `1.500,00`) em **todas as contas correntes, cartão e previsões**, em todos os meses, ordenados do mais recente para o mais antigo.
+- **Ir direto ao lançamento**: toque em um resultado e o app **abre a tela que contém o item** (conta correta na 🏦 Conta Corrente, cartão certo na 💳 Cartão ou 📅 Previsão), já **filtrando o mês** e **destacando a linha** — para editar rapidamente.
 
 ### 🔒 Senha do app (criptografia local, sempre ativa)
 - A criptografia é **sempre ativa**. Na **primeira abertura**, o app pede para você **criar uma senha**; a partir daí ele **pede essa senha toda vez que abrir** e grava no IndexedDB apenas um bloco embaralhado (AES-GCM) — quem inspecionar pelo F12 vê `a8f9e23b…`, não "Mercado". A senha (chave) fica **só na memória** enquanto o app está aberto.

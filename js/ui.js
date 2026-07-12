@@ -764,7 +764,7 @@
                     const badgeAlerta = alerta ? `<span class="block text-[10px] font-bold text-rose-700 mt-1">🚨 ${alerta.map(a => `${a.limite}º dia no vermelho em ${a.mes}${a.exato ? '' : ` (atingido em ${a.dia}, sem lançamento nesse dia)`}`).join(' · ')} — ultrapassa o limite do cheque especial</span>` : '';
 
                     html += `
-                        <tr class="${rowClass} border-b transition">
+                        <tr id="busca-${f.id}" class="${rowClass} border-b transition">
                             <td class="p-4 font-semibold text-slate-600 whitespace-nowrap">${f.data} ${alerta ? '🚨' : (isVencido?'⚠️':'')}</td>
                             <td class="p-4 text-slate-800 font-medium">${escapeHtml(f.descricao)}${badgeInv}${badgeAlerta}</td>
                             <td class="p-4"><span class="text-[11px] bg-white border border-slate-200 px-2 py-1 rounded text-slate-600">${escapeHtml(f.categoria)}</span></td>
@@ -1094,7 +1094,7 @@
 
                 const corDif = dif > 0 ? 'text-emerald-600' : (dif < 0 ? 'text-rose-600' : 'text-slate-400');
                 html += `
-                    <tr class="hover:bg-slate-50 transition">
+                    <tr id="busca-${f.id}" class="hover:bg-slate-50 transition">
                         <td class="p-3 font-semibold text-slate-600 whitespace-nowrap">${f.data}<span class="block text-[10px] font-normal text-slate-400">efetivada ${f.dataConciliacao || ''}</span></td>
                         <td class="p-3 text-slate-800 font-medium">${escapeHtml(f.descricao)} <span class="text-[10px] ${isDeb ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'} px-1.5 py-0.5 rounded font-bold">${isDeb ? 'Saída' : 'Entrada'}</span></td>
                         <td class="p-3"><span class="text-[11px] bg-white border border-slate-200 px-2 py-1 rounded text-slate-600">${escapeHtml(f.categoria)}</span></td>
@@ -1914,7 +1914,7 @@
         function linhaTransacaoHtml(t, dataHtml, corValor, tipo, fnApagar) {
             const isDeb = t.debito > 0; const val = isDeb ? t.debito : t.credito;
             return `
-                <div class="virt-row flex flex-col md:flex-row justify-between p-4 border-b ${t.isDuplicate ? 'bg-yellow-100 hover:bg-yellow-200 border-yellow-300' : 'hover:bg-slate-50'}">
+                <div id="busca-${t.id}" class="virt-row flex flex-col md:flex-row justify-between p-4 border-b ${t.isDuplicate ? 'bg-yellow-100 hover:bg-yellow-200 border-yellow-300' : 'hover:bg-slate-50'}">
                     <div class="flex-1 grid grid-cols-3 md:grid-cols-4 gap-2 items-center">
                         ${dataHtml}
                         <span class="text-sm text-slate-700 truncate col-span-2" title="${escapeHtml(t.descricao)}">${escapeHtml(t.descricao)}</span>
@@ -2692,40 +2692,92 @@
             for (let t of appState.transactions) {
                 if (bateTexto(t) || bateValor(t.credito) || bateValor(t.debito)) {
                     const conta = getContaById(t.contaId);
-                    resultados.push({ origem: `🏦 ${conta ? conta.nome : 'Conta'}`, data: t.data, descricao: t.descricao, categoria: t.categoria, valor: (Number(t.credito) || 0) - (Number(t.debito) || 0) });
+                    resultados.push({ origem: `🏦 ${conta ? conta.nome : 'Conta'}`, data: t.data, descricao: t.descricao, categoria: t.categoria, valor: (Number(t.credito) || 0) - (Number(t.debito) || 0), tipo: 'banco', id: t.id, contaId: t.contaId });
                 }
             }
             for (let t of appState.ccTransactions) {
                 if (bateTexto(t) || bateValor(t.credito) || bateValor(t.debito)) {
-                    resultados.push({ origem: '💳 Cartão', data: t.data, descricao: t.descricao, categoria: t.categoria, valor: (Number(t.credito) || 0) - (Number(t.debito) || 0) });
+                    resultados.push({ origem: '💳 Cartão', data: t.data, descricao: t.descricao, categoria: t.categoria, valor: (Number(t.credito) || 0) - (Number(t.debito) || 0), tipo: 'cartao', id: t.id, cartaoId: (t.cartaoId || null) });
                 }
             }
             for (let f of appState.futureTransactions) {
                 if (bateTexto(f) || bateValor(f.valor)) {
-                    resultados.push({ origem: f.conciliado ? '📅 Previsão (efetivada)' : '📅 Previsão', data: f.data, descricao: f.descricao, categoria: f.categoria, valor: f.tipo === 'debito' ? -(Number(f.valor) || 0) : (Number(f.valor) || 0) });
+                    resultados.push({ origem: f.conciliado ? '📅 Previsão (efetivada)' : '📅 Previsão', data: f.data, descricao: f.descricao, categoria: f.categoria, valor: f.tipo === 'debito' ? -(Number(f.valor) || 0) : (Number(f.valor) || 0), tipo: 'previsao', id: f.id, conciliado: !!f.conciliado });
                 }
             }
             resultados.sort((a, b) => dataTransacaoISO(b.data).localeCompare(dataTransacaoISO(a.data)));
 
             const LIMITE = 150;
             const exibidos = resultados.slice(0, LIMITE);
+            _buscaResultados = exibidos;   // guarda p/ o clique navegar até o item
             if (info) info.innerText = resultados.length === 0
                 ? 'Nenhum lançamento encontrado.'
-                : (resultados.length > LIMITE ? `Mostrando os ${LIMITE} mais recentes de ${resultados.length} resultados.` : `${resultados.length} resultado${resultados.length > 1 ? 's' : ''}.`);
+                : (resultados.length > LIMITE ? `Mostrando os ${LIMITE} mais recentes de ${resultados.length} resultados. Toque em um item para abri-lo na tela.` : `${resultados.length} resultado${resultados.length > 1 ? 's' : ''}. Toque em um item para abri-lo na tela.`);
 
             let html = '';
-            for (let r of exibidos) {
+            for (let i = 0; i < exibidos.length; i++) {
+                const r = exibidos[i];
                 const cor = r.valor >= 0 ? 'text-emerald-600' : 'text-rose-600';
                 html += `
-                    <div class="py-2.5 flex justify-between items-center gap-3">
+                    <div onclick="irParaLancamentoBusca(${i})" role="button" tabindex="0" title="Abrir na tela para editar" class="py-2.5 px-2 -mx-2 rounded-lg flex justify-between items-center gap-3 cursor-pointer hover:bg-indigo-50 transition">
                         <div class="min-w-0">
-                            <p class="text-sm font-medium text-slate-700 truncate">${escapeHtml(r.descricao)}</p>
+                            <p class="text-sm font-medium text-slate-700 truncate">${escapeHtml(r.descricao)} <span class="text-indigo-400 text-xs">↗</span></p>
                             <p class="text-xs text-slate-400">${r.origem} &bull; ${escapeHtml(r.data || '')} &bull; ${escapeHtml(r.categoria || 'Não Categorizado')}</p>
                         </div>
                         <span class="font-bold text-sm whitespace-nowrap ${cor}">${r.valor >= 0 ? '+' : '-'} ${formatCurrency(Math.abs(r.valor))}</span>
                     </div>`;
             }
             cont.innerHTML = html;
+        }
+
+
+        // Resultados atualmente exibidos na busca (para o clique navegar até o item)
+        let _buscaResultados = [];
+
+        // Abre o lançamento clicado na busca na tela correspondente (conta/cartão/previsão),
+        // ajustando conta/cartão ativos e o filtro de mês, e destacando a linha para edição.
+        function irParaLancamentoBusca(idx) {
+            const r = _buscaResultados[idx];
+            if (!r) return;
+            const mesItem = (() => { const p = String(r.data || '').split('/'); return p.length === 3 ? `${p[1]}/${p[2]}` : 'todos'; })();
+            const ajustarFiltroMes = (selId, mes) => {
+                const sel = document.getElementById(selId);
+                if (!sel) return;
+                const tem = [...sel.options].some(o => o.value === mes);
+                sel.value = tem ? mes : 'todos';
+            };
+            fecharBuscaGlobal();
+            try {
+                if (r.tipo === 'banco') {
+                    if (r.contaId && getContaById(r.contaId)) contaSelecionadaId = r.contaId;
+                    switchTab('extrato');
+                    updateFilterMesBancoLight();
+                    ajustarFiltroMes('filterMesBanco', mesItem);
+                    _bancoAte = LIMITE_LISTA; _bancoSig = null;
+                    renderTransactionsBanco();
+                } else if (r.tipo === 'cartao') {
+                    if (r.cartaoId && getCartaoById(r.cartaoId)) cartaoSelecionadoId = r.cartaoId;
+                    switchTab('cartao');
+                    updateFilterMesCartaoLight();
+                    ajustarFiltroMes('filterMesCartao', mesItem);
+                    _cartaoAte = LIMITE_LISTA; _cartaoSig = null;
+                    renderTransactionsCartao();
+                } else { // previsão
+                    switchTab('previsao');
+                    renderPrevisao();
+                    safeRun(renderPrevistoRealizado);
+                }
+            } catch (e) {}
+            // dá um tempo para a lista renderizar e então rola/destaca a linha
+            setTimeout(() => destacarLinhaBusca(`busca-${r.id}`), 150);
+        }
+
+        function destacarLinhaBusca(elId) {
+            const el = document.getElementById(elId);
+            if (!el) return;
+            try { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) { el.scrollIntoView(); }
+            el.classList.add('ring-2', 'ring-indigo-500', 'ring-inset', 'bg-indigo-50');
+            setTimeout(() => el.classList.remove('ring-2', 'ring-indigo-500', 'ring-inset', 'bg-indigo-50'), 2600);
         }
 
 
