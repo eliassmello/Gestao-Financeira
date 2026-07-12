@@ -1,4 +1,4 @@
-const CACHE_NAME = 'financas-pwa-v33';
+const CACHE_NAME = 'financas-pwa-v34';
 
 // Recursos essenciais para a aplicação abrir offline (o app + as bibliotecas de CDN).
 const urlsToCache = [
