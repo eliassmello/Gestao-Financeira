@@ -1032,12 +1032,12 @@
 
                     <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
                         <h3 class="font-bold text-slate-700 text-lg mb-1">Backup Completo</h3>
-                        <p class="text-sm text-slate-500 mb-4">O backup é <b>criptografado (.pib)</b> com a <b>senha do app</b> — a mesma que você usa para abrir. A restauração usa essa senha automaticamente (e ainda reconhece backups <b>.json</b> antigos). <span class="text-rose-600">Se esquecer a senha, não há recuperação.</span></p>
+                        <p class="text-sm text-slate-500 mb-4">O backup é <b>criptografado (.pib)</b> com a <b>senha do app</b> — a mesma que você usa para abrir. A restauração usa essa senha automaticamente (e ainda reconhece backups <b>.json</b> antigos). No <b>iPhone/iPad</b>, ao restaurar toque em <b>“Escolher arquivo”</b> e selecione o <b>.pib</b> no app <b>Arquivos</b> (o tipo é reconhecido pelo conteúdo, não pela extensão). <span class="text-rose-600">Se esquecer a senha, não há recuperação.</span></p>
                         <div class="flex gap-3 flex-wrap">
                             <button onclick="exportDataProtegido()" class="flex-1 bg-emerald-700 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-emerald-800 transition text-center whitespace-nowrap">💾 Salvar backup</button>
                             <label class="flex-1 bg-slate-200 text-slate-700 px-4 py-2 rounded-md text-sm font-bold hover:bg-slate-300 cursor-pointer transition text-center whitespace-nowrap">
                                 📂 Restaurar backup
-                                <input type="file" accept=".json,.pib" onchange="importData(event)" class="hidden">
+                                <input type="file" onchange="importData(event)" class="hidden">
                             </label>
                         </div>
                         <p id="info-ultimo-backup" class="text-xs font-bold text-slate-400 mt-3"></p>
