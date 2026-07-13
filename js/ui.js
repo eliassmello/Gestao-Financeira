@@ -2549,6 +2549,8 @@
                     updateFutureCategoriesDropdown(); updatePrevSumDropdown();
                 }
             }
+            // Atualiza a lista de categorias em Config na hora (sem precisar de F5)
+            safeRun(renderCategoriesTab);
             saveData();
         }
 
