@@ -24,6 +24,7 @@ Aplicativo de orçamento pessoal que roda direto no navegador, funciona **offlin
 - Relatório mensal de **receitas e despesas** (Conta Corrente + Cartão).
 - Filtro por **mês de referência** e por **período**: um campo editável onde você **digita quantos meses** o relatório deve abranger (terminando no mês de referência).
 - Cartões de resumo: **Saldo Real** (soma das contas marcadas), **Entradas**, **Saídas** e **Balanço do período**.
+- **Sem duplicar o cartão**: quando você tem os lançamentos do cartão detalhados, o Dashboard **não conta o pagamento da fatura** que sai da conta corrente (senão a despesa do cartão entraria duas vezes). Ele identifica esse pagamento pela **categoria = nome de um cartão cadastrado** (marcação explícita, sempre) ou pela **descrição típica** de pagamento de fatura que mencione "cartão" (só quando há lançamentos de cartão). Uma nota sob **Saídas** informa quanto foi excluído. Dica: categorize o pagamento da fatura na conta com o **nome do cartão** para garantir a exclusão.
 - **Evolução Mensal**: gráfico de barras com Entradas × Saídas dos **últimos 12 meses** (terminando no mês de referência) e linha de **balanço** mês a mês.
 - **🎯 Orçamento por Categoria**: barras de progresso comparando o gasto do período com o **limite mensal** definido em Config — verde (ok), amarelo (a partir de 80%) e vermelho (estourou). Com período de vários meses, o limite é multiplicado pelo nº de meses.
 - **Gráficos de pizza** de distribuição de despesas e de receitas.
