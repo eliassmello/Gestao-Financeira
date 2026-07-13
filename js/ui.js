@@ -188,7 +188,7 @@
                 
                 if (tabId === 'dashboard') renderRelatorio();
                 if (tabId === 'previsao') renderPrevisao();
-                if (tabId === 'extrato') { renderContasUI(); preencherFormConta(); preencherContasTransferencia(); renderTransactionsBanco(); }
+                if (tabId === 'extrato') { renderContasUI(); preencherFormConta(); renderTransactionsBanco(); }
                 if (tabId === 'cartao') { safeRun(renderCartoesUI); renderTransactionsCartao(); }
                 if (tabId === 'investimentos') renderInvestimentos();
                 if (tabId === 'quitacao') renderQuitacao();
@@ -1148,26 +1148,20 @@
             itens.sort((a,b) => converterDataBRParaDate(a.data) - converterDataBRParaDate(b.data));
 
             const cards = document.getElementById('pr-cards');
-            const porCat = document.getElementById('pr-por-categoria');
             if (itens.length === 0) {
                 tbody.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-slate-400">Nenhuma previsão efetivada neste mês. Use o botão ✔ no cronograma acima.</td></tr>`;
                 if (cards) cards.innerHTML = '';
-                if (porCat) porCat.innerHTML = '';
                 return;
             }
 
             let html = '';
             let prevDeb = 0, realDeb = 0, prevCred = 0, realCred = 0, difTotal = 0;
-            const mapaCat = {};
             for (let f of itens) {
                 const isDeb = f.tipo === 'debito';
                 const prev = Number(f.valor) || 0, real = Number(f.realizado) || 0;
                 const dif = diferencaConciliacao(f);
                 difTotal += dif;
                 if (isDeb) { prevDeb += prev; realDeb += real; } else { prevCred += prev; realCred += real; }
-                const c = f.categoria || 'Não Categorizado';
-                if (!mapaCat[c]) mapaCat[c] = { prev: 0, real: 0, dif: 0 };
-                mapaCat[c].prev += prev; mapaCat[c].real += real; mapaCat[c].dif += dif;
 
                 const corDif = dif > 0 ? 'text-emerald-600' : (dif < 0 ? 'text-rose-600' : 'text-slate-400');
                 html += `
@@ -1204,21 +1198,6 @@
                         <p class="text-2xl font-bold mt-1 ${corDifT}">${difTotal > 0 ? '+' : ''}${formatCurrency(difTotal)}</p>
                         <p class="text-[10px] text-slate-400">Positiva = melhor que o previsto</p>
                     </div>`;
-            }
-
-            if (porCat) {
-                let chips = '';
-                const catsOrdenadas = Object.keys(mapaCat).sort((a,b) => mapaCat[a].dif - mapaCat[b].dif);
-                for (let c of catsOrdenadas) {
-                    const m = mapaCat[c];
-                    const cor = m.dif > 0 ? 'text-emerald-600' : (m.dif < 0 ? 'text-rose-600' : 'text-slate-400');
-                    chips += `
-                        <div class="flex justify-between items-center gap-2 bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-sm">
-                            <span class="font-medium text-slate-600 truncate">${escapeHtml(c)}</span>
-                            <span class="whitespace-nowrap text-xs text-slate-500">${formatCurrency(m.prev)} → ${formatCurrency(m.real)} <b class="${cor}">(${m.dif > 0 ? '+' : ''}${formatCurrency(m.dif)})</b></span>
-                        </div>`;
-                }
-                porCat.innerHTML = `<p class="text-xs font-bold text-slate-500 uppercase mb-2">Resumo por categoria</p><div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">${chips}</div>`;
             }
         }
 
@@ -1927,7 +1906,6 @@
             updateFilterMesBancoLight();
             updateFutureCategoriesDropdown(); updatePrevSumDropdown();
             safeRun(renderCategoriesTab);
-            preencherContasTransferencia();
             saveData();
         }
 
@@ -1938,52 +1916,6 @@
             garantirCategoria('despesas', `Transferido para a conta: ${nome}`);
         }
 
-        function preencherContasTransferencia() {
-            const o = document.getElementById('transf-origem'), d = document.getElementById('transf-destino');
-            if (!o || !d) return;
-            const opts = (appState.contas || []).map(c => `<option value="${c.id}">${escapeHtml(c.nome)}</option>`).join('');
-            const ov = o.value, dv = d.value;
-            o.innerHTML = opts; d.innerHTML = opts;
-            if ([...o.options].some(x => x.value === ov)) o.value = ov;
-            if ([...d.options].some(x => x.value === dv)) d.value = dv;
-            if (d.value === o.value && d.options.length > 1) d.selectedIndex = (o.selectedIndex + 1) % d.options.length;
-            const dataEl = document.getElementById('transf-data');
-            if (dataEl && !dataEl.value) dataEl.value = new Date().toISOString().split('T')[0];
-        }
-
-        // Transferência entre contas: cria as DUAS pontas de uma vez — saída (débito) na
-        // origem categorizada "Transferido para a conta: {destino}" e entrada (crédito) no
-        // destino categorizada "Recebido da conta: {origem}". Essas categorias são tratadas
-        // como movimentação interna e ficam de fora do Dashboard (não são despesa/receita).
-        function executarTransferencia() {
-            const oId = document.getElementById('transf-origem')?.value;
-            const dId = document.getElementById('transf-destino')?.value;
-            const valor = Math.round((parseFloat(document.getElementById('transf-valor')?.value) || 0) * 100) / 100;
-            const dataISO = document.getElementById('transf-data')?.value;
-            const origem = getContaById(oId), destino = getContaById(dId);
-            if (!origem || !destino) { alert('Selecione as contas de origem e destino.'); return; }
-            if (oId === dId) { alert('Origem e destino devem ser contas diferentes.'); return; }
-            if (!(valor > 0)) { alert('Informe um valor maior que zero.'); return; }
-            let dataBR;
-            if (dataISO) { const p = dataISO.split('-'); dataBR = `${p[2]}/${p[1]}/${p[0]}`; }
-            else { const h = new Date(); dataBR = `${String(h.getDate()).padStart(2, '0')}/${String(h.getMonth() + 1).padStart(2, '0')}/${h.getFullYear()}`; }
-            garantirCategoriasConta(origem.nome); garantirCategoriasConta(destino.nome);
-            const base = 'trf_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
-            appState.transactions.push({
-                id: base + '_o', data: dataBR, descricao: `Transferência para ${destino.nome}`, contaId: origem.id,
-                debito: valor, credito: 0, categoria: `Transferido para a conta: ${destino.nome}`, isDuplicate: false, transferencia: true
-            });
-            appState.transactions.push({
-                id: base + '_d', data: dataBR, descricao: `Transferência de ${origem.nome}`, contaId: destino.id,
-                debito: 0, credito: valor, categoria: `Recebido da conta: ${origem.nome}`, isDuplicate: false, transferencia: true
-            });
-            const vEl = document.getElementById('transf-valor'); if (vEl) vEl.value = '';
-            updateFilterMesBancoLight();
-            renderTransactionsBanco();
-            safeRun(renderCategoriesTab);
-            saveData();
-            alert(`Transferência de ${formatCurrency(valor)} de "${origem.nome}" para "${destino.nome}" registrada nas duas contas.`);
-        }
 
 
         function excluirConta() {
