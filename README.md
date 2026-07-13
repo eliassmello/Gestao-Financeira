@@ -68,8 +68,9 @@ Aplicativo de orçamento pessoal que roda direto no navegador, funciona **offlin
 - **Resumo de patrimônio** por moeda: **BRL, USD e EUR**, além dos **aportes do mês** filtrado.
 - **💰 Patrimônio Líquido (BRL)**: quando há compras em **Quitação**, aparece um cartão com o patrimônio em reais **menos o saldo devedor** das parcelas ainda em aberto a partir do mês da Fotografia — o quanto sobraria se você quitasse as dívidas.
 - **"Fotografia do patrimônio"**: veja o saldo consolidado em qualquer mês/ano.
-- Cadastro de vários investimentos (nome, instituição e moeda).
-- **⏳ Liquidez (D+)**: informe quantos dias antes você precisa dar a **ordem de resgate** (D+0, D+3, D+15, D+30…). Sempre que houver um **Resgate** agendado na 📅 Previsão para esse investimento, o app cria automaticamente uma **linha-lembrete de valor R$ 0** essa quantidade de dias antes — para você lembrar de emitir a ordem de saque a tempo. O lembrete é recalculado sozinho se a data do resgate ou o D+ mudar. Você pode **dispensar o lembrete** apagando a linha na Previsão — ele **não volta** (a dispensa fica registrada). Lembretes de **resgates que já ocorreram** também são removidos automaticamente, para não ficarem na Previsão sem necessidade.
+- Cadastro de vários investimentos (nome, instituição e moeda). Ao criar um investimento, o app cria automaticamente **duas categorias** para ele: **despesa "Aplicação em: {nome}"** e **receita "Resgate de: {nome}"** — deixando a Previsão e os lançamentos mais específicos (renomear o investimento renomeia as categorias).
+- **↔️ Movimentação interna não vira despesa/receita**: no **Dashboard**, transações categorizadas como **"Aplicação em: …"** ou **"Resgate de: …"** de um investimento cadastrado **não** entram como Saída/Entrada — é apenas dinheiro mudando de lugar entre a conta e o investimento. (Na 📅 Previsão continua aparecendo normalmente.)
+- **⏳ Liquidez (D+)**: informe quantos dias antes você precisa dar a **ordem de resgate** (D+0, D+3, D+15, D+30…). Sempre que houver um **Resgate** agendado na 📅 Previsão para esse investimento, o app cria automaticamente uma **linha-lembrete de valor R$ 0** essa quantidade de dias antes — para você lembrar de emitir a ordem de saque a tempo. **No 📅 Calendário, o dia do aviso fica pintado de amarelo (🔔)** para reforçar o alerta. O lembrete é recalculado sozinho se a data do resgate ou o D+ mudar. Você pode **dispensar o lembrete** apagando a linha na Previsão — ele **não volta** (a dispensa fica registrada). Lembretes de **resgates que já ocorreram** também são removidos automaticamente, para não ficarem na Previsão sem necessidade.
 - **Histórico/evolução** de cada investimento com saldo anterior, aporte, taxa, rendimento, resgate e saldo final, em **data dia/mês/ano**.
 - **Cálculo de rendimento automático** em cascata:
   - Rendimento **mensal** (taxa anual ÷ 12) para lançamentos de fim de mês.
@@ -102,6 +103,7 @@ Aplicativo de orçamento pessoal que roda direto no navegador, funciona **offlin
 - Visão de mês em grade com as **entradas e saídas previstas** de cada dia (agendamentos + recorrências). Navegue entre meses e clique num dia para ver os lançamentos; recorrentes aparecem com 🔁.
 - Ao clicar num dia, além dos lançamentos daquele dia, o painel mostra o **saldo previsto até aquela data** (Caixa de Partida de hoje + todas as previsões pendentes até o dia).
 - Os **dias com saldo previsto negativo** ficam **pintados de vermelho** na grade (com o valor projetado), destacando quando a conta entraria no vermelho.
+- Os **dias com aviso antecipado de resgate** (lembrete de ordem de saque do investimento) ficam **pintados de amarelo** com um **🔔**, reforçando o alerta.
 
 ### 🔔 Notificações de contas a vencer
 - Um **banner no topo** avisa sobre saídas previstas que vencem nos **próximos 3 dias**. Em **Config**, você pode autorizar **notificações do sistema** (aparecem ao abrir o app).
