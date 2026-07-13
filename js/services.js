@@ -1484,9 +1484,18 @@
             const catParcela = (compra.categoria && compra.categoria !== '__nova__')
                 ? garantirCategoria('despesas', compra.categoria)
                 : garantirCategoria('despesas', compra.nome);
-            const catResgate = garantirCategoria('receitas', 'Resgate Investimento');
-            const catAporte = garantirCategoria('despesas', 'Aporte Investimento');
             compra.categoria = catParcela;
+            // Categoria específica do investimento processado (amarra com o Dashboard, que
+            // trata "Aplicação em: X" / "Resgate de: X" como movimentação interna). Se o
+            // investimento não for encontrado, cai numa categoria genérica.
+            const catResgateDe = (invId) => {
+                const inv = appState.investimentos.find(i => i.id === invId);
+                return garantirCategoria('receitas', inv ? `Resgate de: ${inv.nome}` : 'Resgate Investimento');
+            };
+            const catAplicacaoEm = (invId) => {
+                const inv = appState.investimentos.find(i => i.id === invId);
+                return garantirCategoria('despesas', inv ? `Aplicação em: ${inv.nome}` : 'Aporte Investimento');
+            };
 
             // Mês travado = tem qualquer lançamento já conciliado na Previsão (parcela,
             // resgate ou aporte). O mês inteiro é preservado e não é regenerado.
@@ -1512,9 +1521,11 @@
             let criados = 0;
             for (const m of movimentos) {
                 if (travados.has(m.k)) continue;
+                const cat = m.grupo === 'parcela' ? catParcela
+                    : (m.grupo === 'resgate' ? catResgateDe(m.investimentoId) : catAplicacaoEm(m.investimentoId));
                 const fut = {
                     id: m.id, data: m.data, tipo: m.tipo, valor: m.valor, descricao: m.descricao,
-                    categoria: m.grupo === 'parcela' ? catParcela : (m.grupo === 'resgate' ? catResgate : catAporte),
+                    categoria: cat,
                     investimentoId: m.investimentoId, compraId: compra.id, parcelaK: m.k, grupoCompra: m.grupo
                 };
                 if (fut.investimentoId) aplicarReflexoInvestimento(fut);
