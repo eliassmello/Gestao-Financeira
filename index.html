@@ -52,14 +52,19 @@
         /* inputs e selects mantêm contraste */
         .dark input, .dark select, .dark textarea { background-color: #1e293b; color: #e2e8f0; }
         .dark input::placeholder { color: #64748b; }
+        /* barra de navegação: esconde a scrollbar quando desliza na horizontal (mobile) */
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        /* os botões do menu não encolhem nem quebram: deslizam na horizontal */
+        header nav > button { flex: 0 0 auto; white-space: nowrap; }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-800 font-sans antialiased">
 
     <header class="bg-indigo-600 text-white shadow-md sticky top-0 z-50">
-        <div class="max-w-7xl mx-auto px-4 py-4 flex flex-col lg:flex-row justify-between items-center gap-4">
-            <h1 class="text-xl font-bold tracking-tight whitespace-nowrap">Gestão Financeira</h1>
-            <nav class="flex flex-wrap justify-center gap-1.5">
+        <div class="max-w-7xl mx-auto px-4 py-2 sm:py-4 flex flex-col lg:flex-row justify-between items-center gap-2 sm:gap-4">
+            <h1 class="text-lg sm:text-xl font-bold tracking-tight whitespace-nowrap">Gestão Financeira</h1>
+            <nav class="w-full lg:w-auto flex flex-nowrap lg:flex-wrap justify-start lg:justify-center gap-1.5 overflow-x-auto no-scrollbar">
                 <button onclick="switchTab('dashboard')" id="btn-dashboard" class="tab-btn px-3 py-2 rounded-lg bg-indigo-700 text-white font-medium text-sm transition">📊 Dashboard</button>
                 <button onclick="switchTab('previsao')" id="btn-previsao" class="tab-btn px-3 py-2 rounded-lg text-indigo-100 hover:bg-indigo-500 font-medium text-sm transition">📅 Previsão</button>
                 <button onclick="switchTab('extrato')" id="btn-extrato" class="tab-btn px-3 py-2 rounded-lg text-indigo-100 hover:bg-indigo-500 font-medium text-sm transition">🏦 Conta Corrente</button>
