@@ -494,6 +494,22 @@
 
 
         // MOTOR DE FILTRAGEM DO DASHBOARD ATUALIZADO (Robusto para todos os formatos de data)
+        // True quando uma transação de CONTA CORRENTE é um pagamento de fatura de cartão que
+        // NÃO deve entrar no Dashboard — porque as compras do cartão já entram detalhadas (aba
+        // Cartão) e somar o pagamento duplicaria a despesa. Identifica por:
+        //  (a) categoria = nome de um cartão cadastrado (marcação explícita), sempre; ou
+        //  (b) descrição típica de pagamento de fatura mencionando "cartão" — só quando HÁ
+        //      lançamentos de cartão ("quando seus lançamentos já constarem").
+        function ehPagamentoFaturaCartaoConta(t) {
+            const nomesCartao = new Set((appState.cartoes || []).map(c => c.nome));
+            if (nomesCartao.has(t.categoria)) return true;
+            if (!((appState.ccTransactions || []).length > 0)) return false;
+            if (!(Number(t.debito) > 0)) return false;
+            const d = normalizarTextoBusca(t.descricao || '');
+            if (!d.includes('cartao')) return false;
+            return ['fatura', 'pagamento', 'pagto', 'deb autom', 'debito autom'].some(k => d.includes(k));
+        }
+
         function renderRelatorio() {
             const filterEl = document.getElementById('dash-month-filter');
             let filterVal = filterEl ? filterEl.value : '';
@@ -520,8 +536,22 @@
                 return tNum !== null && tNum >= startNum && tNum <= endNum;
             };
 
-            transReais = transReais.filter(t => inRange(t.data)); 
+            transReais = transReais.filter(t => inRange(t.data));
             transCartoes = transCartoes.filter(c => inRange(c.data));
+
+            // Não conta o PAGAMENTO da fatura do cartão na conta corrente (evita duplicar).
+            let despFaturaExcluida = 0, nExcluidos = 0;
+            transReais = transReais.filter(t => {
+                if (ehPagamentoFaturaCartaoConta(t)) { despFaturaExcluida += Number(t.debito) || 0; nExcluidos++; return false; }
+                return true;
+            });
+            const notaEl = document.getElementById('card-despesas-nota');
+            if (notaEl) {
+                if (nExcluidos > 0) {
+                    notaEl.innerText = `Não inclui ${nExcluidos} pagamento(s) de fatura de cartão (${formatCurrency(despFaturaExcluida)}) — as compras já entram pelo Cartão.`;
+                    notaEl.classList.remove('hidden');
+                } else { notaEl.classList.add('hidden'); }
+            }
 
             let recCaixa = 0, desCaixa = 0;
             for (let t of transReais) { recCaixa += Number(t.credito)||0; desCaixa += Number(t.debito)||0; }
@@ -620,7 +650,7 @@
                 receitas[n - startNum] += Number(t.credito) || 0;
                 despesas[n - startNum] += Number(t.debito) || 0;
             };
-            for (let t of appState.transactions) { if (contaIncluida(t.contaId)) somar(t); }
+            for (let t of appState.transactions) { if (contaIncluida(t.contaId) && !ehPagamentoFaturaCartaoConta(t)) somar(t); }
             for (let t of appState.ccTransactions) somar(t);
 
             const labels = [];
