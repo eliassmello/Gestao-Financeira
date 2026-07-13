@@ -47,6 +47,8 @@ Aplicativo de orçamento pessoal que roda direto no navegador, funciona **offlin
 - **Múltiplas contas correntes**, cada uma independente (ex.: Nubank, Itaú, Carteira), com **nome** e **saldo inicial próprios**.
 - **Conta ativa**: o seletor no topo define qual conta recebe as **importações** e cujos lançamentos são exibidos. Clique no nome de uma conta nos "chips" para torná-la ativa.
 - **Checkbox "Refletir no dashboard/previsão"** por conta: marque quais contas entram nas **totalizações do Dashboard** e na **Caixa de Partida da Previsão**. Os totais somam **todas as contas marcadas**.
+- **Categorias próprias da conta**: ao criar/renomear uma conta, o app cria automaticamente as categorias de **transferência** dela — receita **"Recebido da conta: {nome}"** e despesa **"Transferido para a conta: {nome}"** (renomear a conta renomeia as categorias).
+- **↔️ Transferência entre contas**: um formulário (origem, destino, valor, data) que cria **as duas pontas de uma vez** — saída na origem (`Transferido para a conta: {destino}`) e entrada no destino (`Recebido da conta: {origem}`). Essas categorias são tratadas como **movimentação interna** e **não entram como despesa/receita no Dashboard** (igual às movimentações de investimento). Se preferir lançar manualmente, basta usar essas mesmas categorias.
 - **Importação de extrato bancário** (**.ofx, .xls, .xlsx, .csv**) direto na conta ativa, com detecção de duplicidade **por ocorrência**: lançamentos legitimamente **repetidos no mesmo extrato** (mesma data/descrição/valor — ex.: duas corridas iguais no dia) são **todos importados**, enquanto **reimportar o mesmo extrato não duplica**. Em **.ofx** com `FITID`, o identificador único do banco diferencia os lançamentos.
 - Filtros por **mês** e por **tipo** (entradas, saídas ou sem categoria) e **categorização** rápida.
 - Exclusão de **um mês específico** dentro da conta ativa; criação, renomeação e exclusão de contas.
@@ -104,6 +106,9 @@ Aplicativo de orçamento pessoal que roda direto no navegador, funciona **offlin
 - Ao clicar num dia, além dos lançamentos daquele dia, o painel mostra o **saldo previsto até aquela data** (Caixa de Partida de hoje + todas as previsões pendentes até o dia).
 - Os **dias com saldo previsto negativo** ficam **pintados de vermelho** na grade (com o valor projetado), destacando quando a conta entraria no vermelho.
 - Os **dias com aviso antecipado de resgate** (lembrete de ordem de saque do investimento) ficam **pintados de amarelo** com um **🔔**, reforçando o alerta.
+
+### 📝 Informações
+- Uma aba para **anotações rápidas**: cada linha tem **Título** (até 60 caracteres) e **Info** (até 100). Botão **+ Criar Info**; cada item pode ser **editado** (direto nos campos) ou **apagado**. Ficam salvas junto com seus dados e vão no **backup**.
 
 ### 🔔 Notificações de contas a vencer
 - Um **banner no topo** avisa sobre saídas previstas que vencem nos **próximos 3 dias**. Em **Config**, você pode autorizar **notificações do sistema** (aparecem ao abrir o app).
