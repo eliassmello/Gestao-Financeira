@@ -44,6 +44,7 @@
             cartoes: [],
             despesasCartao: [],
             lembretesResgateSuprimidos: [],
+            informacoes: [],
             transactions: [],
             ccTransactions: [],
             futureTransactions: [],
@@ -110,6 +111,7 @@
             appState.cartoes = appState.cartoes || [];
             appState.despesasCartao = appState.despesasCartao || [];
             appState.lembretesResgateSuprimidos = appState.lembretesResgateSuprimidos || [];
+            appState.informacoes = appState.informacoes || [];
             if (appState.notificarVencimentos === undefined) appState.notificarVencimentos = false;
             if (appState.limiteDiasNegativos === undefined || appState.limiteDiasNegativos === null) appState.limiteDiasNegativos = 10;
             if (appState.ultimoBackup === undefined) appState.ultimoBackup = null;
@@ -215,6 +217,7 @@
                     appState.cartoes = confObj.cartoes || [];
                     appState.despesasCartao = confObj.despesasCartao || [];
                     appState.lembretesResgateSuprimidos = confObj.lembretesResgateSuprimidos || [];
+                    appState.informacoes = confObj.informacoes || [];
                     appState.transactions = tr || [];
                     appState.ccTransactions = cr || [];
                     appState.futureTransactions = pr || [];
@@ -241,7 +244,7 @@
                 }
                 // Modo padrão (texto puro) — inalterado
                 await db.transaction('rw', db.transacoes, db.cartao, db.previsoes, db.investimentos, db.config, async () => {
-                    await db.config.put({ id: 'global', saldoInicial: appState.saldoInicial, categories: appState.categories, orcamentos: appState.orcamentos, comprasParceladas: appState.comprasParceladas, recorrencias: appState.recorrencias, regrasCategoria: appState.regrasCategoria, notificarVencimentos: appState.notificarVencimentos, limiteDiasNegativos: appState.limiteDiasNegativos, contas: appState.contas, cartoes: appState.cartoes, despesasCartao: appState.despesasCartao, lembretesResgateSuprimidos: appState.lembretesResgateSuprimidos, ultimoBackup: appState.ultimoBackup, backupAdiadoAte: appState.backupAdiadoAte });
+                    await db.config.put({ id: 'global', saldoInicial: appState.saldoInicial, categories: appState.categories, orcamentos: appState.orcamentos, comprasParceladas: appState.comprasParceladas, recorrencias: appState.recorrencias, regrasCategoria: appState.regrasCategoria, notificarVencimentos: appState.notificarVencimentos, limiteDiasNegativos: appState.limiteDiasNegativos, contas: appState.contas, cartoes: appState.cartoes, despesasCartao: appState.despesasCartao, lembretesResgateSuprimidos: appState.lembretesResgateSuprimidos, informacoes: appState.informacoes, ultimoBackup: appState.ultimoBackup, backupAdiadoAte: appState.backupAdiadoAte });
                     await db.transacoes.clear(); if(appState.transactions.length > 0) await db.transacoes.bulkPut(appState.transactions);
                     await db.cartao.clear(); if(appState.ccTransactions.length > 0) await db.cartao.bulkPut(appState.ccTransactions);
                     await db.previsoes.clear(); if(appState.futureTransactions.length > 0) await db.previsoes.bulkPut(appState.futureTransactions);
@@ -1884,6 +1887,7 @@
             if (!appState.cartoes) appState.cartoes = [];
             if (!appState.despesasCartao) appState.despesasCartao = [];
             if (!appState.lembretesResgateSuprimidos) appState.lembretesResgateSuprimidos = [];
+            if (!appState.informacoes) appState.informacoes = [];
             if (appState.limiteDiasNegativos === undefined || appState.limiteDiasNegativos === null) appState.limiteDiasNegativos = 10;
             if (!appState.contas) appState.contas = [];
             garantirContas();

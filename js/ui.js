@@ -70,6 +70,19 @@
             try { if (sincronizarParcelasCartao()) await saveToDB(); } catch(e) {}
             // Gera os lembretes de resgate (D+X) na Previsão
             try { if (sincronizarLembretesResgate()) await saveToDB(); } catch(e) {}
+            // Migração: garante as categorias de contas/investimentos já cadastrados
+            try {
+                let mudouCat = false;
+                const antes = (appState.categories.despesas.length + appState.categories.receitas.length);
+                for (const c of (appState.contas || [])) if (c && c.nome) garantirCategoriasConta(c.nome);
+                for (const i of (appState.investimentos || [])) {
+                    if (!i || !i.nome) continue;
+                    garantirCategoria('despesas', `Aplicação em: ${i.nome}`);
+                    garantirCategoria('receitas', `Resgate de: ${i.nome}`);
+                }
+                mudouCat = (appState.categories.despesas.length + appState.categories.receitas.length) !== antes;
+                if (mudouCat) await saveToDB();
+            } catch(e) {}
 
             // Backup automático em pasta (desktop): tenta sincronizar ao abrir. Se a
             // permissão da pasta ainda não foi concedida nesta sessão, mostra um banner
@@ -175,11 +188,12 @@
                 
                 if (tabId === 'dashboard') renderRelatorio();
                 if (tabId === 'previsao') renderPrevisao();
-                if (tabId === 'extrato') { renderContasUI(); preencherFormConta(); renderTransactionsBanco(); }
+                if (tabId === 'extrato') { renderContasUI(); preencherFormConta(); preencherContasTransferencia(); renderTransactionsBanco(); }
                 if (tabId === 'cartao') { safeRun(renderCartoesUI); renderTransactionsCartao(); }
                 if (tabId === 'investimentos') renderInvestimentos();
                 if (tabId === 'quitacao') renderQuitacao();
                 if (tabId === 'calendario') renderCalendario();
+                if (tabId === 'informacoes') renderInformacoes();
                 if (tabId === 'config') { renderCategoriesTab(); safeRun(renderRegrasCategoria); safeRun(atualizarInfoUltimoBackup); safeRun(renderCardSenha); safeRun(atualizarCardNotif); safeRun(renderCardAutoBkp); }
             } catch(err) {}
         }
@@ -510,15 +524,21 @@
             return ['fatura', 'pagamento', 'pagto', 'deb autom', 'debito autom'].some(k => d.includes(k));
         }
 
-        // Conjunto de categorias que representam MOVIMENTAÇÃO INTERNA de investimento
-        // ("Aplicação em: X" / "Resgate de: X"). Transferir para/resgatar de um investimento
-        // cadastrado não é despesa nem receita no Dashboard — é só dinheiro mudando de lugar.
+        // Conjunto de categorias que representam MOVIMENTAÇÃO INTERNA — não é despesa nem
+        // receita no Dashboard, é só dinheiro mudando de lugar:
+        //  - investimento: "Aplicação em: X" / "Resgate de: X";
+        //  - transferência entre contas: "Transferido para a conta: X" / "Recebido da conta: X".
         function _catsMovimentacaoInvestimento() {
             const s = new Set();
             for (const i of (appState.investimentos || [])) {
                 if (!i || !i.nome) continue;
                 s.add(`Aplicação em: ${i.nome}`);
                 s.add(`Resgate de: ${i.nome}`);
+            }
+            for (const c of (appState.contas || [])) {
+                if (!c || !c.nome) continue;
+                s.add(`Transferido para a conta: ${c.nome}`);
+                s.add(`Recebido da conta: ${c.nome}`);
             }
             return s;
         }
@@ -571,7 +591,7 @@
             if (notaEl) {
                 const partes = [];
                 if (nFatura > 0) partes.push(`${nFatura} pagamento(s) de fatura de cartão (${formatCurrency(despFaturaExcluida)})`);
-                if (nInvest > 0) partes.push(`${nInvest} movimentação(ões) de investimento`);
+                if (nInvest > 0) partes.push(`${nInvest} movimentação(ões) interna(s) (investimento/transferência entre contas)`);
                 if (partes.length) {
                     notaEl.innerText = `Não inclui ${partes.join(' e ')} — não são despesa/receita, apenas movimentação.`;
                     notaEl.classList.remove('hidden');
@@ -1889,14 +1909,80 @@
                 appState.contas.push({ id, nome, saldoInicial, incluirDashboard: incluir });
                 contaSelecionadaId = id;
                 sel.value = id;
+                garantirCategoriasConta(nome);
             } else {
                 const c = getContaById(sel.value);
-                if (c) { c.nome = nome; c.saldoInicial = saldoInicial; c.incluirDashboard = incluir; }
+                if (c) {
+                    if (c.nome !== nome) {
+                        // renomeia as categorias de transferência da conta (propaga aos lançamentos)
+                        renomearCategoria('receitas', `Recebido da conta: ${c.nome}`, `Recebido da conta: ${nome}`);
+                        renomearCategoria('despesas', `Transferido para a conta: ${c.nome}`, `Transferido para a conta: ${nome}`);
+                    }
+                    c.nome = nome; c.saldoInicial = saldoInicial; c.incluirDashboard = incluir;
+                    garantirCategoriasConta(nome);
+                }
             }
             renderContasUI();
             preencherFormConta();
             updateFilterMesBancoLight();
+            updateFutureCategoriesDropdown(); updatePrevSumDropdown();
+            safeRun(renderCategoriesTab);
+            preencherContasTransferencia();
             saveData();
+        }
+
+        // Categorias de transferência entre contas (movimentação interna, não é despesa/receita):
+        // "Recebido da conta: X" (crédito) e "Transferido para a conta: X" (débito).
+        function garantirCategoriasConta(nome) {
+            garantirCategoria('receitas', `Recebido da conta: ${nome}`);
+            garantirCategoria('despesas', `Transferido para a conta: ${nome}`);
+        }
+
+        function preencherContasTransferencia() {
+            const o = document.getElementById('transf-origem'), d = document.getElementById('transf-destino');
+            if (!o || !d) return;
+            const opts = (appState.contas || []).map(c => `<option value="${c.id}">${escapeHtml(c.nome)}</option>`).join('');
+            const ov = o.value, dv = d.value;
+            o.innerHTML = opts; d.innerHTML = opts;
+            if ([...o.options].some(x => x.value === ov)) o.value = ov;
+            if ([...d.options].some(x => x.value === dv)) d.value = dv;
+            if (d.value === o.value && d.options.length > 1) d.selectedIndex = (o.selectedIndex + 1) % d.options.length;
+            const dataEl = document.getElementById('transf-data');
+            if (dataEl && !dataEl.value) dataEl.value = new Date().toISOString().split('T')[0];
+        }
+
+        // Transferência entre contas: cria as DUAS pontas de uma vez — saída (débito) na
+        // origem categorizada "Transferido para a conta: {destino}" e entrada (crédito) no
+        // destino categorizada "Recebido da conta: {origem}". Essas categorias são tratadas
+        // como movimentação interna e ficam de fora do Dashboard (não são despesa/receita).
+        function executarTransferencia() {
+            const oId = document.getElementById('transf-origem')?.value;
+            const dId = document.getElementById('transf-destino')?.value;
+            const valor = Math.round((parseFloat(document.getElementById('transf-valor')?.value) || 0) * 100) / 100;
+            const dataISO = document.getElementById('transf-data')?.value;
+            const origem = getContaById(oId), destino = getContaById(dId);
+            if (!origem || !destino) { alert('Selecione as contas de origem e destino.'); return; }
+            if (oId === dId) { alert('Origem e destino devem ser contas diferentes.'); return; }
+            if (!(valor > 0)) { alert('Informe um valor maior que zero.'); return; }
+            let dataBR;
+            if (dataISO) { const p = dataISO.split('-'); dataBR = `${p[2]}/${p[1]}/${p[0]}`; }
+            else { const h = new Date(); dataBR = `${String(h.getDate()).padStart(2, '0')}/${String(h.getMonth() + 1).padStart(2, '0')}/${h.getFullYear()}`; }
+            garantirCategoriasConta(origem.nome); garantirCategoriasConta(destino.nome);
+            const base = 'trf_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+            appState.transactions.push({
+                id: base + '_o', data: dataBR, descricao: `Transferência para ${destino.nome}`, contaId: origem.id,
+                debito: valor, credito: 0, categoria: `Transferido para a conta: ${destino.nome}`, isDuplicate: false, transferencia: true
+            });
+            appState.transactions.push({
+                id: base + '_d', data: dataBR, descricao: `Transferência de ${origem.nome}`, contaId: destino.id,
+                debito: 0, credito: valor, categoria: `Recebido da conta: ${origem.nome}`, isDuplicate: false, transferencia: true
+            });
+            const vEl = document.getElementById('transf-valor'); if (vEl) vEl.value = '';
+            updateFilterMesBancoLight();
+            renderTransactionsBanco();
+            safeRun(renderCategoriesTab);
+            saveData();
+            alert(`Transferência de ${formatCurrency(valor)} de "${origem.nome}" para "${destino.nome}" registrada nas duas contas.`);
         }
 
 
@@ -1915,6 +2001,49 @@
             renderContasUI();
             preencherFormConta();
             updateFilterMesBancoLight();
+            saveData();
+        }
+
+
+        // ===== Informações (anotações rápidas: Título até 60, Info até 100) =====
+        function renderInformacoes() {
+            const ul = document.getElementById('lista-informacoes');
+            if (!ul) return;
+            const arr = appState.informacoes || [];
+            if (!arr.length) {
+                ul.innerHTML = `<li class="px-4 py-6 text-center text-slate-400">Nenhuma informação. Crie a primeira acima.</li>`;
+                return;
+            }
+            ul.innerHTML = arr.map(i => `
+                <li class="flex flex-col sm:flex-row sm:items-center gap-2 px-4 py-3">
+                    <input type="text" maxlength="60" value="${escapeHtml(i.titulo || '')}" onchange="editarInformacao('${i.id}','titulo',this.value)" class="w-full sm:w-56 text-sm font-semibold border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
+                    <input type="text" maxlength="100" value="${escapeHtml(i.info || '')}" onchange="editarInformacao('${i.id}','info',this.value)" class="flex-1 text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
+                    <button onclick="excluirInformacao('${i.id}')" title="Apagar" class="text-rose-500 hover:text-rose-700 font-bold text-xl shrink-0 self-end sm:self-auto px-2">&times;</button>
+                </li>`).join('');
+        }
+
+        function adicionarInformacao() {
+            const tEl = document.getElementById('info-titulo'), iEl = document.getElementById('info-texto');
+            const titulo = (tEl?.value || '').trim().slice(0, 60);
+            const info = (iEl?.value || '').trim().slice(0, 100);
+            if (!titulo && !info) { alert('Preencha o título ou a info.'); return; }
+            if (!Array.isArray(appState.informacoes)) appState.informacoes = [];
+            appState.informacoes.push({ id: 'info_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), titulo, info });
+            if (tEl) tEl.value = ''; if (iEl) iEl.value = '';
+            renderInformacoes();
+            saveData();
+        }
+
+        function editarInformacao(id, campo, valor) {
+            const it = (appState.informacoes || []).find(x => x.id === id);
+            if (!it) return;
+            it[campo] = String(valor || '').slice(0, campo === 'titulo' ? 60 : 100);
+            saveData();
+        }
+
+        function excluirInformacao(id) {
+            appState.informacoes = (appState.informacoes || []).filter(x => x.id !== id);
+            renderInformacoes();
             saveData();
         }
 
@@ -3210,7 +3339,7 @@
                     criptoAtivada = false; chaveSessao = null; criptoSalt = null; senhaSessao = null;
                     db.seguro.clear().catch(() => {});
                     db.config.delete('cripto').catch(() => {});
-                    appState = { saldoInicial: 0, contas: [], cartoes: [], despesasCartao: [], lembretesResgateSuprimidos: [], transactions: [], ccTransactions: [], futureTransactions: [], investimentos: [], categories: { despesas: ["Outros"], receitas: ["Outros"] }, orcamentos: {}, comprasParceladas: [], recorrencias: [], regrasCategoria: [], limiteDiasNegativos: 10, notificarVencimentos: false };
+                    appState = { saldoInicial: 0, contas: [], cartoes: [], despesasCartao: [], lembretesResgateSuprimidos: [], informacoes: [], transactions: [], ccTransactions: [], futureTransactions: [], investimentos: [], categories: { despesas: ["Outros"], receitas: ["Outros"] }, orcamentos: {}, comprasParceladas: [], recorrencias: [], regrasCategoria: [], limiteDiasNegativos: 10, notificarVencimentos: false };
                     garantirContas(); garantirCartoes(); renderContasUI(); preencherFormConta(); renderCartoesUI();
                     alert("O banco de dados foi completamente zerado. Defina uma nova senha para continuar.");
                     mostrarTelaCriarSenha();
