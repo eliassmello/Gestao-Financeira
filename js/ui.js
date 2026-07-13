@@ -510,6 +510,19 @@
             return ['fatura', 'pagamento', 'pagto', 'deb autom', 'debito autom'].some(k => d.includes(k));
         }
 
+        // Conjunto de categorias que representam MOVIMENTAÇÃO INTERNA de investimento
+        // ("Aplicação em: X" / "Resgate de: X"). Transferir para/resgatar de um investimento
+        // cadastrado não é despesa nem receita no Dashboard — é só dinheiro mudando de lugar.
+        function _catsMovimentacaoInvestimento() {
+            const s = new Set();
+            for (const i of (appState.investimentos || [])) {
+                if (!i || !i.nome) continue;
+                s.add(`Aplicação em: ${i.nome}`);
+                s.add(`Resgate de: ${i.nome}`);
+            }
+            return s;
+        }
+
         function renderRelatorio() {
             const filterEl = document.getElementById('dash-month-filter');
             let filterVal = filterEl ? filterEl.value : '';
@@ -539,16 +552,28 @@
             transReais = transReais.filter(t => inRange(t.data));
             transCartoes = transCartoes.filter(c => inRange(c.data));
 
-            // Não conta o PAGAMENTO da fatura do cartão na conta corrente (evita duplicar).
-            let despFaturaExcluida = 0, nExcluidos = 0;
+            // Exclusões do Dashboard:
+            //  - PAGAMENTO da fatura do cartão na conta (as compras já entram pelo Cartão);
+            //  - MOVIMENTAÇÃO de investimento (aplicação/resgate) — é só transferência interna.
+            const catsInvest = _catsMovimentacaoInvestimento();
+            const ehMovInvest = (t) => !!t.categoria && catsInvest.has(t.categoria);
+            let despFaturaExcluida = 0, nFatura = 0, nInvest = 0;
             transReais = transReais.filter(t => {
-                if (ehPagamentoFaturaCartaoConta(t)) { despFaturaExcluida += Number(t.debito) || 0; nExcluidos++; return false; }
+                if (ehPagamentoFaturaCartaoConta(t)) { despFaturaExcluida += Number(t.debito) || 0; nFatura++; return false; }
+                if (ehMovInvest(t)) { nInvest++; return false; }
+                return true;
+            });
+            transCartoes = transCartoes.filter(t => {
+                if (ehMovInvest(t)) { nInvest++; return false; }
                 return true;
             });
             const notaEl = document.getElementById('card-despesas-nota');
             if (notaEl) {
-                if (nExcluidos > 0) {
-                    notaEl.innerText = `Não inclui ${nExcluidos} pagamento(s) de fatura de cartão (${formatCurrency(despFaturaExcluida)}) — as compras já entram pelo Cartão.`;
+                const partes = [];
+                if (nFatura > 0) partes.push(`${nFatura} pagamento(s) de fatura de cartão (${formatCurrency(despFaturaExcluida)})`);
+                if (nInvest > 0) partes.push(`${nInvest} movimentação(ões) de investimento`);
+                if (partes.length) {
+                    notaEl.innerText = `Não inclui ${partes.join(' e ')} — não são despesa/receita, apenas movimentação.`;
                     notaEl.classList.remove('hidden');
                 } else { notaEl.classList.add('hidden'); }
             }
@@ -650,8 +675,10 @@
                 receitas[n - startNum] += Number(t.credito) || 0;
                 despesas[n - startNum] += Number(t.debito) || 0;
             };
-            for (let t of appState.transactions) { if (contaIncluida(t.contaId) && !ehPagamentoFaturaCartaoConta(t)) somar(t); }
-            for (let t of appState.ccTransactions) somar(t);
+            const catsInvestEv = _catsMovimentacaoInvestimento();
+            const ehMovInvestEv = (t) => !!t.categoria && catsInvestEv.has(t.categoria);
+            for (let t of appState.transactions) { if (contaIncluida(t.contaId) && !ehPagamentoFaturaCartaoConta(t) && !ehMovInvestEv(t)) somar(t); }
+            for (let t of appState.ccTransactions) { if (!ehMovInvestEv(t)) somar(t); }
 
             const labels = [];
             for (let i = 0; i < NUM_MESES; i++) {
@@ -2504,9 +2531,23 @@
                 const filterMonth = document.getElementById('inv-month-filter')?.value || new Date().toISOString().split('T')[0].substring(0,7);
                 appState.investimentos.push({ id: novoId, nome, banco, moeda, ignorarPatrimonio, diasResgate, valor: 0, valorInicial: 0, historico: [], data: filterMonth + "-01" });
                 document.getElementById('inv-select').value = novoId;
+                // Categorias específicas do investimento: aporte (despesa) e resgate (receita)
+                garantirCategoria('despesas', `Aplicação em: ${nome}`);
+                garantirCategoria('receitas', `Resgate de: ${nome}`);
+                updateFutureCategoriesDropdown(); updatePrevSumDropdown();
             } else {
                 const inv = appState.investimentos.find(i => i.id === id);
-                if (inv) { inv.nome = nome; inv.banco = banco; inv.moeda = moeda; inv.ignorarPatrimonio = ignorarPatrimonio; inv.diasResgate = diasResgate; }
+                if (inv) {
+                    if (inv.nome !== nome) {
+                        // renomeia as categorias do investimento (propaga aos lançamentos)
+                        renomearCategoria('despesas', `Aplicação em: ${inv.nome}`, `Aplicação em: ${nome}`);
+                        renomearCategoria('receitas', `Resgate de: ${inv.nome}`, `Resgate de: ${nome}`);
+                    }
+                    inv.nome = nome; inv.banco = banco; inv.moeda = moeda; inv.ignorarPatrimonio = ignorarPatrimonio; inv.diasResgate = diasResgate;
+                    garantirCategoria('despesas', `Aplicação em: ${nome}`);
+                    garantirCategoria('receitas', `Resgate de: ${nome}`);
+                    updateFutureCategoriesDropdown(); updatePrevSumDropdown();
+                }
             }
             saveData();
         }
@@ -2969,12 +3010,17 @@
                 const sel = calDiaSel === dataBR;
                 const saldo = saldoNoDia(d);
                 const neg = saldo < -0.005;
-                let base = neg ? 'bg-rose-100 border-rose-300' : (ehHoje(d) ? 'border-indigo-500 border-2' : 'border-slate-100');
+                // Dia com aviso antecipado de resgate (lembrete): destacado em amarelo
+                const temLembreteResgate = ev && ev.itens && ev.itens.some(f => f.lembreteResgateDe);
+                let base = neg ? 'bg-rose-100 border-rose-300'
+                    : (temLembreteResgate ? 'bg-amber-100 border-amber-300'
+                    : (ehHoje(d) ? 'border-indigo-500 border-2' : 'border-slate-100'));
                 html += `
-                    <button onclick="selecionarDiaCalendario('${dataBR}')" title="Saldo previsto: ${formatCurrency(saldo)}" class="min-h-[62px] text-left border ${base} ${sel ? 'ring-2 ring-indigo-400' : ''} rounded-lg p-1.5 hover:bg-slate-50 transition flex flex-col">
-                        <span class="text-xs font-bold ${neg ? 'text-rose-700' : (ehHoje(d) ? 'text-indigo-600' : 'text-slate-500')}">${d}</span>
+                    <button onclick="selecionarDiaCalendario('${dataBR}')" title="Saldo previsto: ${formatCurrency(saldo)}${temLembreteResgate ? ' — 🔔 aviso de ordem de resgate' : ''}" class="min-h-[62px] text-left border ${base} ${sel ? 'ring-2 ring-indigo-400' : ''} rounded-lg p-1.5 hover:bg-slate-50 transition flex flex-col">
+                        <span class="text-xs font-bold ${neg ? 'text-rose-700' : (temLembreteResgate ? 'text-amber-700' : (ehHoje(d) ? 'text-indigo-600' : 'text-slate-500'))}">${d}</span>
                         ${ev && ev.entradas ? `<span class="text-[10px] text-emerald-600 font-semibold leading-tight">+${formatCurrencyNumber(ev.entradas)}</span>` : ''}
                         ${ev && ev.saidas ? `<span class="text-[10px] text-rose-600 font-semibold leading-tight">-${formatCurrencyNumber(ev.saidas)}</span>` : ''}
+                        ${temLembreteResgate ? `<span class="text-[9px] text-amber-700 font-bold leading-tight mt-auto">🔔 resgate</span>` : ''}
                         ${neg ? `<span class="text-[9px] text-rose-700 font-bold leading-tight mt-auto">⚠ ${formatCurrencyNumber(saldo)}</span>` : ''}
                     </button>`;
             }
