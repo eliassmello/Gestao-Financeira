@@ -2433,7 +2433,7 @@
                             <span class="text-xs font-bold text-slate-500">${g.qtd} lançamento${g.qtd > 1 ? 's' : ''} &bull; líquido <span class="text-amber-700">${formatCurrency(g.liquido)}</span></span>
                         </div>`);
                 }
-                const dtHtml = `<div class="text-sm"><span class="text-sm text-slate-600">${t.dataCompra || t.data || ''}</span>${t.dataCompra ? `<br><span class="text-[10px] text-slate-400">Venc: ${t.data || ''}</span>` : ''}</div>`;
+                const dtHtml = `<div class="text-sm"><span class="text-sm text-slate-600">${t.data || t.dataCompra || ''}</span>${t.dataCompra ? `<br><span class="text-[10px] text-slate-400">Compra: ${t.dataCompra}</span>` : ''}</div>`;
                 const isDeb = t.debito > 0;
                 html.push(linhaTransacaoHtml(t, dtHtml, isDeb ? 'text-amber-600' : 'text-emerald-600', 'cartao', 'apagarLinhaCartao'));
             }
