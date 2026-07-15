@@ -194,6 +194,7 @@
                 if (tabId === 'quitacao') renderQuitacao();
                 if (tabId === 'calendario') renderCalendario();
                 if (tabId === 'informacoes') renderInformacoes();
+                if (tabId === 'calculos') renderCalculos();
                 if (tabId === 'config') { renderCategoriesTab(); safeRun(renderRegrasCategoria); safeRun(atualizarInfoUltimoBackup); safeRun(renderCardSenha); safeRun(atualizarCardNotif); safeRun(renderCardAutoBkp); }
             } catch(err) {}
         }
@@ -1980,6 +1981,192 @@
         }
 
 
+        // ===== 🔢 Cálculos (agregador/calculadora sobre os dados) =====
+        // Cada termo agrega valores de uma FONTE (conta/cartão/previsão/investimento) com um
+        // FILTRO (categoria/data/descrição) e uma AGREGAÇÃO. Até 3 termos combinados por
+        // operadores (+ − × ÷), avaliados da esquerda para a direita.
+        const _termoPadrao = () => ({ fonte: 'conta', escopoId: '', movimento: 'saida', agg: 'soma', filtroTipo: 'nenhum', filtroValor: '', filtroTipo2: 'nenhum', filtroValor2: '', invId: '', metrica: 'aportes' });
+        let calcTermos = [_termoPadrao(), _termoPadrao(), _termoPadrao()];
+        let calcOps = ['nenhum', 'nenhum'];
+
+        function _ymdAny(s) {
+            s = String(s || '').trim(); let m;
+            if ((m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))) return { y: +m[1], m: +m[2], d: +m[3] };
+            if ((m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/))) return { d: +m[1], m: +m[2], y: +m[3] };
+            return null;
+        }
+        // Filtro de período aceita DD/MM/AAAA (dia), MM/AAAA (mês) ou AAAA (ano). Vazio/incompleto = tudo.
+        function _matchPeriodoCalc(dataStr, filtro) {
+            filtro = String(filtro || '').trim(); if (!filtro) return true;
+            const s = _ymdAny(dataStr); if (!s) return false; let f;
+            if ((f = filtro.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/))) return s.d === +f[1] && s.m === +f[2] && s.y === +f[3];
+            if ((f = filtro.match(/^(\d{1,2})\/(\d{4})$/))) return s.m === +f[1] && s.y === +f[2];
+            if ((f = filtro.match(/^(\d{4})$/))) return s.y === +f[1];
+            return true; // formato incompleto: não filtra ainda
+        }
+        // Fim do período do filtro (para "Saldo" do investimento em determinada data):
+        // DD/MM/AAAA = aquele dia; MM/AAAA = último dia do mês; AAAA = 31/12. null = atual.
+        function _fimPeriodoCalc(filtro) {
+            filtro = String(filtro || '').trim(); let f;
+            if ((f = filtro.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/))) return { y: +f[3], m: +f[2], d: +f[1] };
+            if ((f = filtro.match(/^(\d{1,2})\/(\d{4})$/))) { const y = +f[2], m = +f[1]; return { y, m, d: new Date(y, m, 0).getDate() }; }
+            if ((f = filtro.match(/^(\d{4})$/))) return { y: +f[1], m: 12, d: 31 };
+            return null;
+        }
+        function _cmpYmd(a, b) { return (a.y - b.y) || (a.m - b.m) || (a.d - b.d); }
+        function _linhasFonteCalc(fonte) {
+            if (fonte === 'conta') return (appState.transactions || []).map(x => ({ id: x.contaId || '', data: x.data, desc: x.descricao, cat: x.categoria, ent: Number(x.credito) || 0, sai: Number(x.debito) || 0 }));
+            if (fonte === 'cartao') return (appState.ccTransactions || []).map(x => ({ id: x.cartaoId || '', data: x.data, desc: x.descricao, cat: x.categoria, ent: Number(x.credito) || 0, sai: Number(x.debito) || 0 }));
+            if (fonte === 'previsao') return (appState.futureTransactions || []).map(x => ({ id: '', data: x.data, desc: x.descricao, cat: x.categoria, ent: x.tipo === 'credito' ? Number(x.valor) || 0 : 0, sai: x.tipo === 'debito' ? Number(x.valor) || 0 : 0 }));
+            return [];
+        }
+        function _agregarCalc(vals, agg) {
+            if (agg === 'contagem') return vals.length;
+            if (!vals.length) return 0;
+            if (agg === 'media') return vals.reduce((s, v) => s + v, 0) / vals.length;
+            if (agg === 'min') return Math.min(...vals);
+            if (agg === 'max') return Math.max(...vals);
+            return vals.reduce((s, v) => s + v, 0); // soma
+        }
+        function _avaliarTermoCalc(t) {
+            if (t.fonte === 'investimento') {
+                const invs = (appState.investimentos || []).filter(i => !t.invId || i.id === t.invId);
+                let valor = 0, n = 0;
+                if (t.metrica === 'saldo') {
+                    const alvo = _fimPeriodoCalc(t.filtroValor);  // null = saldo atual
+                    for (const i of invs) {
+                        const h = (i.historico || []);
+                        if (!alvo) { const s = i.valor != null ? Number(i.valor) : (h.length ? Number(h[h.length - 1].saldoFinal) || 0 : 0); valor += s; n++; continue; }
+                        // saldo na data: último lançamento do histórico com data <= o fim do período
+                        let best = null;
+                        for (const l of h) { const ly = _ymdAny(l.data); if (!ly) continue; if (_cmpYmd(ly, alvo) <= 0 && (!best || _cmpYmd(ly, best.ymd) > 0)) best = { ymd: ly, s: Number(l.saldoFinal) || 0 }; }
+                        if (best) { valor += best.s; n++; }
+                    }
+                    return { valor, n };
+                }
+                for (const i of invs) for (const h of (i.historico || [])) {
+                    if (t.filtroValor && !_matchPeriodoCalc(h.data, t.filtroValor)) continue;
+                    valor += t.metrica === 'aportes' ? Number(h.aporte) || 0 : t.metrica === 'resgates' ? Number(h.resgate) || 0 : Number(h.rendimento) || 0;
+                    n++;
+                }
+                return { valor, n };
+            }
+            const passaFiltro = (r, tipo, val) => {
+                if (!val) return true;                                     // sem valor: não filtra
+                if (tipo === 'categoria') return r.cat === val;
+                if (tipo === 'descricao') return normalizarTextoBusca(r.desc).includes(normalizarTextoBusca(val));
+                if (tipo === 'data') return _matchPeriodoCalc(r.data, val);
+                return true;
+            };
+            const rows = _linhasFonteCalc(t.fonte).filter(r => {
+                if (t.escopoId && r.id !== t.escopoId) return false;       // conta/cartão específico
+                // os dois filtros combinam com E (AND)
+                return passaFiltro(r, t.filtroTipo, t.filtroValor) && passaFiltro(r, t.filtroTipo2, t.filtroValor2);
+            });
+            const vals = rows.map(r => t.movimento === 'entrada' ? r.ent : t.movimento === 'saida' ? r.sai : (r.ent - r.sai));
+            return { valor: _agregarCalc(vals, t.agg), n: rows.length };
+        }
+        function _catsTodasCalc() {
+            const s = new Set([...(appState.categories.despesas || []), ...(appState.categories.receitas || [])]);
+            return [...s].sort((a, b) => a.localeCompare(b));
+        }
+        function _opSimbolo(op) { return { '+': '+', '-': '−', '*': '×', '/': '÷' }[op] || ''; }
+        function _aplicaOp(a, op, b) { return op === '+' ? a + b : op === '-' ? a - b : op === '*' ? a * b : op === '/' ? (b === 0 ? 0 : a / b) : a; }
+
+        function renderCalculos() {
+            const cont = document.getElementById('calc-termos'); if (!cont) return;
+            const cats = _catsTodasCalc();
+            const sel = (val, opts) => opts.map(([v, l]) => `<option value="${v}"${v === val ? ' selected' : ''}>${l}</option>`).join('');
+            const invOpts = [['', 'Todos os investimentos'], ...(appState.investimentos || []).map(i => [i.id, i.nome])];
+            let html = '';
+            for (let i = 0; i < 3; i++) {
+                const t = calcTermos[i];
+                const ehInv = t.fonte === 'investimento';
+                let linha2 = '';
+                if (ehInv) {
+                    linha2 = `
+                        <select onchange="calcSet(${i},'invId',this.value)" class="text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">${sel(t.invId, invOpts)}</select>
+                        <input type="text" value="${escapeHtml(t.filtroValor)}" oninput="calcSet(${i},'filtroValor',this.value)" placeholder="Período: DD/MM/AAAA, MM/AAAA ou AAAA (opcional)" class="flex-1 min-w-[10rem] text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">`;
+                } else {
+                    // Monta um grupo de filtro (select do tipo + campo do valor) para o slot 1 ou 2.
+                    const grupoFiltro = (slot) => {
+                        const tipo = slot === 2 ? t.filtroTipo2 : t.filtroTipo;
+                        const val = slot === 2 ? t.filtroValor2 : t.filtroValor;
+                        const campoAlvo = slot === 2 ? 'filtroValor2' : 'filtroValor';
+                        let campo = '';
+                        if (tipo === 'categoria') campo = `<select onchange="calcSet(${i},'${campoAlvo}',this.value)" class="flex-1 min-w-[9rem] text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500"><option value="">Todas as categorias</option>${cats.map(c => `<option value="${escapeHtml(c)}"${c === val ? ' selected' : ''}>${escapeHtml(c)}</option>`).join('')}</select>`;
+                        else if (tipo === 'data') campo = `<input type="text" value="${escapeHtml(val)}" oninput="calcSet(${i},'${campoAlvo}',this.value)" placeholder="DD/MM/AAAA, MM/AAAA ou AAAA" class="flex-1 min-w-[9rem] text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">`;
+                        else if (tipo === 'descricao') campo = `<input type="text" value="${escapeHtml(val)}" oninput="calcSet(${i},'${campoAlvo}',this.value)" placeholder="descrição contém…" class="flex-1 min-w-[9rem] text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">`;
+                        return `<div class="flex items-center gap-2 flex-1 min-w-[15rem]">
+                            <select onchange="calcSetFiltroTipo(${i},${slot},this.value)" class="text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">${sel(tipo, [['nenhum', 'Sem filtro'], ['categoria', 'Categoria'], ['data', 'Data'], ['descricao', 'Descrição']])}</select>
+                            ${campo}</div>`;
+                    };
+                    linha2 = `${grupoFiltro(1)}<span class="text-xs font-bold text-slate-400 self-center px-1">E</span>${grupoFiltro(2)}`;
+                }
+                const fonteSel = `<select onchange="calcSetFonte(${i},this.value)" class="text-sm font-semibold text-indigo-700 border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">${sel(t.fonte, [['conta', '🏦 Conta'], ['cartao', '💳 Cartão'], ['previsao', '📅 Previsão'], ['investimento', '📈 Investimento']])}</select>`;
+                // seletor de conta/cartão específico (ou todas/todos)
+                let escopoSel = '';
+                if (t.fonte === 'conta') escopoSel = `<select onchange="calcSet(${i},'escopoId',this.value)" class="text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">${sel(t.escopoId, [['', 'Todas as contas'], ...(appState.contas || []).map(c => [c.id, c.nome])])}</select>`;
+                else if (t.fonte === 'cartao') escopoSel = `<select onchange="calcSet(${i},'escopoId',this.value)" class="text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">${sel(t.escopoId, [['', 'Todos os cartões'], ...(appState.cartoes || []).map(c => [c.id, c.nome])])}</select>`;
+                const linha1 = ehInv
+                    ? `${fonteSel}
+                        <select onchange="calcSet(${i},'metrica',this.value)" class="text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">${sel(t.metrica, [['aportes', 'Aportes'], ['resgates', 'Resgates'], ['rendimento', 'Rendimento'], ['saldo', 'Saldo']])}</select>`
+                    : `${fonteSel}
+                        ${escopoSel}
+                        <select onchange="calcSet(${i},'movimento',this.value)" class="text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">${sel(t.movimento, [['saida', 'Saídas'], ['entrada', 'Entradas'], ['liquido', 'Líquido (E−S)']])}</select>
+                        <select onchange="calcSet(${i},'agg',this.value)" class="text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">${sel(t.agg, [['soma', 'Soma'], ['media', 'Média'], ['contagem', 'Contagem'], ['min', 'Mínimo'], ['max', 'Máximo']])}</select>`;
+                html += `
+                    <div class="border border-slate-200 rounded-lg p-3 space-y-2">
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <span class="text-[10px] font-bold text-slate-400 uppercase w-14">Termo ${i + 1}</span>
+                            ${linha1}
+                            <span class="ml-auto text-sm font-bold text-slate-700 whitespace-nowrap">= <span id="calc-valor-${i}">R$ 0,00</span> <span class="text-[10px] font-normal text-slate-400">(<span id="calc-n-${i}">0</span>)</span></span>
+                        </div>
+                        <div class="flex items-center gap-2 flex-wrap">${linha2}</div>
+                    </div>`;
+                if (i < 2) {
+                    html += `
+                        <div class="flex justify-center">
+                            <select onchange="calcSetOp(${i},this.value)" class="text-lg font-bold text-indigo-600 border border-slate-200 rounded-md px-3 py-1 outline-none focus:ring-1 focus:ring-indigo-500">${sel(calcOps[i], [['nenhum', '— (parar)'], ['+', '+'], ['-', '−'], ['*', '×'], ['/', '÷']])}</select>
+                        </div>`;
+                }
+            }
+            cont.innerHTML = html;
+            calcularResultado();
+        }
+        function calcSetFonte(i, v) { const t = calcTermos[i]; t.fonte = v; t.filtroTipo = 'nenhum'; t.filtroValor = ''; t.filtroTipo2 = 'nenhum'; t.filtroValor2 = ''; t.escopoId = ''; renderCalculos(); }
+        function calcSetFiltroTipo(i, slot, v) { const t = calcTermos[i]; if (slot === 2) { t.filtroTipo2 = v; t.filtroValor2 = ''; } else { t.filtroTipo = v; t.filtroValor = ''; } renderCalculos(); }
+        function calcSet(i, campo, v) { calcTermos[i][campo] = v; calcularResultado(); }
+        function calcSetOp(i, v) { calcOps[i] = v; calcularResultado(); }
+
+        // Contagem é um número puro (não R$); demais agregações são monetárias.
+        function _ehContagem(t) { return t && t.fonte !== 'investimento' && t.agg === 'contagem'; }
+        function _fmtCalc(t, v) { return _ehContagem(t) ? String(Math.round(v)) : formatCurrency(v); }
+        function calcularResultado() {
+            const vals = calcTermos.map(_avaliarTermoCalc);
+            for (let i = 0; i < 3; i++) {
+                const el = document.getElementById('calc-valor-' + i); if (el) el.innerText = _fmtCalc(calcTermos[i], vals[i].valor);
+                const en = document.getElementById('calc-n-' + i); if (en) en.innerText = vals[i].n;
+            }
+            let r = vals[0].valor;
+            const partes = [`T1 = ${_fmtCalc(calcTermos[0], vals[0].valor)}`];
+            let soT1 = true;
+            if (calcOps[0] !== 'nenhum') {
+                soT1 = false;
+                r = _aplicaOp(r, calcOps[0], vals[1].valor);
+                partes.push(`${_opSimbolo(calcOps[0])} T2 (${_fmtCalc(calcTermos[1], vals[1].valor)})`);
+                if (calcOps[1] !== 'nenhum') {
+                    r = _aplicaOp(r, calcOps[1], vals[2].valor);
+                    partes.push(`${_opSimbolo(calcOps[1])} T3 (${_fmtCalc(calcTermos[2], vals[2].valor)})`);
+                }
+            }
+            // Resultado: número puro só quando é um único termo de contagem; senão, monetário.
+            const resFmt = (soT1 && _ehContagem(calcTermos[0])) ? String(Math.round(r)) : formatCurrency(r);
+            const resEl = document.getElementById('calc-resultado'); if (resEl) resEl.innerText = resFmt;
+            const det = document.getElementById('calc-detalhe'); if (det) det.innerText = partes.join('  ') + `  =  ${resFmt}`;
+        }
+
+
         function toggleContaDashboard(id) {
             const c = getContaById(id);
             if (!c) return;
@@ -3193,7 +3380,7 @@
         //  Q Quitação · L Calendário · N Informações · G Config · B Buscar · T Tema.
         const ATALHOS_MENU = {
             d: 'dashboard', p: 'previsao', c: 'extrato', a: 'cartao', i: 'investimentos',
-            q: 'quitacao', l: 'calendario', n: 'informacoes', g: 'config'
+            q: 'quitacao', l: 'calendario', n: 'informacoes', g: 'config', x: 'calculos'
         };
 
         function _editandoAgora(el) {
@@ -3222,7 +3409,7 @@
         // Mostra o atalho no title (tooltip) de cada botão do menu, para descoberta.
         function aplicarTitulosAtalhos() {
             const map = { 'btn-dashboard': 'D', 'btn-previsao': 'P', 'btn-extrato': 'C', 'btn-cartao': 'A',
-                'btn-investimentos': 'I', 'btn-quitacao': 'Q', 'btn-calendario': 'L', 'btn-informacoes': 'N', 'btn-config': 'G' };
+                'btn-investimentos': 'I', 'btn-quitacao': 'Q', 'btn-calendario': 'L', 'btn-informacoes': 'N', 'btn-config': 'G', 'btn-calculos': 'X' };
             for (const id in map) { const el = document.getElementById(id); if (el) el.title = `Atalho: tecla ${map[id]}`; }
             const bt = document.getElementById('btn-tema'); if (bt) bt.title = 'Alternar modo claro/escuro (tecla T)';
         }
