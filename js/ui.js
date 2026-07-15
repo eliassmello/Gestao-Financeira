@@ -3186,7 +3186,50 @@
             saveData(); atualizarCardNotif();
         }
 
-        window.onload = init;
+        // ===== Atalhos de teclado para navegar pelo menu =====
+        // Só agem quando você NÃO está editando (fora de input/textarea/select) e o app
+        // está desbloqueado. Uma letra por seção:
+        //  D Dashboard · P Previsão · C Conta Corrente · A Cartão · I Investimentos
+        //  Q Quitação · L Calendário · N Informações · G Config · B Buscar · T Tema.
+        const ATALHOS_MENU = {
+            d: 'dashboard', p: 'previsao', c: 'extrato', a: 'cartao', i: 'investimentos',
+            q: 'quitacao', l: 'calendario', n: 'informacoes', g: 'config'
+        };
+
+        function _editandoAgora(el) {
+            if (!el) return false;
+            const tag = (el.tagName || '').toLowerCase();
+            return tag === 'input' || tag === 'textarea' || tag === 'select' || el.isContentEditable === true;
+        }
+
+        function tratarAtalhoTeclado(e) {
+            if (e.ctrlKey || e.altKey || e.metaKey) return;          // não atrapalha atalhos do navegador
+            if (_editandoAgora(e.target)) return;                    // digitando num campo: ignora
+            // Bloqueado/criando senha: não navega (deixa a senha ser digitada)
+            const bloq = document.getElementById('tela-bloqueio');
+            const criar = document.getElementById('tela-criar-senha');
+            if ((bloq && !bloq.classList.contains('hidden')) || (criar && !criar.classList.contains('hidden'))) return;
+            // Busca aberta: só Esc fecha
+            const busca = document.getElementById('modal-busca');
+            if (busca && !busca.classList.contains('hidden')) { if (e.key === 'Escape') fecharBuscaGlobal(); return; }
+            if (e.key === 'Escape') return;
+            const k = (e.key || '').toLowerCase();
+            if (k === 'b') { e.preventDefault(); abrirBuscaGlobal(); return; }
+            if (k === 't') { e.preventDefault(); toggleTema(); return; }
+            if (ATALHOS_MENU[k]) { e.preventDefault(); switchTab(ATALHOS_MENU[k]); }
+        }
+
+        // Mostra o atalho no title (tooltip) de cada botão do menu, para descoberta.
+        function aplicarTitulosAtalhos() {
+            const map = { 'btn-dashboard': 'D', 'btn-previsao': 'P', 'btn-extrato': 'C', 'btn-cartao': 'A',
+                'btn-investimentos': 'I', 'btn-quitacao': 'Q', 'btn-calendario': 'L', 'btn-informacoes': 'N', 'btn-config': 'G' };
+            for (const id in map) { const el = document.getElementById(id); if (el) el.title = `Atalho: tecla ${map[id]}`; }
+            const bt = document.getElementById('btn-tema'); if (bt) bt.title = 'Alternar modo claro/escuro (tecla T)';
+        }
+
+        document.addEventListener('keydown', tratarAtalhoTeclado);
+
+        window.onload = () => { aplicarTitulosAtalhos(); init(); };
 
         // ===== Proteção por senha (criptografia local) =====
         function mostrarTelaBloqueio() {
