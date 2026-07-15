@@ -1986,9 +1986,9 @@
         // FILTRO (categoria/data/descrição) e uma AGREGAÇÃO. Até 3 termos combinados por
         // operadores (+ − × ÷), avaliados da esquerda para a direita.
         let calcTermos = [
-            { fonte: 'conta', movimento: 'saida', agg: 'soma', filtroTipo: 'nenhum', filtroValor: '', invId: '', metrica: 'aportes' },
-            { fonte: 'conta', movimento: 'saida', agg: 'soma', filtroTipo: 'nenhum', filtroValor: '', invId: '', metrica: 'aportes' },
-            { fonte: 'conta', movimento: 'saida', agg: 'soma', filtroTipo: 'nenhum', filtroValor: '', invId: '', metrica: 'aportes' }
+            { fonte: 'conta', escopoId: '', movimento: 'saida', agg: 'soma', filtroTipo: 'nenhum', filtroValor: '', invId: '', metrica: 'aportes' },
+            { fonte: 'conta', escopoId: '', movimento: 'saida', agg: 'soma', filtroTipo: 'nenhum', filtroValor: '', invId: '', metrica: 'aportes' },
+            { fonte: 'conta', escopoId: '', movimento: 'saida', agg: 'soma', filtroTipo: 'nenhum', filtroValor: '', invId: '', metrica: 'aportes' }
         ];
         let calcOps = ['nenhum', 'nenhum'];
 
@@ -2018,9 +2018,9 @@
         }
         function _cmpYmd(a, b) { return (a.y - b.y) || (a.m - b.m) || (a.d - b.d); }
         function _linhasFonteCalc(fonte) {
-            if (fonte === 'conta') return (appState.transactions || []).map(x => ({ data: x.data, desc: x.descricao, cat: x.categoria, ent: Number(x.credito) || 0, sai: Number(x.debito) || 0 }));
-            if (fonte === 'cartao') return (appState.ccTransactions || []).map(x => ({ data: x.data, desc: x.descricao, cat: x.categoria, ent: Number(x.credito) || 0, sai: Number(x.debito) || 0 }));
-            if (fonte === 'previsao') return (appState.futureTransactions || []).map(x => ({ data: x.data, desc: x.descricao, cat: x.categoria, ent: x.tipo === 'credito' ? Number(x.valor) || 0 : 0, sai: x.tipo === 'debito' ? Number(x.valor) || 0 : 0 }));
+            if (fonte === 'conta') return (appState.transactions || []).map(x => ({ id: x.contaId || '', data: x.data, desc: x.descricao, cat: x.categoria, ent: Number(x.credito) || 0, sai: Number(x.debito) || 0 }));
+            if (fonte === 'cartao') return (appState.ccTransactions || []).map(x => ({ id: x.cartaoId || '', data: x.data, desc: x.descricao, cat: x.categoria, ent: Number(x.credito) || 0, sai: Number(x.debito) || 0 }));
+            if (fonte === 'previsao') return (appState.futureTransactions || []).map(x => ({ id: '', data: x.data, desc: x.descricao, cat: x.categoria, ent: x.tipo === 'credito' ? Number(x.valor) || 0 : 0, sai: x.tipo === 'debito' ? Number(x.valor) || 0 : 0 }));
             return [];
         }
         function _agregarCalc(vals, agg) {
@@ -2055,6 +2055,7 @@
                 return { valor, n };
             }
             const rows = _linhasFonteCalc(t.fonte).filter(r => {
+                if (t.escopoId && r.id !== t.escopoId) return false;   // conta/cartão específico
                 if (t.filtroTipo === 'categoria' && t.filtroValor) return r.cat === t.filtroValor;
                 if (t.filtroTipo === 'descricao' && t.filtroValor) return normalizarTextoBusca(r.desc).includes(normalizarTextoBusca(t.filtroValor));
                 if (t.filtroTipo === 'data' && t.filtroValor) return _matchPeriodoCalc(r.data, t.filtroValor);
@@ -2093,10 +2094,16 @@
                         <select onchange="calcSetFiltroTipo(${i},this.value)" class="text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">${sel(t.filtroTipo, [['nenhum', 'Sem filtro'], ['categoria', 'Categoria'], ['data', 'Data'], ['descricao', 'Descrição']])}</select>
                         ${campo}`;
                 }
+                const fonteSel = `<select onchange="calcSetFonte(${i},this.value)" class="text-sm font-semibold text-indigo-700 border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">${sel(t.fonte, [['conta', '🏦 Conta'], ['cartao', '💳 Cartão'], ['previsao', '📅 Previsão'], ['investimento', '📈 Investimento']])}</select>`;
+                // seletor de conta/cartão específico (ou todas/todos)
+                let escopoSel = '';
+                if (t.fonte === 'conta') escopoSel = `<select onchange="calcSet(${i},'escopoId',this.value)" class="text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">${sel(t.escopoId, [['', 'Todas as contas'], ...(appState.contas || []).map(c => [c.id, c.nome])])}</select>`;
+                else if (t.fonte === 'cartao') escopoSel = `<select onchange="calcSet(${i},'escopoId',this.value)" class="text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">${sel(t.escopoId, [['', 'Todos os cartões'], ...(appState.cartoes || []).map(c => [c.id, c.nome])])}</select>`;
                 const linha1 = ehInv
-                    ? `<select onchange="calcSetFonte(${i},this.value)" class="text-sm font-semibold text-indigo-700 border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">${sel(t.fonte, [['conta', '🏦 Conta'], ['cartao', '💳 Cartão'], ['previsao', '📅 Previsão'], ['investimento', '📈 Investimento']])}</select>
+                    ? `${fonteSel}
                         <select onchange="calcSet(${i},'metrica',this.value)" class="text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">${sel(t.metrica, [['aportes', 'Aportes'], ['resgates', 'Resgates'], ['rendimento', 'Rendimento'], ['saldo', 'Saldo']])}</select>`
-                    : `<select onchange="calcSetFonte(${i},this.value)" class="text-sm font-semibold text-indigo-700 border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">${sel(t.fonte, [['conta', '🏦 Conta'], ['cartao', '💳 Cartão'], ['previsao', '📅 Previsão'], ['investimento', '📈 Investimento']])}</select>
+                    : `${fonteSel}
+                        ${escopoSel}
                         <select onchange="calcSet(${i},'movimento',this.value)" class="text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">${sel(t.movimento, [['saida', 'Saídas'], ['entrada', 'Entradas'], ['liquido', 'Líquido (E−S)']])}</select>
                         <select onchange="calcSet(${i},'agg',this.value)" class="text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">${sel(t.agg, [['soma', 'Soma'], ['media', 'Média'], ['contagem', 'Contagem'], ['min', 'Mínimo'], ['max', 'Máximo']])}</select>`;
                 html += `
@@ -2118,7 +2125,7 @@
             cont.innerHTML = html;
             calcularResultado();
         }
-        function calcSetFonte(i, v) { calcTermos[i].fonte = v; calcTermos[i].filtroTipo = 'nenhum'; calcTermos[i].filtroValor = ''; renderCalculos(); }
+        function calcSetFonte(i, v) { calcTermos[i].fonte = v; calcTermos[i].filtroTipo = 'nenhum'; calcTermos[i].filtroValor = ''; calcTermos[i].escopoId = ''; renderCalculos(); }
         function calcSetFiltroTipo(i, v) { calcTermos[i].filtroTipo = v; calcTermos[i].filtroValor = ''; renderCalculos(); }
         function calcSet(i, campo, v) { calcTermos[i][campo] = v; calcularResultado(); }
         function calcSetOp(i, v) { calcOps[i] = v; calcularResultado(); }
