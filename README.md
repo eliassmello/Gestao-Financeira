@@ -90,6 +90,9 @@ Aplicativo de orçamento pessoal que roda direto no navegador, funciona **offlin
 - Suporta **várias compras** simultâneas, cada uma com seu indexador e suas fontes.
 - **Operação mês a mês (após efetivar)**: depois de efetivar, o formulário do topo fica travado e a **Projeção mês a mês vira a tela de trabalho** — editar Correção/Aporte de um mês **regenera automaticamente** os lançamentos daquele mês em diante na 📅 Previsão e no 📈 Investimento. Quando você concilia a parcela (e o resgate) com **✔** na Previsão — ela sai do cronograma para o Previsto × Realizado —, a linha correspondente na projeção fica **🔒 travada** com o valor **realizado**, e os meses seguintes se re-ancoram nele sozinhos. Não há botão de reprojetar: tudo é contínuo.
 
+### ⌨️ Atalhos de teclado
+- Fora de campos de edição, uma **tecla** navega direto para cada seção (maiúscula ou minúscula): **D** Dashboard · **P** Previsão · **C** Conta Corrente · **A** Cartão · **I** Investimentos · **Q** Quitação · **L** Calendário · **N** Informações · **G** Config · **B** Buscar · **T** alternar tema. Com a Busca aberta, **Esc** fecha. Os atalhos são ignorados quando você está digitando num campo (input/seleção), e a letra de cada aba aparece no seu **tooltip**.
+
 ### 🔍 Busca Global
 - Botão **🔍 Buscar** no topo: encontre lançamentos por **descrição, categoria ou valor** (ex.: `mercado`, `1.500,00`) em **todas as contas correntes, cartão e previsões**, em todos os meses, ordenados do mais recente para o mais antigo.
 - **Ir direto ao lançamento**: toque em um resultado e o app **abre a tela que contém o item** (conta correta na 🏦 Conta Corrente, cartão certo na 💳 Cartão ou 📅 Previsão), já **filtrando o mês** e **destacando a linha** — para editar rapidamente.
