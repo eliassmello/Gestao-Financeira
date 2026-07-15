@@ -2007,6 +2007,16 @@
             if ((f = filtro.match(/^(\d{4})$/))) return s.y === +f[1];
             return true; // formato incompleto: não filtra ainda
         }
+        // Fim do período do filtro (para "Saldo" do investimento em determinada data):
+        // DD/MM/AAAA = aquele dia; MM/AAAA = último dia do mês; AAAA = 31/12. null = atual.
+        function _fimPeriodoCalc(filtro) {
+            filtro = String(filtro || '').trim(); let f;
+            if ((f = filtro.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/))) return { y: +f[3], m: +f[2], d: +f[1] };
+            if ((f = filtro.match(/^(\d{1,2})\/(\d{4})$/))) { const y = +f[2], m = +f[1]; return { y, m, d: new Date(y, m, 0).getDate() }; }
+            if ((f = filtro.match(/^(\d{4})$/))) return { y: +f[1], m: 12, d: 31 };
+            return null;
+        }
+        function _cmpYmd(a, b) { return (a.y - b.y) || (a.m - b.m) || (a.d - b.d); }
         function _linhasFonteCalc(fonte) {
             if (fonte === 'conta') return (appState.transactions || []).map(x => ({ data: x.data, desc: x.descricao, cat: x.categoria, ent: Number(x.credito) || 0, sai: Number(x.debito) || 0 }));
             if (fonte === 'cartao') return (appState.ccTransactions || []).map(x => ({ data: x.data, desc: x.descricao, cat: x.categoria, ent: Number(x.credito) || 0, sai: Number(x.debito) || 0 }));
@@ -2026,7 +2036,15 @@
                 const invs = (appState.investimentos || []).filter(i => !t.invId || i.id === t.invId);
                 let valor = 0, n = 0;
                 if (t.metrica === 'saldo') {
-                    for (const i of invs) { const h = (i.historico || []); const s = i.valor != null ? Number(i.valor) : (h.length ? Number(h[h.length - 1].saldoFinal) || 0 : 0); valor += s; n++; }
+                    const alvo = _fimPeriodoCalc(t.filtroValor);  // null = saldo atual
+                    for (const i of invs) {
+                        const h = (i.historico || []);
+                        if (!alvo) { const s = i.valor != null ? Number(i.valor) : (h.length ? Number(h[h.length - 1].saldoFinal) || 0 : 0); valor += s; n++; continue; }
+                        // saldo na data: último lançamento do histórico com data <= o fim do período
+                        let best = null;
+                        for (const l of h) { const ly = _ymdAny(l.data); if (!ly) continue; if (_cmpYmd(ly, alvo) <= 0 && (!best || _cmpYmd(ly, best.ymd) > 0)) best = { ymd: ly, s: Number(l.saldoFinal) || 0 }; }
+                        if (best) { valor += best.s; n++; }
+                    }
                     return { valor, n };
                 }
                 for (const i of invs) for (const h of (i.historico || [])) {
@@ -2077,7 +2095,7 @@
                 }
                 const linha1 = ehInv
                     ? `<select onchange="calcSetFonte(${i},this.value)" class="text-sm font-semibold text-indigo-700 border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">${sel(t.fonte, [['conta', '🏦 Conta'], ['cartao', '💳 Cartão'], ['previsao', '📅 Previsão'], ['investimento', '📈 Investimento']])}</select>
-                        <select onchange="calcSet(${i},'metrica',this.value)" class="text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">${sel(t.metrica, [['aportes', 'Aportes'], ['resgates', 'Resgates'], ['rendimento', 'Rendimento'], ['saldo', 'Saldo atual']])}</select>`
+                        <select onchange="calcSet(${i},'metrica',this.value)" class="text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">${sel(t.metrica, [['aportes', 'Aportes'], ['resgates', 'Resgates'], ['rendimento', 'Rendimento'], ['saldo', 'Saldo']])}</select>`
                     : `<select onchange="calcSetFonte(${i},this.value)" class="text-sm font-semibold text-indigo-700 border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">${sel(t.fonte, [['conta', '🏦 Conta'], ['cartao', '💳 Cartão'], ['previsao', '📅 Previsão'], ['investimento', '📈 Investimento']])}</select>
                         <select onchange="calcSet(${i},'movimento',this.value)" class="text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">${sel(t.movimento, [['saida', 'Saídas'], ['entrada', 'Entradas'], ['liquido', 'Líquido (E−S)']])}</select>
                         <select onchange="calcSet(${i},'agg',this.value)" class="text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">${sel(t.agg, [['soma', 'Soma'], ['media', 'Média'], ['contagem', 'Contagem'], ['min', 'Mínimo'], ['max', 'Máximo']])}</select>`;
