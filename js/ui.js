@@ -1985,11 +1985,8 @@
         // Cada termo agrega valores de uma FONTE (conta/cartão/previsão/investimento) com um
         // FILTRO (categoria/data/descrição) e uma AGREGAÇÃO. Até 3 termos combinados por
         // operadores (+ − × ÷), avaliados da esquerda para a direita.
-        let calcTermos = [
-            { fonte: 'conta', escopoId: '', movimento: 'saida', agg: 'soma', filtroTipo: 'nenhum', filtroValor: '', invId: '', metrica: 'aportes' },
-            { fonte: 'conta', escopoId: '', movimento: 'saida', agg: 'soma', filtroTipo: 'nenhum', filtroValor: '', invId: '', metrica: 'aportes' },
-            { fonte: 'conta', escopoId: '', movimento: 'saida', agg: 'soma', filtroTipo: 'nenhum', filtroValor: '', invId: '', metrica: 'aportes' }
-        ];
+        const _termoPadrao = () => ({ fonte: 'conta', escopoId: '', movimento: 'saida', agg: 'soma', filtroTipo: 'nenhum', filtroValor: '', filtroTipo2: 'nenhum', filtroValor2: '', invId: '', metrica: 'aportes' });
+        let calcTermos = [_termoPadrao(), _termoPadrao(), _termoPadrao()];
         let calcOps = ['nenhum', 'nenhum'];
 
         function _ymdAny(s) {
@@ -2054,12 +2051,17 @@
                 }
                 return { valor, n };
             }
-            const rows = _linhasFonteCalc(t.fonte).filter(r => {
-                if (t.escopoId && r.id !== t.escopoId) return false;   // conta/cartão específico
-                if (t.filtroTipo === 'categoria' && t.filtroValor) return r.cat === t.filtroValor;
-                if (t.filtroTipo === 'descricao' && t.filtroValor) return normalizarTextoBusca(r.desc).includes(normalizarTextoBusca(t.filtroValor));
-                if (t.filtroTipo === 'data' && t.filtroValor) return _matchPeriodoCalc(r.data, t.filtroValor);
+            const passaFiltro = (r, tipo, val) => {
+                if (!val) return true;                                     // sem valor: não filtra
+                if (tipo === 'categoria') return r.cat === val;
+                if (tipo === 'descricao') return normalizarTextoBusca(r.desc).includes(normalizarTextoBusca(val));
+                if (tipo === 'data') return _matchPeriodoCalc(r.data, val);
                 return true;
+            };
+            const rows = _linhasFonteCalc(t.fonte).filter(r => {
+                if (t.escopoId && r.id !== t.escopoId) return false;       // conta/cartão específico
+                // os dois filtros combinam com E (AND)
+                return passaFiltro(r, t.filtroTipo, t.filtroValor) && passaFiltro(r, t.filtroTipo2, t.filtroValor2);
             });
             const vals = rows.map(r => t.movimento === 'entrada' ? r.ent : t.movimento === 'saida' ? r.sai : (r.ent - r.sai));
             return { valor: _agregarCalc(vals, t.agg), n: rows.length };
@@ -2086,13 +2088,20 @@
                         <select onchange="calcSet(${i},'invId',this.value)" class="text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">${sel(t.invId, invOpts)}</select>
                         <input type="text" value="${escapeHtml(t.filtroValor)}" oninput="calcSet(${i},'filtroValor',this.value)" placeholder="Período: DD/MM/AAAA, MM/AAAA ou AAAA (opcional)" class="flex-1 min-w-[10rem] text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">`;
                 } else {
-                    let campo = '';
-                    if (t.filtroTipo === 'categoria') campo = `<select onchange="calcSet(${i},'filtroValor',this.value)" class="flex-1 min-w-[10rem] text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500"><option value="">Todas as categorias</option>${cats.map(c => `<option value="${escapeHtml(c)}"${c === t.filtroValor ? ' selected' : ''}>${escapeHtml(c)}</option>`).join('')}</select>`;
-                    else if (t.filtroTipo === 'data') campo = `<input type="text" value="${escapeHtml(t.filtroValor)}" oninput="calcSet(${i},'filtroValor',this.value)" placeholder="DD/MM/AAAA, MM/AAAA ou AAAA" class="flex-1 min-w-[10rem] text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">`;
-                    else if (t.filtroTipo === 'descricao') campo = `<input type="text" value="${escapeHtml(t.filtroValor)}" oninput="calcSet(${i},'filtroValor',this.value)" placeholder="descrição contém…" class="flex-1 min-w-[10rem] text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">`;
-                    linha2 = `
-                        <select onchange="calcSetFiltroTipo(${i},this.value)" class="text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">${sel(t.filtroTipo, [['nenhum', 'Sem filtro'], ['categoria', 'Categoria'], ['data', 'Data'], ['descricao', 'Descrição']])}</select>
-                        ${campo}`;
+                    // Monta um grupo de filtro (select do tipo + campo do valor) para o slot 1 ou 2.
+                    const grupoFiltro = (slot) => {
+                        const tipo = slot === 2 ? t.filtroTipo2 : t.filtroTipo;
+                        const val = slot === 2 ? t.filtroValor2 : t.filtroValor;
+                        const campoAlvo = slot === 2 ? 'filtroValor2' : 'filtroValor';
+                        let campo = '';
+                        if (tipo === 'categoria') campo = `<select onchange="calcSet(${i},'${campoAlvo}',this.value)" class="flex-1 min-w-[9rem] text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500"><option value="">Todas as categorias</option>${cats.map(c => `<option value="${escapeHtml(c)}"${c === val ? ' selected' : ''}>${escapeHtml(c)}</option>`).join('')}</select>`;
+                        else if (tipo === 'data') campo = `<input type="text" value="${escapeHtml(val)}" oninput="calcSet(${i},'${campoAlvo}',this.value)" placeholder="DD/MM/AAAA, MM/AAAA ou AAAA" class="flex-1 min-w-[9rem] text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">`;
+                        else if (tipo === 'descricao') campo = `<input type="text" value="${escapeHtml(val)}" oninput="calcSet(${i},'${campoAlvo}',this.value)" placeholder="descrição contém…" class="flex-1 min-w-[9rem] text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">`;
+                        return `<div class="flex items-center gap-2 flex-1 min-w-[15rem]">
+                            <select onchange="calcSetFiltroTipo(${i},${slot},this.value)" class="text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">${sel(tipo, [['nenhum', 'Sem filtro'], ['categoria', 'Categoria'], ['data', 'Data'], ['descricao', 'Descrição']])}</select>
+                            ${campo}</div>`;
+                    };
+                    linha2 = `${grupoFiltro(1)}<span class="text-xs font-bold text-slate-400 self-center px-1">E</span>${grupoFiltro(2)}`;
                 }
                 const fonteSel = `<select onchange="calcSetFonte(${i},this.value)" class="text-sm font-semibold text-indigo-700 border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">${sel(t.fonte, [['conta', '🏦 Conta'], ['cartao', '💳 Cartão'], ['previsao', '📅 Previsão'], ['investimento', '📈 Investimento']])}</select>`;
                 // seletor de conta/cartão específico (ou todas/todos)
@@ -2125,8 +2134,8 @@
             cont.innerHTML = html;
             calcularResultado();
         }
-        function calcSetFonte(i, v) { calcTermos[i].fonte = v; calcTermos[i].filtroTipo = 'nenhum'; calcTermos[i].filtroValor = ''; calcTermos[i].escopoId = ''; renderCalculos(); }
-        function calcSetFiltroTipo(i, v) { calcTermos[i].filtroTipo = v; calcTermos[i].filtroValor = ''; renderCalculos(); }
+        function calcSetFonte(i, v) { const t = calcTermos[i]; t.fonte = v; t.filtroTipo = 'nenhum'; t.filtroValor = ''; t.filtroTipo2 = 'nenhum'; t.filtroValor2 = ''; t.escopoId = ''; renderCalculos(); }
+        function calcSetFiltroTipo(i, slot, v) { const t = calcTermos[i]; if (slot === 2) { t.filtroTipo2 = v; t.filtroValor2 = ''; } else { t.filtroTipo = v; t.filtroValor = ''; } renderCalculos(); }
         function calcSet(i, campo, v) { calcTermos[i][campo] = v; calcularResultado(); }
         function calcSetOp(i, v) { calcOps[i] = v; calcularResultado(); }
 
