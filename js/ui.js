@@ -1985,9 +1985,11 @@
         // Cada termo agrega valores de uma FONTE (conta/cartão/previsão/investimento) com um
         // FILTRO (categoria/data/descrição) e uma AGREGAÇÃO. Até 3 termos combinados por
         // operadores (+ − × ÷), avaliados da esquerda para a direita.
+        const CALC_N_TERMOS = 4;
         const _termoPadrao = () => ({ fonte: 'conta', escopoId: '', movimento: 'saida', agg: 'soma', filtroTipo: 'nenhum', filtroValor: '', filtroTipo2: 'nenhum', filtroValor2: '', invId: '', metrica: 'aportes' });
-        let calcTermos = [_termoPadrao(), _termoPadrao(), _termoPadrao()];
-        let calcOps = ['nenhum', 'nenhum'];
+        let calcTermos = Array.from({ length: CALC_N_TERMOS }, _termoPadrao);
+        let calcOps = Array.from({ length: CALC_N_TERMOS - 1 }, () => 'nenhum');
+        let _calcItens = [];
 
         function _ymdAny(s) {
             s = String(s || '').trim(); let m;
@@ -2020,6 +2022,13 @@
             if (fonte === 'previsao') return (appState.futureTransactions || []).map(x => ({ id: '', data: x.data, desc: x.descricao, cat: x.categoria, ent: x.tipo === 'credito' ? Number(x.valor) || 0 : 0, sai: x.tipo === 'debito' ? Number(x.valor) || 0 : 0 }));
             return [];
         }
+        function _passaFiltroCalc(cat, desc, data, tipo, val) {
+            if (!val) return true;
+            if (tipo === 'categoria') return cat === val;
+            if (tipo === 'descricao') return normalizarTextoBusca(desc || '').includes(normalizarTextoBusca(val));
+            if (tipo === 'data') return _matchPeriodoCalc(data, val);
+            return true;
+        }
         function _agregarCalc(vals, agg) {
             if (agg === 'contagem') return vals.length;
             if (!vals.length) return 0;
@@ -2051,17 +2060,11 @@
                 }
                 return { valor, n };
             }
-            const passaFiltro = (r, tipo, val) => {
-                if (!val) return true;                                     // sem valor: não filtra
-                if (tipo === 'categoria') return r.cat === val;
-                if (tipo === 'descricao') return normalizarTextoBusca(r.desc).includes(normalizarTextoBusca(val));
-                if (tipo === 'data') return _matchPeriodoCalc(r.data, val);
-                return true;
-            };
             const rows = _linhasFonteCalc(t.fonte).filter(r => {
                 if (t.escopoId && r.id !== t.escopoId) return false;       // conta/cartão específico
                 // os dois filtros combinam com E (AND)
-                return passaFiltro(r, t.filtroTipo, t.filtroValor) && passaFiltro(r, t.filtroTipo2, t.filtroValor2);
+                return _passaFiltroCalc(r.cat, r.desc, r.data, t.filtroTipo, t.filtroValor)
+                    && _passaFiltroCalc(r.cat, r.desc, r.data, t.filtroTipo2, t.filtroValor2);
             });
             const vals = rows.map(r => t.movimento === 'entrada' ? r.ent : t.movimento === 'saida' ? r.sai : (r.ent - r.sai));
             return { valor: _agregarCalc(vals, t.agg), n: rows.length };
@@ -2079,7 +2082,7 @@
             const sel = (val, opts) => opts.map(([v, l]) => `<option value="${v}"${v === val ? ' selected' : ''}>${l}</option>`).join('');
             const invOpts = [['', 'Todos os investimentos'], ...(appState.investimentos || []).map(i => [i.id, i.nome])];
             let html = '';
-            for (let i = 0; i < 3; i++) {
+            for (let i = 0; i < CALC_N_TERMOS; i++) {
                 const t = calcTermos[i];
                 const ehInv = t.fonte === 'investimento';
                 let linha2 = '';
@@ -2120,11 +2123,14 @@
                         <div class="flex items-center gap-2 flex-wrap">
                             <span class="text-[10px] font-bold text-slate-400 uppercase w-14">Termo ${i + 1}</span>
                             ${linha1}
-                            <span class="ml-auto text-sm font-bold text-slate-700 whitespace-nowrap">= <span id="calc-valor-${i}">R$ 0,00</span> <span class="text-[10px] font-normal text-slate-400">(<span id="calc-n-${i}">0</span>)</span></span>
+                            <span class="ml-auto flex items-center gap-2 whitespace-nowrap">
+                                <button onclick="abrirItensTermo(${i})" title="Ver os itens encontrados neste termo" class="text-slate-400 hover:text-indigo-600 text-base">🔍</button>
+                                <span class="text-sm font-bold text-slate-700">= <span id="calc-valor-${i}">R$ 0,00</span> <span class="text-[10px] font-normal text-slate-400">(<span id="calc-n-${i}">0</span>)</span></span>
+                            </span>
                         </div>
                         <div class="flex items-center gap-2 flex-wrap">${linha2}</div>
                     </div>`;
-                if (i < 2) {
+                if (i < CALC_N_TERMOS - 1) {
                     html += `
                         <div class="flex justify-center">
                             <select onchange="calcSetOp(${i},this.value)" class="text-lg font-bold text-indigo-600 border border-slate-200 rounded-md px-3 py-1 outline-none focus:ring-1 focus:ring-indigo-500">${sel(calcOps[i], [['nenhum', '— (parar)'], ['+', '+'], ['-', '−'], ['*', '×'], ['/', '÷']])}</select>
@@ -2144,27 +2150,96 @@
         function _fmtCalc(t, v) { return _ehContagem(t) ? String(Math.round(v)) : formatCurrency(v); }
         function calcularResultado() {
             const vals = calcTermos.map(_avaliarTermoCalc);
-            for (let i = 0; i < 3; i++) {
+            for (let i = 0; i < CALC_N_TERMOS; i++) {
                 const el = document.getElementById('calc-valor-' + i); if (el) el.innerText = _fmtCalc(calcTermos[i], vals[i].valor);
                 const en = document.getElementById('calc-n-' + i); if (en) en.innerText = vals[i].n;
             }
+            // Avaliação da esquerda para a direita: para no 1º operador "nenhum".
             let r = vals[0].valor;
             const partes = [`T1 = ${_fmtCalc(calcTermos[0], vals[0].valor)}`];
-            let soT1 = true;
-            if (calcOps[0] !== 'nenhum') {
-                soT1 = false;
-                r = _aplicaOp(r, calcOps[0], vals[1].valor);
-                partes.push(`${_opSimbolo(calcOps[0])} T2 (${_fmtCalc(calcTermos[1], vals[1].valor)})`);
-                if (calcOps[1] !== 'nenhum') {
-                    r = _aplicaOp(r, calcOps[1], vals[2].valor);
-                    partes.push(`${_opSimbolo(calcOps[1])} T3 (${_fmtCalc(calcTermos[2], vals[2].valor)})`);
-                }
+            let usados = 1;
+            for (let i = 0; i < CALC_N_TERMOS - 1; i++) {
+                if (calcOps[i] === 'nenhum') break;
+                r = _aplicaOp(r, calcOps[i], vals[i + 1].valor);
+                partes.push(`${_opSimbolo(calcOps[i])} T${i + 2} (${_fmtCalc(calcTermos[i + 1], vals[i + 1].valor)})`);
+                usados++;
             }
             // Resultado: número puro só quando é um único termo de contagem; senão, monetário.
-            const resFmt = (soT1 && _ehContagem(calcTermos[0])) ? String(Math.round(r)) : formatCurrency(r);
+            const resFmt = (usados === 1 && _ehContagem(calcTermos[0])) ? String(Math.round(r)) : formatCurrency(r);
             const resEl = document.getElementById('calc-resultado'); if (resEl) resEl.innerText = resFmt;
             const det = document.getElementById('calc-detalhe'); if (det) det.innerText = partes.join('  ') + `  =  ${resFmt}`;
         }
+
+        // Itens que compõem um termo (para a lupa). Para conta/cartão/previsão são
+        // lançamentos navegáveis; para investimento são linhas do histórico (não navegáveis).
+        function _itensDoTermo(t) {
+            const out = [];
+            if (t.fonte === 'investimento') {
+                const invs = (appState.investimentos || []).filter(i => !t.invId || i.id === t.invId);
+                if (t.metrica === 'saldo') {
+                    const alvo = _fimPeriodoCalc(t.filtroValor);
+                    for (const i of invs) {
+                        const h = (i.historico || []); let s = 0, quando = 'atual';
+                        if (!alvo) s = i.valor != null ? Number(i.valor) : (h.length ? Number(h[h.length - 1].saldoFinal) || 0 : 0);
+                        else { let best = null; for (const l of h) { const ly = _ymdAny(l.data); if (ly && _cmpYmd(ly, alvo) <= 0 && (!best || _cmpYmd(ly, best.ymd) > 0)) best = { ymd: ly, s: Number(l.saldoFinal) || 0, data: l.data }; } if (best) { s = best.s; quando = best.data; } }
+                        out.push({ tipo: 'investimento', nav: false, data: quando, descricao: `Saldo — ${i.nome}`, categoria: '', valor: s });
+                    }
+                    return out;
+                }
+                for (const i of invs) for (const l of (i.historico || [])) {
+                    if (t.filtroValor && !_matchPeriodoCalc(l.data, t.filtroValor)) continue;
+                    const v = t.metrica === 'aportes' ? Number(l.aporte) || 0 : t.metrica === 'resgates' ? Number(l.resgate) || 0 : Number(l.rendimento) || 0;
+                    if (Math.abs(v) < 0.005) continue;
+                    out.push({ tipo: 'investimento', nav: false, data: l.data, descricao: `${i.nome} — ${t.metrica}`, categoria: '', valor: v });
+                }
+                return out;
+            }
+            const arr = t.fonte === 'conta' ? appState.transactions : t.fonte === 'cartao' ? appState.ccTransactions : appState.futureTransactions;
+            const navTipo = t.fonte === 'conta' ? 'banco' : t.fonte;
+            for (const x of (arr || [])) {
+                const escId = t.fonte === 'conta' ? (x.contaId || '') : t.fonte === 'cartao' ? (x.cartaoId || '') : '';
+                if (t.escopoId && escId !== t.escopoId) continue;
+                if (!_passaFiltroCalc(x.categoria, x.descricao, x.data, t.filtroTipo, t.filtroValor)) continue;
+                if (!_passaFiltroCalc(x.categoria, x.descricao, x.data, t.filtroTipo2, t.filtroValor2)) continue;
+                const ent = t.fonte === 'previsao' ? (x.tipo === 'credito' ? Number(x.valor) || 0 : 0) : Number(x.credito) || 0;
+                const sai = t.fonte === 'previsao' ? (x.tipo === 'debito' ? Number(x.valor) || 0 : 0) : Number(x.debito) || 0;
+                const valor = t.movimento === 'entrada' ? ent : t.movimento === 'saida' ? sai : (ent - sai);
+                out.push({ tipo: navTipo, nav: true, id: x.id, contaId: x.contaId, cartaoId: x.cartaoId, data: x.data, descricao: x.descricao, categoria: x.categoria, valor });
+            }
+            return out;
+        }
+        function _chaveDataCalc(d) { const s = String(d || ''); if (/^\d{4}-/.test(s)) return s.slice(0, 10).replace(/-/g, ''); const p = s.split('/'); return p.length === 3 ? `${p[2]}${p[1].padStart(2, '0')}${p[0].padStart(2, '0')}` : ''; }
+        function abrirItensTermo(i) {
+            _calcItens = _itensDoTermo(calcTermos[i]);
+            _calcItens.sort((a, b) => _chaveDataCalc(b.data).localeCompare(_chaveDataCalc(a.data)));
+            const modal = document.getElementById('modal-calc-itens'); if (!modal) return;
+            const tit = document.getElementById('calc-itens-titulo'); if (tit) tit.innerText = `Termo ${i + 1} — itens encontrados`;
+            const info = document.getElementById('calc-itens-info');
+            if (info) {
+                const total = _calcItens.reduce((s, it) => s + (Number(it.valor) || 0), 0);
+                info.innerText = _calcItens.length ? `${_calcItens.length} item(ns) · total ${formatCurrency(total)}${_calcItens.some(x => x.nav) ? ' · toque para abrir na tela' : ''}` : 'Nenhum item.';
+            }
+            renderItensCalc();
+            modal.classList.remove('hidden');
+        }
+        function renderItensCalc() {
+            const cont = document.getElementById('calc-itens-lista'); if (!cont) return;
+            if (!_calcItens.length) { cont.innerHTML = `<p class="text-slate-400 py-6 text-center">Nenhum item encontrado para este termo.</p>`; return; }
+            const origem = { banco: '🏦 Conta', cartao: '💳 Cartão', previsao: '📅 Previsão', investimento: '📈 Investimento' };
+            cont.innerHTML = _calcItens.map((r, idx) => {
+                const cor = (Number(r.valor) || 0) >= 0 ? 'text-emerald-600' : 'text-rose-600';
+                const dataFmt = /^\d{4}-/.test(String(r.data || '')) ? String(r.data).split('T')[0].split('-').reverse().join('/') : (r.data || '');
+                const clic = r.nav ? `onclick="irParaItemCalc(${idx})" role="button" tabindex="0"` : '';
+                const hover = r.nav ? 'cursor-pointer hover:bg-indigo-50' : '';
+                const seta = r.nav ? ' <span class="text-indigo-400 text-xs">↗</span>' : '';
+                return `<div ${clic} class="py-2.5 px-2 -mx-2 rounded-lg flex justify-between items-center gap-3 transition ${hover}">
+                    <div class="min-w-0"><p class="text-sm font-medium text-slate-700 truncate">${escapeHtml(r.descricao || '')}${seta}</p>
+                    <p class="text-xs text-slate-400">${origem[r.tipo] || ''} &bull; ${escapeHtml(dataFmt)}${r.categoria ? (' &bull; ' + escapeHtml(r.categoria)) : ''}</p></div>
+                    <span class="font-bold text-sm whitespace-nowrap ${cor}">${formatCurrency(Math.abs(Number(r.valor) || 0))}</span></div>`;
+            }).join('');
+        }
+        function irParaItemCalc(idx) { const r = _calcItens[idx]; if (!r || !r.nav) return; _navegarParaLancamento(r, fecharItensCalc); }
+        function fecharItensCalc() { const m = document.getElementById('modal-calc-itens'); if (m) m.classList.add('hidden'); }
 
 
         function toggleContaDashboard(id) {
@@ -3055,10 +3130,10 @@
         // Resultados atualmente exibidos na busca (para o clique navegar até o item)
         let _buscaResultados = [];
 
-        // Abre o lançamento clicado na busca na tela correspondente (conta/cartão/previsão),
-        // ajustando conta/cartão ativos e o filtro de mês, e destacando a linha para edição.
-        function irParaLancamentoBusca(idx) {
-            const r = _buscaResultados[idx];
+        // Abre o lançamento na tela correspondente (conta/cartão/previsão), ajustando
+        // conta/cartão ativos e o filtro de mês, e destacando a linha para edição.
+        // `fecharModal` fecha o overlay de origem (busca ou itens do cálculo) antes de navegar.
+        function _navegarParaLancamento(r, fecharModal) {
             if (!r) return;
             const mesItem = (() => { const p = String(r.data || '').split('/'); return p.length === 3 ? `${p[1]}/${p[2]}` : 'todos'; })();
             const ajustarFiltroMes = (selId, mes) => {
@@ -3067,7 +3142,7 @@
                 const tem = [...sel.options].some(o => o.value === mes);
                 sel.value = tem ? mes : 'todos';
             };
-            fecharBuscaGlobal();
+            if (typeof fecharModal === 'function') fecharModal();
             try {
                 if (r.tipo === 'banco') {
                     if (r.contaId && getContaById(r.contaId)) contaSelecionadaId = r.contaId;
@@ -3089,9 +3164,9 @@
                     safeRun(renderPrevistoRealizado);
                 }
             } catch (e) {}
-            // dá um tempo para a lista renderizar e então rola/destaca a linha
             setTimeout(() => destacarLinhaBusca(`busca-${r.id}`), 150);
         }
+        function irParaLancamentoBusca(idx) { _navegarParaLancamento(_buscaResultados[idx], fecharBuscaGlobal); }
 
         function destacarLinhaBusca(elId) {
             const el = document.getElementById(elId);
@@ -3399,6 +3474,9 @@
             // Busca aberta: só Esc fecha
             const busca = document.getElementById('modal-busca');
             if (busca && !busca.classList.contains('hidden')) { if (e.key === 'Escape') fecharBuscaGlobal(); return; }
+            // Itens do cálculo aberto: só Esc fecha
+            const itens = document.getElementById('modal-calc-itens');
+            if (itens && !itens.classList.contains('hidden')) { if (e.key === 'Escape') fecharItensCalc(); return; }
             if (e.key === 'Escape') return;
             const k = (e.key || '').toLowerCase();
             if (k === 'b') { e.preventDefault(); abrirBuscaGlobal(); return; }
