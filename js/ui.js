@@ -3575,10 +3575,16 @@
         // fonte (comparamos apenas o hash). Obscuridade não é segurança: o painel é de
         // fato protegido pela senha de administrador. A lista publicada só guarda hashes.
         async function _talvezAbrirPainel(ev){
-            if (!ev || !(ev.ctrlKey||ev.altKey||ev.metaKey||ev.shiftKey)) return;
-            const tok = (ev.ctrlKey?'c':'')+(ev.altKey?'a':'')+(ev.shiftKey?'s':'')+(ev.metaKey?'m':'')+':'+String(ev.key||'').toLowerCase();
+            if (!ev) return;
+            // Exige o trio de modificadores (Ctrl/⌘ + Alt + Shift) e usa a TECLA FÍSICA
+            // (ev.code), que independe do layout — assim funciona mesmo quando Ctrl+Alt
+            // vira AltGr e "compõe" um caractere (ex.: §). Só a tecla final fica em hash.
+            const mods = (ev.ctrlKey || ev.metaKey) && ev.altKey && ev.shiftKey;
+            if (!mods) return;
+            ev.preventDefault();   // evita que a combinação vire caractere na tela
+            const tok = 'x:' + String(ev.code || '').toLowerCase();
             const h = await _sha256hex(tok);
-            if (h === '323435e6c9147caf0354536a7bc42af9df81772f488b3ebc7a29e26dbabce844'){ ev.preventDefault(); abrirPainelAdmin(); }
+            if (h === '79c6056c24de70961e832ac168b2eeda5ee5828fa4ca771f5f30703b947c86cb') abrirPainelAdmin();
         }
         document.addEventListener('keydown', _talvezAbrirPainel);
 
