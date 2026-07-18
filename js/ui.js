@@ -3622,6 +3622,18 @@
         }
         document.addEventListener('keydown', _talvezAbrirPainel);
 
+        // Alternativa para toque (celular, sem teclado): tocar 5 vezes seguidas (intervalo
+        // < 1,5s entre toques) num ponto discreto — o título do cabeçalho ou o emoji da tela
+        // de identificação — abre o painel. Discreto, mas não é segurança (o painel exige a
+        // senha de administrador).
+        let _toqueContador = 0, _toqueTimer = null;
+        function _toqueSecretoPainel(){
+            _toqueContador++;
+            if (_toqueTimer) clearTimeout(_toqueTimer);
+            _toqueTimer = setTimeout(()=>{ _toqueContador = 0; }, 1500);
+            if (_toqueContador >= 5){ _toqueContador = 0; clearTimeout(_toqueTimer); abrirPainelAdmin(); }
+        }
+
         let _adminAutenticado = false;
         let _admSenha = null;   // senha de admin em memória (p/ cifrar/decifrar os nomes)
         function abrirPainelAdmin(){
