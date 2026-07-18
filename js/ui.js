@@ -3623,6 +3623,7 @@
         document.addEventListener('keydown', _talvezAbrirPainel);
 
         let _adminAutenticado = false;
+        let _admSenha = null;   // senha de admin em memória (p/ cifrar/decifrar os nomes)
         function abrirPainelAdmin(){
             const t = document.getElementById('tela-admin'); if(!t) return;
             t.classList.remove('hidden'); _adminAutenticado = false; renderPainelAdmin();
@@ -3661,8 +3662,37 @@
                 cfg = { salt, adminHash: await _hashSenhaAdmin(senha, salt), usuarios: [] };
                 _salvarCfgAdmin(cfg);
             }
+            _admSenha = senha;               // guarda em memória p/ cifrar/decifrar os nomes
             await _migrarCfgUsuarios();
+            await _restaurarNomesDoArquivo(); // recupera os nomes reais do cafe.json publicado
             _adminAutenticado = true; renderPainelAdmin();
+        }
+
+        // Recupera os nomes em texto a partir do campo cifrado "adm" do cafe.json publicado,
+        // usando a senha de administrador recém-informada. Não faz nada se o arquivo não tiver
+        // o campo (versões antigas) ou se a senha não corresponder — nunca apaga nomes locais.
+        async function _restaurarNomesDoArquivo(){
+            try {
+                const lista = await carregarListaAcesso();
+                if (!lista || !lista.adm || !lista.salt || !Array.isArray(lista.usuarios)) return;
+                let nomes;
+                try { nomes = await decifrarNomesAdmin(lista.adm, _admSenha, lista.salt); }
+                catch(e){ return; }          // senha não corresponde a este arquivo
+                const usuarios = [];
+                for (const h of lista.usuarios){
+                    let nome = null;
+                    for (const nm of nomes){ if (await _hashAcesso(nm, lista.salt) === h){ nome = nm; break; } }
+                    usuarios.push({ nome, hash: h });
+                }
+                // preserva eventuais adições locais ainda não publicadas
+                const existentes = new Set(usuarios.map(u => u.hash));
+                const cfg = _lerCfgAdmin() || {};
+                for (const u of (cfg.usuarios || [])) if (u && u.hash && !existentes.has(u.hash)) usuarios.push(u);
+                cfg.salt = lista.salt;
+                if (lista.admin) cfg.adminHash = lista.admin;
+                cfg.usuarios = usuarios; delete cfg.nomes;
+                _salvarCfgAdmin(cfg);
+            } catch(e){}
         }
 
         // Migra o modelo antigo (cfg.nomes:[texto]) para o novo (cfg.usuarios:[{nome,hash}]),
@@ -3725,8 +3755,14 @@
             const cfg = _lerCfgAdmin();
             if (!cfg || !cfg.adminHash){ alert('Defina a senha de administrador primeiro.'); return; }
             const usuarios = [];
-            for (const u of (cfg.usuarios||[])) usuarios.push(u.nome ? await _hashAcesso(u.nome, cfg.salt) : u.hash);
+            const nomes = [];
+            for (const u of (cfg.usuarios||[])){
+                usuarios.push(u.nome ? await _hashAcesso(u.nome, cfg.salt) : u.hash);
+                if (u.nome) nomes.push(u.nome);
+            }
             const obj = { v:1, salt: cfg.salt, admin: cfg.adminHash, usuarios };
+            // Guarda os nomes cifrados (só a senha de admin abre) para recuperá-los depois.
+            if (_admSenha){ try { obj.adm = await cifrarNomesAdmin(nomes, _admSenha, cfg.salt); } catch(e){} }
             const txt = JSON.stringify(obj, null, 2);
             const pre = document.getElementById('admin-json'); if (pre) pre.value = txt;
             const blob = new Blob([txt], { type:'application/json' });
@@ -3750,7 +3786,13 @@
             if (!obj || typeof obj !== 'object' || !obj.salt || !Array.isArray(obj.usuarios)){ alert('Arquivo de acesso inválido (esperado salt + usuarios).'); return; }
             if (!confirm('Importar esta lista? Ela substitui a lista atual deste dispositivo (salt, senha de admin e usuários).')) return;
             const cfgAtual = _lerCfgAdmin();
-            const conhecidos = _nomesConhecidos(cfgAtual);
+            // Nomes candidatos: os já conhecidos localmente + os recuperados do campo cifrado
+            // "adm" do arquivo (se a senha de admin em memória abrir). Assim os nomes reais
+            // voltam a aparecer, e não só "não identificado".
+            const conhecidos = _nomesConhecidos(cfgAtual).slice();
+            if (obj.adm && _admSenha){
+                try { for (const nm of await decifrarNomesAdmin(obj.adm, _admSenha, obj.salt)) if (nm) conhecidos.push(nm); } catch(e){}
+            }
             const usuarios = [];
             for (const h of obj.usuarios){
                 let nome = null;

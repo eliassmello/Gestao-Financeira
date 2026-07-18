@@ -1871,6 +1871,29 @@
             } catch (e) { return null; }
         }
 
+        // Os nomes em texto viajam CIFRADOS (AES-GCM) dentro do cafe.json, no campo "adm".
+        // Só a senha de administrador decifra — o público continua vendo apenas os hashes.
+        // Assim o admin recupera os nomes reais em qualquer máquina.
+        async function _chaveAdmin(senha, saltHex) {
+            const km = await crypto.subtle.importKey("raw", new TextEncoder().encode(String(senha || '')), "PBKDF2", false, ["deriveKey"]);
+            return crypto.subtle.deriveKey({ name: "PBKDF2", salt: _hexToBytes(saltHex), iterations: 150000, hash: "SHA-256" }, km, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+        }
+        async function cifrarNomesAdmin(nomes, senha, saltHex) {
+            const key = await _chaveAdmin(senha, saltHex);
+            const iv = crypto.getRandomValues(new Uint8Array(12));
+            const data = new TextEncoder().encode(JSON.stringify(nomes || []));
+            const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, data));
+            return _bytesToHex(iv) + ':' + _bytesToHex(ct);
+        }
+        async function decifrarNomesAdmin(blob, senha, saltHex) {
+            const parts = String(blob || '').split(':');
+            if (parts.length !== 2) throw new Error('formato');
+            const key = await _chaveAdmin(senha, saltHex);
+            const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: _hexToBytes(parts[0]) }, key, _hexToBytes(parts[1]));
+            const arr = JSON.parse(new TextDecoder().decode(new Uint8Array(pt)));
+            return Array.isArray(arr) ? arr : [];
+        }
+
 
         function exportData() {
             appState.ultimoBackup = new Date().toISOString();
