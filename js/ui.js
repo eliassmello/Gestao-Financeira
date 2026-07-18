@@ -2127,18 +2127,40 @@
                         ${escopoSel}
                         <select onchange="calcSet(${i},'movimento',this.value)" class="text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">${sel(t.movimento, [['saida', 'Saídas'], ['entrada', 'Entradas'], ['liquido', 'Líquido (E−S)']])}</select>
                         <select onchange="calcSet(${i},'agg',this.value)" class="text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">${sel(t.agg, [['soma', 'Soma'], ['media', 'Média'], ['contagem', 'Contagem'], ['min', 'Mínimo'], ['max', 'Máximo']])}</select>`;
-                html += `
-                    <div class="border border-slate-200 rounded-lg p-3 space-y-2">
-                        <div class="flex items-center gap-2 flex-wrap">
-                            <span class="text-[10px] font-bold text-slate-400 uppercase w-14">Termo ${i + 1}</span>
-                            ${linha1}
-                            <span class="ml-auto flex items-center gap-2 whitespace-nowrap">
-                                <button onclick="abrirItensTermo(${i})" title="Ver os itens encontrados neste termo" class="text-slate-400 hover:text-indigo-600 text-base">🔍</button>
-                                <span class="text-sm font-bold text-slate-700">= <span id="calc-valor-${i}">R$ 0,00</span> <span class="text-[10px] font-normal text-slate-400">(<span id="calc-n-${i}">0</span>)</span></span>
-                            </span>
-                        </div>
-                        <div class="flex items-center gap-2 flex-wrap">${linha2}</div>
-                    </div>`;
+                // Resultado do termo (sempre visível, mesmo recolhido)
+                const resultadoTermo = `<span class="ml-auto flex items-center gap-2 whitespace-nowrap">
+                        <button onclick="event.preventDefault();event.stopPropagation();abrirItensTermo(${i})" title="Ver os itens encontrados neste termo" class="text-slate-400 hover:text-indigo-600 text-base">🔍</button>
+                        <span class="text-sm font-bold text-slate-700">= <span id="calc-valor-${i}">R$ 0,00</span> <span class="text-[10px] font-normal text-slate-400">(<span id="calc-n-${i}">0</span>)</span></span>
+                    </span>`;
+                if (i === 0) {
+                    // Termo 1: sempre aberto (sem recolher).
+                    html += `
+                        <div class="border border-slate-200 rounded-lg p-3 space-y-2">
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <span class="text-[10px] font-bold text-slate-400 uppercase w-14">Termo 1</span>
+                                ${linha1}
+                                ${resultadoTermo}
+                            </div>
+                            <div class="flex items-center gap-2 flex-wrap">${linha2}</div>
+                        </div>`;
+                } else {
+                    // Termos 2–4: recolhíveis. Abrem só quando o operador anterior é escolhido
+                    // (≠ "parar"); com "parar" ficam fechados.
+                    const aberto = calcOps[i - 1] !== 'nenhum';
+                    html += `
+                        <details class="border border-slate-200 rounded-lg group"${aberto ? ' open' : ''}>
+                            <summary class="flex items-center gap-2 flex-wrap p-3 cursor-pointer select-none">
+                                <span class="text-[10px] font-bold text-slate-400 uppercase w-14">Termo ${i + 1}</span>
+                                ${resultadoTermo}
+                                <span class="text-slate-400 text-xs group-open:hidden">▼ abrir</span>
+                                <span class="text-slate-400 text-xs hidden group-open:inline">▲ fechar</span>
+                            </summary>
+                            <div class="px-3 pb-3 pt-0 space-y-2">
+                                <div class="flex items-center gap-2 flex-wrap">${linha1}</div>
+                                <div class="flex items-center gap-2 flex-wrap">${linha2}</div>
+                            </div>
+                        </details>`;
+                }
                 if (i < CALC_N_TERMOS - 1) {
                     html += `
                         <div class="flex justify-center">
@@ -2152,7 +2174,8 @@
         function calcSetFonte(i, v) { const t = calcTermos[i]; t.fonte = v; t.filtroTipo = 'nenhum'; t.filtroValor = ''; t.filtroTipo2 = 'nenhum'; t.filtroValor2 = ''; t.escopoId = ''; renderCalculos(); }
         function calcSetFiltroTipo(i, slot, v) { const t = calcTermos[i]; if (slot === 2) { t.filtroTipo2 = v; t.filtroValor2 = ''; } else { t.filtroTipo = v; t.filtroValor = ''; } renderCalculos(); }
         function calcSet(i, campo, v) { calcTermos[i][campo] = v; calcularResultado(); }
-        function calcSetOp(i, v) { calcOps[i] = v; calcularResultado(); }
+        // Re-renderiza para o próximo termo abrir/fechar conforme o operador escolhido.
+        function calcSetOp(i, v) { calcOps[i] = v; renderCalculos(); }
 
         // Contagem é um número puro (não R$); demais agregações são monetárias.
         function _ehContagem(t) { return t && t.fonte !== 'investimento' && t.agg === 'contagem'; }
@@ -2300,10 +2323,34 @@
         }
 
 
+        // Escapa texto para uso dentro de um atributo HTML (inclui aspas).
+        function _escAttr(s) { return escapeHtml(String(s == null ? '' : s)).replace(/"/g, '&quot;'); }
+
+        // Campo de observação (até 25 caracteres) por linha. Não participa das importações
+        // nem da deduplicação — é apenas uma anotação livre gravada na própria transação.
+        function obsInputHtml(t, tipo) {
+            return `<input type="text" maxlength="25" value="${_escAttr(t.obs || '')}" placeholder="Obs."
+                onchange="setObsTransacao('${t.id}','${tipo}', this.value)"
+                title="Observação (até 25 caracteres)"
+                class="w-full md:w-40 text-xs border border-slate-200 rounded-md p-2 mt-2 md:mt-0">`;
+        }
+
+        // Grava a observação da linha direto no banco, sem re-renderizar a lista (não perde
+        // o foco nem a rolagem). onchange dispara ao sair do campo.
+        function setObsTransacao(id, tipo, valor) {
+            const lista = tipo === 'cartao' ? appState.ccTransactions : appState.transactions;
+            const t = lista.find(x => x.id === id);
+            if (!t) return;
+            const v = String(valor || '').slice(0, 25);
+            if ((t.obs || '') === v) return;
+            t.obs = v;
+            saveToDB();
+        }
+
         function linhaTransacaoHtml(t, dataHtml, corValor, tipo, fnApagar) {
             const isDeb = t.debito > 0; const val = isDeb ? t.debito : t.credito;
             return `
-                <div id="busca-${t.id}" class="virt-row flex flex-col md:flex-row justify-between p-4 border-b ${t.isDuplicate ? 'bg-yellow-100 hover:bg-yellow-200 border-yellow-300' : 'hover:bg-slate-50'}">
+                <div id="busca-${t.id}" class="virt-row flex flex-col md:flex-row md:items-center justify-between gap-2 p-4 border-b ${t.isDuplicate ? 'bg-yellow-100 hover:bg-yellow-200 border-yellow-300' : 'hover:bg-slate-50'}">
                     <div class="flex-1 grid grid-cols-3 md:grid-cols-4 gap-2 items-center">
                         ${dataHtml}
                         <span class="text-sm text-slate-700 truncate col-span-2" title="${escapeHtml(t.descricao)}">${escapeHtml(t.descricao)}</span>
@@ -2312,7 +2359,10 @@
                             <button onclick="${fnApagar}('${t.id}')" class="text-rose-400 hover:text-rose-600 font-bold ml-2 text-xl" title="Apagar transação">&times;</button>
                         </div>
                     </div>
-                    ${selectCategoriaHtml(t, tipo)}
+                    <div class="flex flex-col sm:flex-row gap-2 md:items-center shrink-0">
+                        ${selectCategoriaHtml(t, tipo)}
+                        ${obsInputHtml(t, tipo)}
+                    </div>
                 </div>`;
         }
 
