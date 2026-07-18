@@ -1167,6 +1167,70 @@
         </div>
     </div>
 
+    <!-- Portão de acesso: exibido ANTES das telas de senha. Só quem tem o nome de
+         usuário autorizado (lista publicada em cafe.json) passa daqui. -->
+    <div id="tela-usuario" class="hidden fixed inset-0 bg-slate-900 z-[110] flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-8 text-center">
+            <div class="text-5xl mb-3">👋</div>
+            <h2 class="text-xl font-bold text-slate-800">Identifique-se</h2>
+            <p class="text-sm text-slate-500 mt-1 mb-5">Digite seu nome de usuário para acessar o app.</p>
+            <input type="text" id="usuario-nome" placeholder="Nome de usuário" autocomplete="username" onkeydown="if(event.key==='Enter') submeterUsuario()" class="w-full text-center text-lg border border-slate-300 rounded-lg p-3 outline-none focus:ring-2 focus:ring-indigo-500">
+            <p id="erro-usuario" class="hidden text-sm font-semibold text-rose-600 mt-2"></p>
+            <button onclick="submeterUsuario()" class="w-full mt-4 bg-indigo-600 text-white rounded-lg p-3 font-bold hover:bg-indigo-700 transition">Entrar</button>
+            <p id="usuario-msg" class="hidden text-[12px] text-amber-600 font-medium mt-4"></p>
+            <p class="text-[11px] text-slate-400 mt-4">Ainda não tem acesso? Solicite ao administrador que cadastre seu nome.</p>
+        </div>
+    </div>
+
+    <!-- Painel de administração (oculto): aberto por uma combinação de teclas.
+         Gerencia a lista de usuários autorizados e gera o arquivo cafe.json. -->
+    <div id="tela-admin" class="hidden fixed inset-0 bg-slate-900/95 z-[120] flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 max-h-[92vh] overflow-y-auto">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-bold text-slate-800">🔧 Administração de acesso</h2>
+                <button onclick="fecharPainelAdmin()" class="text-slate-400 hover:text-slate-700 text-2xl leading-none">&times;</button>
+            </div>
+
+            <!-- Login do admin -->
+            <div id="admin-login">
+                <p id="admin-login-titulo" class="text-sm font-semibold text-slate-700 mb-2">Senha de administrador</p>
+                <input type="password" id="admin-senha" placeholder="Senha de administrador" onkeydown="if(event.key==='Enter') submeterAdminLogin()" class="w-full border border-slate-300 rounded-lg p-3 outline-none focus:ring-2 focus:ring-indigo-500">
+                <p id="erro-admin" class="hidden text-sm font-semibold text-rose-600 mt-2"></p>
+                <button onclick="submeterAdminLogin()" class="w-full mt-3 bg-slate-800 text-white rounded-lg p-3 font-bold hover:bg-slate-900 transition">Acessar painel</button>
+                <p class="text-[11px] text-slate-400 mt-3">A senha e a lista de nomes ficam apenas neste dispositivo. O arquivo publicado guarda somente hashes.</p>
+            </div>
+
+            <!-- Corpo do painel -->
+            <div id="admin-corpo" class="hidden">
+                <div class="flex items-center justify-between mb-2">
+                    <p class="text-sm font-semibold text-slate-700">Usuários autorizados</p>
+                    <span id="admin-contagem" class="text-xs text-slate-400">0 usuário(s)</span>
+                </div>
+                <div class="flex gap-2 mb-2">
+                    <input type="text" id="admin-novo-nome" placeholder="Nome do usuário" onkeydown="if(event.key==='Enter') adicionarUsuarioAdmin()" class="flex-1 border border-slate-300 rounded-lg p-2 outline-none focus:ring-2 focus:ring-indigo-500">
+                    <button onclick="adicionarUsuarioAdmin()" class="bg-indigo-600 text-white rounded-lg px-4 font-bold hover:bg-indigo-700 transition">Adicionar</button>
+                </div>
+                <ul id="admin-lista" class="border border-slate-200 rounded-lg px-3 py-1 max-h-48 overflow-y-auto mb-4"></ul>
+
+                <div class="border-t border-slate-200 pt-3">
+                    <p class="text-sm font-semibold text-slate-700 mb-1">Publicar a lista</p>
+                    <p class="text-[12px] text-slate-500 mb-2">Gere o arquivo <code class="bg-slate-100 px-1 rounded">cafe.json</code> e faça commit dele no repositório (raiz). O acesso passa a valer para todos após o deploy.</p>
+                    <div class="flex flex-wrap gap-2 mb-2">
+                        <button onclick="gerarArquivoAcesso()" class="bg-emerald-600 text-white rounded-lg px-4 py-2 text-sm font-bold hover:bg-emerald-700 transition">⬇️ Gerar cafe.json</button>
+                        <button onclick="copiarJsonAcesso()" class="bg-slate-200 text-slate-700 rounded-lg px-4 py-2 text-sm font-bold hover:bg-slate-300 transition">📋 Copiar JSON</button>
+                    </div>
+                    <textarea id="admin-json" readonly placeholder="O conteúdo do arquivo aparece aqui após gerar." class="w-full h-28 text-[11px] font-mono border border-slate-200 rounded-lg p-2 bg-slate-50 outline-none"></textarea>
+                </div>
+
+                <div class="border-t border-slate-200 pt-3 mt-3 flex flex-wrap gap-2">
+                    <button onclick="entrarComoAdmin()" class="bg-indigo-600 text-white rounded-lg px-4 py-2 text-sm font-bold hover:bg-indigo-700 transition">Entrar no app agora</button>
+                    <button onclick="trocarSenhaAdmin()" class="bg-slate-200 text-slate-700 rounded-lg px-4 py-2 text-sm font-bold hover:bg-slate-300 transition">Trocar senha de admin</button>
+                </div>
+                <p class="text-[11px] text-slate-400 mt-3">"Entrar no app agora" libera este dispositivo como administrador (não passa pela lista de nomes).</p>
+            </div>
+        </div>
+    </div>
+
     <script src="./js/services.js"></script>
     <script src="./js/ui.js"></script>
 </body>

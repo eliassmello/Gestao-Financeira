@@ -1819,6 +1819,58 @@
             return crypto.subtle.deriveKey({ name: "PBKDF2", salt, iterations: 210000, hash: "SHA-256" }, km, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
         }
 
+        // ===== Controle de acesso (lista de usuários autorizados) =====
+        // A lista publicada guarda apenas HASHES dos nomes (nunca o texto), então o
+        // arquivo distribuído no repositório não revela quem são os usuários. O nome é
+        // normalizado (sem acento, minúsculo, espaços colapsados) antes de virar hash,
+        // para "João Silva" e "joao  silva" baterem igual.
+        function _normalizeAcesso(txt) {
+            return String(txt || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+                .trim().toLowerCase().replace(/\s+/g, ' ');
+        }
+        function _hexToBytes(hex) {
+            const s = String(hex || ''); const out = new Uint8Array(s.length / 2);
+            for (let i = 0; i < out.length; i++) out[i] = parseInt(s.substr(i * 2, 2), 16);
+            return out;
+        }
+        function _bytesToHex(u8) {
+            return Array.from(u8).map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+        // Hash lento (PBKDF2) do nome/senha com o salt do arquivo — mesmo algoritmo nos
+        // dois lados (gerar a lista e conferir na entrada), senão os hashes não batem.
+        async function _hashAcesso(texto, saltHex) {
+            const km = await crypto.subtle.importKey("raw", new TextEncoder().encode(_normalizeAcesso(texto)), "PBKDF2", false, ["deriveBits"]);
+            const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", salt: _hexToBytes(saltHex), iterations: 120000, hash: "SHA-256" }, km, 256);
+            return _bytesToHex(new Uint8Array(bits));
+        }
+        // A senha do painel de administração não é normalizada (respeita maiúsculas/símbolos).
+        async function _hashSenhaAdmin(senha, saltHex) {
+            const km = await crypto.subtle.importKey("raw", new TextEncoder().encode(String(senha || '')), "PBKDF2", false, ["deriveBits"]);
+            const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", salt: _hexToBytes(saltHex), iterations: 120000, hash: "SHA-256" }, km, 256);
+            return _bytesToHex(new Uint8Array(bits));
+        }
+        async function _sha256hex(txt) {
+            const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(String(txt || '')));
+            return _bytesToHex(new Uint8Array(d));
+        }
+        function _saltAleatorioHex(n) { return _bytesToHex(crypto.getRandomValues(new Uint8Array(n || 16))); }
+
+        // Nome do arquivo de acesso publicado no repositório (propositalmente discreto).
+        const ARQUIVO_ACESSO = 'cafe.json';
+
+        // Busca a lista publicada. Retorna o objeto { salt, admin, usuarios } ou null se
+        // não conseguir carregar (offline/ausente) — o chamador decide o que fazer (o
+        // portão é "à prova de falha fechada": sem lista, ninguém novo entra).
+        async function carregarListaAcesso() {
+            try {
+                const resp = await fetch('./' + ARQUIVO_ACESSO + '?ts=' + Date.now(), { cache: 'no-store' });
+                if (!resp.ok) return null;
+                const j = await resp.json();
+                if (!j || typeof j !== 'object' || !Array.isArray(j.usuarios)) return null;
+                return j;
+            } catch (e) { return null; }
+        }
+
 
         function exportData() {
             appState.ultimoBackup = new Date().toISOString();

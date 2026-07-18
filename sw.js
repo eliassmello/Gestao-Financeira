@@ -1,4 +1,4 @@
-const CACHE_NAME = 'financas-pwa-v54';
+const CACHE_NAME = 'financas-pwa-v55';
 
 // Recursos essenciais para a aplicação abrir offline (o app + as bibliotecas de CDN).
 const urlsToCache = [
@@ -37,6 +37,21 @@ self.addEventListener('install', event => {
 self.addEventListener('fetch', event => {
   const req = event.request;
   if (req.method !== 'GET') return;
+
+  // Lista de acesso (cafe.json): network-first, para o cadastro de usuários publicado
+  // no repositório sempre chegar atualizado. Cai no cache só quando offline.
+  if (new URL(req.url).pathname.endsWith('/cafe.json')) {
+    event.respondWith(
+      fetch(req).then(resp => {
+        if (resp && (resp.ok || resp.type === 'opaque')) {
+          const copy = resp.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(req, copy)).catch(() => {});
+        }
+        return resp;
+      }).catch(() => caches.match(req))
+    );
+    return;
+  }
 
   event.respondWith(
     caches.match(req).then(cached => {
