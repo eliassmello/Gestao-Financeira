@@ -3519,18 +3519,38 @@
         function _lerCfgAdmin(){ try { return JSON.parse(_laGet('cfgAcessoAdmin')||'null'); } catch(e){ return null; } }
         function _salvarCfgAdmin(o){ _laSet('cfgAcessoAdmin', JSON.stringify(o)); }
 
+        // No dispositivo do ADMIN existe a lista local (cfgAcessoAdmin.nomes) em texto:
+        // ela autoriza direto, sem depender do arquivo publicado nem de estar online.
+        // Nos dispositivos dos usuários comuns (sem essa config) vale só o cafe.json.
+        function _temListaLocal(){ const c=_lerCfgAdmin(); return !!(c && Array.isArray(c.nomes) && c.nomes.length); }
+        function _nomeNaListaLocal(nome){
+            const c = _lerCfgAdmin(); if (!c || !Array.isArray(c.nomes)) return false;
+            const norm = _normalizeAcesso(nome);
+            return c.nomes.some(n => _normalizeAcesso(n) === norm);
+        }
+        async function _nomeAutorizado(nome, lista){
+            if (_nomeNaListaLocal(nome)) return true;            // dispositivo do admin
+            if (lista && Array.isArray(lista.usuarios) && lista.usuarios.length){
+                const h = await _hashAcesso(nome, lista.salt);
+                return lista.usuarios.includes(h);
+            }
+            return false;
+        }
+
         // Decide se libera o app. Retorna true (segue p/ senha) ou false (mostra a tela).
         // À prova de falha FECHADA: sem lista carregável e sem selo local, ninguém entra.
         async function portaAcesso(){
-            if (_laGet('_acessoAdmin') === '1') return true;      // dispositivo do admin
+            if (_laGet('_acessoAdmin') === '1') return true;      // dispositivo do admin liberado
             const lembrado = _laGet('_acessoUser');
+            // Nome lembrado que consta na lista local (admin) entra direto.
+            if (lembrado && _nomeNaListaLocal(lembrado)){ _laSet('_acessoSelo','1'); return true; }
             const lista = await carregarListaAcesso();
             if (lista === null){                                 // offline / arquivo indisponível
                 if (lembrado && _laGet('_acessoSelo') === '1') return true;
-                mostrarTelaUsuario('offline'); return false;
+                mostrarTelaUsuario(_temListaLocal() ? '' : 'offline'); return false;
             }
-            if (!lista.usuarios || lista.usuarios.length === 0){ // ainda não configurado
-                mostrarTelaUsuario('vazio'); return false;
+            if (!lista.usuarios || lista.usuarios.length === 0){ // ainda não configurado (publicado)
+                mostrarTelaUsuario(_temListaLocal() ? '' : 'vazio'); return false;
             }
             if (lembrado){
                 const h = await _hashAcesso(lembrado, lista.salt);
@@ -3561,9 +3581,14 @@
             const mostrar = (m)=>{ if(erro){ erro.innerText=m; erro.classList.remove('hidden'); } };
             if (_normalizeAcesso(nome).length < 2){ mostrar('Digite seu nome de usuário.'); return; }
             const lista = await carregarListaAcesso();
-            if (lista === null || !lista.usuarios || !lista.usuarios.length){ mostrar('Não foi possível validar agora. Tente novamente online.'); return; }
-            const h = await _hashAcesso(nome, lista.salt);
-            if (!lista.usuarios.includes(h)){ mostrar('Nome de usuário não autorizado.'); return; }
+            const publicadaTem = !!(lista && Array.isArray(lista.usuarios) && lista.usuarios.length);
+            // Só é possível decidir se há alguma base: lista local (admin) ou lista publicada.
+            if (!_temListaLocal() && !publicadaTem){
+                mostrar(lista === null ? 'Não foi possível validar agora. Tente novamente online.'
+                                       : 'O acesso ainda não foi liberado pelo administrador.');
+                return;
+            }
+            if (!(await _nomeAutorizado(nome, lista))){ mostrar('Nome de usuário não autorizado.'); return; }
             _laSet('_acessoUser', _normalizeAcesso(nome));
             _laSet('_acessoSelo','1');
             const t = document.getElementById('tela-usuario'); if(t) t.classList.add('hidden');
