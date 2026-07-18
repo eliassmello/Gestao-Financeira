@@ -3781,6 +3781,13 @@
             reader.onload = ev => { importarAcessoDeTexto(String(ev.target.result || '')); input.value=''; };
             reader.readAsText(f);
         }
+        // Importa a partir do texto colado na caixa (prático no celular, sem escolher arquivo).
+        function importarAcessoColado(){
+            const el = document.getElementById('admin-json');
+            const txt = el ? el.value.trim() : '';
+            if (!txt){ alert('Cole o conteúdo de um cafe.json na caixa antes de importar.'); return; }
+            importarAcessoDeTexto(txt);
+        }
         async function importarAcessoDeTexto(txt){
             let obj; try { obj = JSON.parse(txt); } catch(e){ alert('Arquivo inválido: não é um JSON.'); return; }
             if (!obj || typeof obj !== 'object' || !obj.salt || !Array.isArray(obj.usuarios)){ alert('Arquivo de acesso inválido (esperado salt + usuarios).'); return; }
