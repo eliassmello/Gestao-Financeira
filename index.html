@@ -1142,7 +1142,7 @@
          ainda não foi desbloqueada. Cobre todo o app até a senha correta ser digitada. -->
     <div id="tela-bloqueio" class="hidden fixed inset-0 bg-slate-900 z-[100] flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-8 text-center">
-            <div class="text-5xl mb-3">🔒</div>
+            <div onclick="_toqueSecretoPainel()" class="text-5xl mb-3 select-none">🔒</div>
             <h2 class="text-xl font-bold text-slate-800">App protegido</h2>
             <p class="text-sm text-slate-500 mt-1 mb-5">Digite sua senha de acesso para desbloquear seus dados.</p>
             <input type="password" id="senha-desbloqueio" placeholder="Senha de acesso" onkeydown="if(event.key === 'Enter') submeterDesbloqueio()" class="w-full text-center text-lg border border-slate-300 rounded-lg p-3 outline-none focus:ring-2 focus:ring-indigo-500">
@@ -1171,7 +1171,7 @@
          usuário autorizado (lista publicada em cafe.json) passa daqui. -->
     <div id="tela-usuario" class="hidden fixed inset-0 bg-slate-900 z-[110] flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-8 text-center">
-            <div onclick="_toqueSecretoPainel()" class="text-5xl mb-3 select-none">👋</div>
+            <div class="text-5xl mb-3">👋</div>
             <h2 class="text-xl font-bold text-slate-800">Identifique-se</h2>
             <p class="text-sm text-slate-500 mt-1 mb-5">Digite seu nome de usuário para acessar o app.</p>
             <input type="text" id="usuario-nome" placeholder="Nome de usuário" autocomplete="username" onkeydown="if(event.key==='Enter') submeterUsuario()" class="w-full text-center text-lg border border-slate-300 rounded-lg p-3 outline-none focus:ring-2 focus:ring-indigo-500">
