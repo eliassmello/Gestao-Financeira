@@ -3519,14 +3519,23 @@
         function _lerCfgAdmin(){ try { return JSON.parse(_laGet('cfgAcessoAdmin')||'null'); } catch(e){ return null; } }
         function _salvarCfgAdmin(o){ _laSet('cfgAcessoAdmin', JSON.stringify(o)); }
 
-        // No dispositivo do ADMIN existe a lista local (cfgAcessoAdmin.nomes) em texto:
-        // ela autoriza direto, sem depender do arquivo publicado nem de estar online.
-        // Nos dispositivos dos usuários comuns (sem essa config) vale só o cafe.json.
-        function _temListaLocal(){ const c=_lerCfgAdmin(); return !!(c && Array.isArray(c.nomes) && c.nomes.length); }
+        // No dispositivo do ADMIN existe a lista local em texto: ela autoriza direto, sem
+        // depender do arquivo publicado nem de estar online. Nos dispositivos dos usuários
+        // comuns (sem essa config) vale só o cafe.json.
+        // Modelo novo: cfg.usuarios = [{nome, hash}] (nome pode ser null p/ hash importado
+        // sem nome). Modelo antigo: cfg.nomes = [texto]. As funções abaixo aceitam ambos.
+        function _nomesConhecidos(cfg){
+            const s = [];
+            if (cfg){
+                if (Array.isArray(cfg.usuarios)) for (const u of cfg.usuarios) if (u && u.nome) s.push(u.nome);
+                if (Array.isArray(cfg.nomes)) for (const n of cfg.nomes) if (n) s.push(n);
+            }
+            return s;
+        }
+        function _temListaLocal(){ return _nomesConhecidos(_lerCfgAdmin()).length > 0; }
         function _nomeNaListaLocal(nome){
-            const c = _lerCfgAdmin(); if (!c || !Array.isArray(c.nomes)) return false;
             const norm = _normalizeAcesso(nome);
-            return c.nomes.some(n => _normalizeAcesso(n) === norm);
+            return _nomesConhecidos(_lerCfgAdmin()).some(n => _normalizeAcesso(n) === norm);
         }
         async function _nomeAutorizado(nome, lista){
             if (_nomeNaListaLocal(nome)) return true;            // dispositivo do admin
@@ -3649,52 +3658,74 @@
                 if (h !== cfg.adminHash){ mostrar('Senha incorreta.'); return; }
             } else {
                 const salt = _saltAleatorioHex(16);
-                cfg = { salt, adminHash: await _hashSenhaAdmin(senha, salt), nomes: [] };
+                cfg = { salt, adminHash: await _hashSenhaAdmin(senha, salt), usuarios: [] };
                 _salvarCfgAdmin(cfg);
             }
+            await _migrarCfgUsuarios();
             _adminAutenticado = true; renderPainelAdmin();
         }
 
-        function renderListaAdmin(){
-            const cfg = _lerCfgAdmin() || { nomes: [] };
-            const nomes = cfg.nomes || [];
-            const ul = document.getElementById('admin-lista');
-            if (ul){
-                ul.innerHTML = nomes.length ? nomes.map((n,idx)=>
-                    `<li class="flex items-center justify-between gap-2 py-1 border-b border-slate-100">
-                       <span class="text-sm text-slate-700">${escapeHtml(n)}</span>
-                       <button onclick="removerUsuarioAdmin(${idx})" class="text-rose-600 text-xs font-bold hover:underline">remover</button>
-                     </li>`).join('')
-                  : '<li class="text-sm text-slate-400 py-2">Nenhum usuário cadastrado ainda.</li>';
+        // Migra o modelo antigo (cfg.nomes:[texto]) para o novo (cfg.usuarios:[{nome,hash}]),
+        // calculando o hash de cada nome com o salt atual. Roda uma vez, no login do admin.
+        async function _migrarCfgUsuarios(){
+            const cfg = _lerCfgAdmin(); if (!cfg) return;
+            if (Array.isArray(cfg.usuarios) && !Array.isArray(cfg.nomes)) return;   // já no formato novo
+            const usuarios = Array.isArray(cfg.usuarios) ? cfg.usuarios.slice() : [];
+            for (const n of (cfg.nomes || [])){
+                if (!n) continue;
+                if (usuarios.some(u => u.nome && _normalizeAcesso(u.nome) === _normalizeAcesso(n))) continue;
+                usuarios.push({ nome: n, hash: await _hashAcesso(n, cfg.salt) });
             }
-            const cont = document.getElementById('admin-contagem'); if (cont) cont.innerText = `${nomes.length} usuário(s) autorizado(s)`;
+            cfg.usuarios = usuarios; delete cfg.nomes; _salvarCfgAdmin(cfg);
         }
 
-        function adicionarUsuarioAdmin(){
+        function renderListaAdmin(){
+            const cfg = _lerCfgAdmin() || { usuarios: [] };
+            const us = Array.isArray(cfg.usuarios) ? cfg.usuarios : [];
+            const ul = document.getElementById('admin-lista');
+            if (ul){
+                ul.innerHTML = us.length ? us.map((u,idx)=>{
+                    const rotulo = u.nome
+                        ? escapeHtml(u.nome)
+                        : `<span class="italic text-slate-400">não identificado</span> <span class="text-[10px] text-slate-300 font-mono">${escapeHtml((u.hash||'').slice(0,8))}…</span>`;
+                    return `<li class="flex items-center justify-between gap-2 py-1 border-b border-slate-100">
+                       <span class="text-sm text-slate-700">${rotulo}</span>
+                       <button onclick="removerUsuarioAdmin(${idx})" class="text-rose-600 text-xs font-bold hover:underline">remover</button>
+                     </li>`;
+                }).join('') : '<li class="text-sm text-slate-400 py-2">Nenhum usuário cadastrado ainda.</li>';
+            }
+            const cont = document.getElementById('admin-contagem'); if (cont) cont.innerText = `${us.length} usuário(s) autorizado(s)`;
+        }
+
+        async function adicionarUsuarioAdmin(){
             const i = document.getElementById('admin-novo-nome');
             const nome = i ? i.value.trim() : '';
             if (!nome) return;
-            const cfg = _lerCfgAdmin() || { salt: _saltAleatorioHex(16), adminHash:'', nomes: [] };
+            const cfg = _lerCfgAdmin() || { salt: _saltAleatorioHex(16), adminHash:'', usuarios: [] };
+            if (!Array.isArray(cfg.usuarios)) cfg.usuarios = [];
             const norm = _normalizeAcesso(nome);
-            if ((cfg.nomes||[]).some(n => _normalizeAcesso(n) === norm)){ alert('Esse nome já está na lista.'); return; }
-            cfg.nomes = (cfg.nomes||[]).concat(nome);
+            if (cfg.usuarios.some(u => u.nome && _normalizeAcesso(u.nome) === norm)){ alert('Esse nome já está na lista.'); return; }
+            cfg.usuarios.push({ nome, hash: await _hashAcesso(nome, cfg.salt) });
             _salvarCfgAdmin(cfg);
             if (i) i.value='';
             renderListaAdmin();
         }
         function removerUsuarioAdmin(idx){
-            const cfg = _lerCfgAdmin(); if(!cfg||!cfg.nomes) return;
-            const nome = cfg.nomes[idx];
-            if (!confirm(`Remover "${nome}" da lista de autorizados?`)) return;
-            cfg.nomes.splice(idx,1); _salvarCfgAdmin(cfg); renderListaAdmin();
+            const cfg = _lerCfgAdmin(); if(!cfg||!Array.isArray(cfg.usuarios)) return;
+            const u = cfg.usuarios[idx]; if (!u) return;
+            const label = u.nome || 'usuário não identificado';
+            if (!confirm(`Remover "${label}" da lista de autorizados?`)) return;
+            cfg.usuarios.splice(idx,1); _salvarCfgAdmin(cfg); renderListaAdmin();
         }
 
-        // Gera o cafe.json (salt + hash da senha admin + hashes dos nomes): download + cópia.
+        // Gera o cafe.json (salt + hash da senha admin + hashes dos usuários): download + cópia.
+        // Nomes conhecidos são re-hasheados com o salt atual; entradas importadas sem nome
+        // reutilizam o hash original.
         async function gerarArquivoAcesso(){
             const cfg = _lerCfgAdmin();
             if (!cfg || !cfg.adminHash){ alert('Defina a senha de administrador primeiro.'); return; }
             const usuarios = [];
-            for (const n of (cfg.nomes||[])) usuarios.push(await _hashAcesso(n, cfg.salt));
+            for (const u of (cfg.usuarios||[])) usuarios.push(u.nome ? await _hashAcesso(u.nome, cfg.salt) : u.hash);
             const obj = { v:1, salt: cfg.salt, admin: cfg.adminHash, usuarios };
             const txt = JSON.stringify(obj, null, 2);
             const pre = document.getElementById('admin-json'); if (pre) pre.value = txt;
@@ -3702,6 +3733,35 @@
             const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'cafe.json';
             document.body.appendChild(a); a.click(); document.body.removeChild(a);
             setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
+        }
+
+        // Importa um cafe.json existente para continuar a administração em outra máquina.
+        // Adota o salt, a senha de admin (hash) e a lista de hashes. Como hash não volta a
+        // texto, reassocia os nomes já conhecidos neste dispositivo; os demais ficam "não
+        // identificado" (removíveis por posição; novos nomes podem ser adicionados normalmente).
+        function importarAcessoArquivo(input){
+            const f = input && input.files && input.files[0]; if (!f) return;
+            const reader = new FileReader();
+            reader.onload = ev => { importarAcessoDeTexto(String(ev.target.result || '')); input.value=''; };
+            reader.readAsText(f);
+        }
+        async function importarAcessoDeTexto(txt){
+            let obj; try { obj = JSON.parse(txt); } catch(e){ alert('Arquivo inválido: não é um JSON.'); return; }
+            if (!obj || typeof obj !== 'object' || !obj.salt || !Array.isArray(obj.usuarios)){ alert('Arquivo de acesso inválido (esperado salt + usuarios).'); return; }
+            if (!confirm('Importar esta lista? Ela substitui a lista atual deste dispositivo (salt, senha de admin e usuários).')) return;
+            const cfgAtual = _lerCfgAdmin();
+            const conhecidos = _nomesConhecidos(cfgAtual);
+            const usuarios = [];
+            for (const h of obj.usuarios){
+                let nome = null;
+                for (const nm of conhecidos){ if (await _hashAcesso(nm, obj.salt) === h){ nome = nm; break; } }
+                usuarios.push({ nome, hash: h });
+            }
+            const novoCfg = { salt: obj.salt, adminHash: obj.admin || (cfgAtual && cfgAtual.adminHash) || '', usuarios };
+            _salvarCfgAdmin(novoCfg);
+            renderListaAdmin();
+            const semNome = usuarios.filter(u => !u.nome).length;
+            alert(`Lista importada: ${usuarios.length} usuário(s).` + (semNome ? ` ${semNome} sem nome identificado (aparecem como "não identificado").` : '') + (obj.admin ? '\nA senha de administrador passa a ser a do arquivo importado.' : ''));
         }
         async function copiarJsonAcesso(){
             const pre = document.getElementById('admin-json');
@@ -3715,7 +3775,7 @@
             const nova = prompt('Nova senha de administrador (mín. 4):'); if (nova===null) return;
             if (nova.length < 4){ alert('Senha muito curta.'); return; }
             if (prompt('Confirme a nova senha:') !== nova){ alert('As senhas não conferem.'); return; }
-            const cfg = _lerCfgAdmin() || { salt: _saltAleatorioHex(16), nomes: [] };
+            const cfg = _lerCfgAdmin() || { salt: _saltAleatorioHex(16), usuarios: [] };
             _hashSenhaAdmin(nova, cfg.salt).then(h => { cfg.adminHash = h; _salvarCfgAdmin(cfg); alert('Senha de administrador alterada. Gere e faça commit do arquivo novamente.'); });
         }
 

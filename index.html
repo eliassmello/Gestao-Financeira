@@ -1218,7 +1218,10 @@
                     <div class="flex flex-wrap gap-2 mb-2">
                         <button onclick="gerarArquivoAcesso()" class="bg-emerald-600 text-white rounded-lg px-4 py-2 text-sm font-bold hover:bg-emerald-700 transition">⬇️ Gerar cafe.json</button>
                         <button onclick="copiarJsonAcesso()" class="bg-slate-200 text-slate-700 rounded-lg px-4 py-2 text-sm font-bold hover:bg-slate-300 transition">📋 Copiar JSON</button>
+                        <button onclick="document.getElementById('admin-import-file').click()" class="bg-slate-200 text-slate-700 rounded-lg px-4 py-2 text-sm font-bold hover:bg-slate-300 transition">📤 Importar cafe.json</button>
+                        <input type="file" id="admin-import-file" accept=".json,application/json" class="hidden" onchange="importarAcessoArquivo(this)">
                     </div>
+                    <p class="text-[11px] text-slate-400 mb-2">Importar adota o <code class="bg-slate-100 px-1 rounded">cafe.json</code> existente (salt, senha de admin e usuários) para continuar a administração em outra máquina.</p>
                     <textarea id="admin-json" readonly placeholder="O conteúdo do arquivo aparece aqui após gerar." class="w-full h-28 text-[11px] font-mono border border-slate-200 rounded-lg p-2 bg-slate-50 outline-none"></textarea>
                 </div>
 
