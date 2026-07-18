@@ -44,6 +44,15 @@
 
 
         async function init() {
+            // Antes de qualquer coisa: o portão de acesso (lista de usuários autorizados).
+            // Só quem passa por ele chega às telas de senha/criptografia.
+            const liberado = await portaAcesso();
+            if (!liberado) return;    // tela de usuário exibida; o submit chama initAposAcesso()
+            await initAposAcesso();
+        }
+
+        async function initAposAcesso() {
+            _gateResolvido = true;
             // A criptografia é SEMPRE ativa. Duas situações ao abrir:
             //  • já existe senha cadastrada  -> tela de desbloqueio (pede a senha);
             //  • ainda não existe senha       -> carrega o que houver e pede para CRIAR uma
@@ -3495,6 +3504,228 @@
         document.addEventListener('keydown', tratarAtalhoTeclado);
 
         window.onload = () => { aplicarTitulosAtalhos(); init(); };
+
+        // ===== Portão de acesso (usuários autorizados) =====
+        // Chaves em localStorage:
+        //  _acessoUser  -> último nome validado (normalizado): revalida e libera offline
+        //  _acessoSelo  -> '1' após validar com sucesso (habilita uso offline)
+        //  _acessoAdmin -> '1' se, neste dispositivo, o admin liberou o uso direto
+        //  cfgAcessoAdmin -> { salt, adminHash, nomes:[texto...] } só na máquina do admin
+        let _gateResolvido = false;   // já passamos do portão nesta sessão?
+
+        function _laGet(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
+        function _laSet(k,v){ try { localStorage.setItem(k,v); } catch(e){} }
+        function _laDel(k){ try { localStorage.removeItem(k); } catch(e){} }
+        function _lerCfgAdmin(){ try { return JSON.parse(_laGet('cfgAcessoAdmin')||'null'); } catch(e){ return null; } }
+        function _salvarCfgAdmin(o){ _laSet('cfgAcessoAdmin', JSON.stringify(o)); }
+
+        // No dispositivo do ADMIN existe a lista local (cfgAcessoAdmin.nomes) em texto:
+        // ela autoriza direto, sem depender do arquivo publicado nem de estar online.
+        // Nos dispositivos dos usuários comuns (sem essa config) vale só o cafe.json.
+        function _temListaLocal(){ const c=_lerCfgAdmin(); return !!(c && Array.isArray(c.nomes) && c.nomes.length); }
+        function _nomeNaListaLocal(nome){
+            const c = _lerCfgAdmin(); if (!c || !Array.isArray(c.nomes)) return false;
+            const norm = _normalizeAcesso(nome);
+            return c.nomes.some(n => _normalizeAcesso(n) === norm);
+        }
+        async function _nomeAutorizado(nome, lista){
+            if (_nomeNaListaLocal(nome)) return true;            // dispositivo do admin
+            if (lista && Array.isArray(lista.usuarios) && lista.usuarios.length){
+                const h = await _hashAcesso(nome, lista.salt);
+                return lista.usuarios.includes(h);
+            }
+            return false;
+        }
+
+        // Decide se libera o app. Retorna true (segue p/ senha) ou false (mostra a tela).
+        // À prova de falha FECHADA: sem lista carregável e sem selo local, ninguém entra.
+        async function portaAcesso(){
+            if (_laGet('_acessoAdmin') === '1') return true;      // dispositivo do admin liberado
+            const lembrado = _laGet('_acessoUser');
+            // Nome lembrado que consta na lista local (admin) entra direto.
+            if (lembrado && _nomeNaListaLocal(lembrado)){ _laSet('_acessoSelo','1'); return true; }
+            const lista = await carregarListaAcesso();
+            if (lista === null){                                 // offline / arquivo indisponível
+                if (lembrado && _laGet('_acessoSelo') === '1') return true;
+                mostrarTelaUsuario(_temListaLocal() ? '' : 'offline'); return false;
+            }
+            if (!lista.usuarios || lista.usuarios.length === 0){ // ainda não configurado (publicado)
+                mostrarTelaUsuario(_temListaLocal() ? '' : 'vazio'); return false;
+            }
+            if (lembrado){
+                const h = await _hashAcesso(lembrado, lista.salt);
+                if (lista.usuarios.includes(h)){ _laSet('_acessoSelo','1'); return true; }
+                _laDel('_acessoSelo'); mostrarTelaUsuario('removido'); return false;
+            }
+            mostrarTelaUsuario(''); return false;
+        }
+
+        function mostrarTelaUsuario(estado){
+            const t = document.getElementById('tela-usuario'); if(!t){ initAposAcesso(); return; }
+            t.classList.remove('hidden');
+            const msg = document.getElementById('usuario-msg');
+            const txt = {
+                offline:'Você precisa estar online na primeira vez para validar o acesso.',
+                vazio:'O acesso ainda não foi liberado pelo administrador.',
+                removido:'Seu acesso não está mais autorizado. Fale com o administrador.'
+            };
+            if (msg){ if (txt[estado]){ msg.innerText = txt[estado]; msg.classList.remove('hidden'); } else msg.classList.add('hidden'); }
+            const i = document.getElementById('usuario-nome'); if (i){ i.value = _laGet('_acessoUser')||''; setTimeout(()=>i.focus(),50); }
+            const erro = document.getElementById('erro-usuario'); if (erro) erro.classList.add('hidden');
+        }
+
+        async function submeterUsuario(){
+            const i = document.getElementById('usuario-nome');
+            const erro = document.getElementById('erro-usuario');
+            const nome = i ? i.value : '';
+            const mostrar = (m)=>{ if(erro){ erro.innerText=m; erro.classList.remove('hidden'); } };
+            if (_normalizeAcesso(nome).length < 2){ mostrar('Digite seu nome de usuário.'); return; }
+            const lista = await carregarListaAcesso();
+            const publicadaTem = !!(lista && Array.isArray(lista.usuarios) && lista.usuarios.length);
+            // Só é possível decidir se há alguma base: lista local (admin) ou lista publicada.
+            if (!_temListaLocal() && !publicadaTem){
+                mostrar(lista === null ? 'Não foi possível validar agora. Tente novamente online.'
+                                       : 'O acesso ainda não foi liberado pelo administrador.');
+                return;
+            }
+            if (!(await _nomeAutorizado(nome, lista))){ mostrar('Nome de usuário não autorizado.'); return; }
+            _laSet('_acessoUser', _normalizeAcesso(nome));
+            _laSet('_acessoSelo','1');
+            const t = document.getElementById('tela-usuario'); if(t) t.classList.add('hidden');
+            await initAposAcesso();
+        }
+
+        // ===== Painel de administração (oculto) =====
+        // Aberto por uma combinação de teclas cujo código NÃO aparece em texto claro no
+        // fonte (comparamos apenas o hash). Obscuridade não é segurança: o painel é de
+        // fato protegido pela senha de administrador. A lista publicada só guarda hashes.
+        async function _talvezAbrirPainel(ev){
+            if (!ev) return;
+            // Exige o trio de modificadores (Ctrl/⌘ + Alt + Shift) e usa a TECLA FÍSICA
+            // (ev.code), que independe do layout — assim funciona mesmo quando Ctrl+Alt
+            // vira AltGr e "compõe" um caractere (ex.: §). Só a tecla final fica em hash.
+            const mods = (ev.ctrlKey || ev.metaKey) && ev.altKey && ev.shiftKey;
+            if (!mods) return;
+            ev.preventDefault();   // evita que a combinação vire caractere na tela
+            const tok = 'x:' + String(ev.code || '').toLowerCase();
+            const h = await _sha256hex(tok);
+            if (h === '79c6056c24de70961e832ac168b2eeda5ee5828fa4ca771f5f30703b947c86cb') abrirPainelAdmin();
+        }
+        document.addEventListener('keydown', _talvezAbrirPainel);
+
+        let _adminAutenticado = false;
+        function abrirPainelAdmin(){
+            const t = document.getElementById('tela-admin'); if(!t) return;
+            t.classList.remove('hidden'); _adminAutenticado = false; renderPainelAdmin();
+        }
+        function fecharPainelAdmin(){ const t=document.getElementById('tela-admin'); if(t) t.classList.add('hidden'); }
+
+        function renderPainelAdmin(){
+            const cfg = _lerCfgAdmin();
+            const temAdmin = !!(cfg && cfg.adminHash);
+            const login = document.getElementById('admin-login');
+            const corpo = document.getElementById('admin-corpo');
+            const titulo = document.getElementById('admin-login-titulo');
+            if (login) login.classList.toggle('hidden', _adminAutenticado);
+            if (corpo) corpo.classList.toggle('hidden', !_adminAutenticado);
+            if (titulo) titulo.innerText = temAdmin ? 'Senha de administrador' : 'Defina a senha de administrador';
+            if (!_adminAutenticado){
+                const s = document.getElementById('admin-senha'); if (s){ s.value=''; setTimeout(()=>s.focus(),60); }
+                const e = document.getElementById('erro-admin'); if (e) e.classList.add('hidden');
+                return;
+            }
+            renderListaAdmin();
+        }
+
+        async function submeterAdminLogin(){
+            const s = document.getElementById('admin-senha');
+            const e = document.getElementById('erro-admin');
+            const senha = s ? s.value : '';
+            const mostrar = (m)=>{ if(e){ e.innerText=m; e.classList.remove('hidden'); } };
+            if (senha.length < 4){ mostrar('Senha muito curta (mín. 4).'); return; }
+            let cfg = _lerCfgAdmin();
+            if (cfg && cfg.adminHash){
+                const h = await _hashSenhaAdmin(senha, cfg.salt);
+                if (h !== cfg.adminHash){ mostrar('Senha incorreta.'); return; }
+            } else {
+                const salt = _saltAleatorioHex(16);
+                cfg = { salt, adminHash: await _hashSenhaAdmin(senha, salt), nomes: [] };
+                _salvarCfgAdmin(cfg);
+            }
+            _adminAutenticado = true; renderPainelAdmin();
+        }
+
+        function renderListaAdmin(){
+            const cfg = _lerCfgAdmin() || { nomes: [] };
+            const nomes = cfg.nomes || [];
+            const ul = document.getElementById('admin-lista');
+            if (ul){
+                ul.innerHTML = nomes.length ? nomes.map((n,idx)=>
+                    `<li class="flex items-center justify-between gap-2 py-1 border-b border-slate-100">
+                       <span class="text-sm text-slate-700">${escapeHtml(n)}</span>
+                       <button onclick="removerUsuarioAdmin(${idx})" class="text-rose-600 text-xs font-bold hover:underline">remover</button>
+                     </li>`).join('')
+                  : '<li class="text-sm text-slate-400 py-2">Nenhum usuário cadastrado ainda.</li>';
+            }
+            const cont = document.getElementById('admin-contagem'); if (cont) cont.innerText = `${nomes.length} usuário(s) autorizado(s)`;
+        }
+
+        function adicionarUsuarioAdmin(){
+            const i = document.getElementById('admin-novo-nome');
+            const nome = i ? i.value.trim() : '';
+            if (!nome) return;
+            const cfg = _lerCfgAdmin() || { salt: _saltAleatorioHex(16), adminHash:'', nomes: [] };
+            const norm = _normalizeAcesso(nome);
+            if ((cfg.nomes||[]).some(n => _normalizeAcesso(n) === norm)){ alert('Esse nome já está na lista.'); return; }
+            cfg.nomes = (cfg.nomes||[]).concat(nome);
+            _salvarCfgAdmin(cfg);
+            if (i) i.value='';
+            renderListaAdmin();
+        }
+        function removerUsuarioAdmin(idx){
+            const cfg = _lerCfgAdmin(); if(!cfg||!cfg.nomes) return;
+            const nome = cfg.nomes[idx];
+            if (!confirm(`Remover "${nome}" da lista de autorizados?`)) return;
+            cfg.nomes.splice(idx,1); _salvarCfgAdmin(cfg); renderListaAdmin();
+        }
+
+        // Gera o cafe.json (salt + hash da senha admin + hashes dos nomes): download + cópia.
+        async function gerarArquivoAcesso(){
+            const cfg = _lerCfgAdmin();
+            if (!cfg || !cfg.adminHash){ alert('Defina a senha de administrador primeiro.'); return; }
+            const usuarios = [];
+            for (const n of (cfg.nomes||[])) usuarios.push(await _hashAcesso(n, cfg.salt));
+            const obj = { v:1, salt: cfg.salt, admin: cfg.adminHash, usuarios };
+            const txt = JSON.stringify(obj, null, 2);
+            const pre = document.getElementById('admin-json'); if (pre) pre.value = txt;
+            const blob = new Blob([txt], { type:'application/json' });
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'cafe.json';
+            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+            setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
+        }
+        async function copiarJsonAcesso(){
+            const pre = document.getElementById('admin-json');
+            if (!pre || !pre.value) await gerarArquivoAcesso();
+            const el = document.getElementById('admin-json');
+            try { await navigator.clipboard.writeText(el.value); alert('JSON copiado. Cole no arquivo cafe.json do repositório e faça commit.'); }
+            catch(e){ if(el){ el.focus(); el.select(); } alert('Selecione o conteúdo e copie manualmente.'); }
+        }
+
+        function trocarSenhaAdmin(){
+            const nova = prompt('Nova senha de administrador (mín. 4):'); if (nova===null) return;
+            if (nova.length < 4){ alert('Senha muito curta.'); return; }
+            if (prompt('Confirme a nova senha:') !== nova){ alert('As senhas não conferem.'); return; }
+            const cfg = _lerCfgAdmin() || { salt: _saltAleatorioHex(16), nomes: [] };
+            _hashSenhaAdmin(nova, cfg.salt).then(h => { cfg.adminHash = h; _salvarCfgAdmin(cfg); alert('Senha de administrador alterada. Gere e faça commit do arquivo novamente.'); });
+        }
+
+        // Libera este dispositivo como admin: entra sem passar pela lista de nomes.
+        async function entrarComoAdmin(){
+            _laSet('_acessoAdmin','1');
+            fecharPainelAdmin();
+            const tu = document.getElementById('tela-usuario'); if (tu) tu.classList.add('hidden');
+            if (!_gateResolvido) await initAposAcesso();
+        }
 
         // ===== Proteção por senha (criptografia local) =====
         function mostrarTelaBloqueio() {

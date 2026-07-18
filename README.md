@@ -40,6 +40,15 @@ Aplicativo de controle financeiro pessoal que roda **direto no navegador**, func
 - **Senha pedida a cada abertura**; para trocar, use **⚙️ Config → Senha do app**. A **mesma senha** protege o app e **todos os backups** (você não gerencia senhas diferentes).
 - ⚠️ **Se esquecer a senha, não há recuperação.** Guarde um backup em local seguro. A criptografia protege contra bisbilhotagem do armazenamento/perfil do navegador; não substitui o cuidado com o próprio dispositivo.
 
+### Controle de acesso por usuário (opcional)
+
+Além da senha pessoal (que cifra os dados no dispositivo de cada um), o app pode exigir um **nome de usuário autorizado** para abrir. A lista de autorizados é mantida pelo **administrador** por um painel reservado e publicada no repositório contendo **apenas hashes** dos nomes (o arquivo não revela quem está na lista).
+
+- **Porta do usuário**: na abertura, a pessoa digita o nome; o app confere contra a lista publicada.
+- **Porta do administrador**: um painel reservado (não documentado publicamente) onde se cadastra/remove nomes e se gera o arquivo da lista para commit.
+- **À prova de falha fechada**: se a lista não puder ser carregada, o acesso é **bloqueado** (apagar/bloquear o arquivo não libera ninguém). Uma vez validado, o dispositivo funciona **offline**.
+- **Natureza da proteção**: por ser um app público e 100% client-side, esse controle é um **freio** contra uso não autorizado — os dados de cada pessoa continuam protegidos pela **senha dela**, então mesmo um contorno técnico não expõe dados de ninguém.
+
 ---
 
 ## 🧭 As telas do app
