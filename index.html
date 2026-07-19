@@ -979,8 +979,10 @@
                 <div class="flex flex-col sm:flex-row gap-2">
                     <input type="text" id="info-titulo" maxlength="60" placeholder="Título (máx. 60)" class="w-full sm:w-56 text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
                     <input type="text" id="info-texto" maxlength="100" placeholder="Info (máx. 100)" class="flex-1 text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
+                    <label class="flex items-center gap-1 text-xs text-slate-500 whitespace-nowrap cursor-pointer" title="Guardar o valor oculto (••••)"><input type="checkbox" id="info-sensivel"> 🔒 sensível</label>
                     <button onclick="adicionarInformacao()" class="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-indigo-700 transition whitespace-nowrap">+ Criar Info</button>
                 </div>
+                <p class="text-[11px] text-slate-400">🔒 <b>Sensível</b> apenas <b>oculta o valor na tela</b> (reduz olhares por cima do ombro). Tudo já é criptografado no dispositivo — mas evite guardar senha/PIN de cartão aqui; prefira um gerenciador de senhas.</p>
             </div>
             <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
                 <ul id="lista-informacoes" class="divide-y divide-slate-100 text-sm"></ul>

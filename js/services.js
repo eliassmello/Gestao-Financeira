@@ -617,6 +617,17 @@
                 // Avisa se houver diferenca (indicio de lancamento nao reconhecido).
                 let msgReconc = '';
                 if (!ehCEF) {
+                    // Data de pagamento (vencimento) impressa na fatura: usa o DIA dela dentro
+                    // do mês/ano que o usuário selecionou (mantém a fatura no mm/aaaa escolhido).
+                    const vencPdf = extrairVencimentoFaturaSantander(linhas);
+                    const partes = (dataVencimentoFatura || '').split('/');
+                    if (vencPdf && partes.length === 3) {
+                        const diaPdf = vencPdf.slice(0, 2);
+                        if (diaPdf !== partes[0]) {
+                            dataVencimentoFatura = `${diaPdf}/${partes[1]}/${partes[2]}`;
+                            msgReconc += `\n📅 Vencimento detectado na fatura: dia ${diaPdf} — lançado em ${dataVencimentoFatura}.`;
+                        }
+                    }
                     const resumo = extrairResumoFaturaSantander(linhas);
                     const fmt = (v) => 'R$ ' + (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                     if (resumo.despesas !== null) {
@@ -785,6 +796,29 @@
             const totalPagar = pegar(new RegExp('SALDO DESTA FATURA\\s+' + V));
             const despesas = (despBrasil === null && despExt === null) ? null : (despBrasil || 0) + (despExt || 0);
             return { despesas: despesas, creditos: creditos, totalPagar: totalPagar };
+        }
+
+        // Procura a data de VENCIMENTO (pagamento) impressa na fatura Santander.
+        // Layouts comuns: "Vencimento 10/01/2026", "Data de Vencimento: 10/01/26",
+        // "Vencimento da fatura 10/01/2026". Retorna "DD/MM/AAAA" (ano em 4 dígitos) ou null.
+        function extrairVencimentoFaturaSantander(linhas) {
+            const D = '(\\d{2}/\\d{2}/\\d{2,4})';
+            const res = [
+                new RegExp('VENCIMENTO\\s+DA\\s+FATURA\\s*:?\\s*' + D),
+                new RegExp('DATA\\s+DE\\s+VENCIMENTO\\s*:?\\s*' + D),
+                new RegExp('VENCIMENTO\\s*:?\\s*' + D)
+            ];
+            for (const re of res) {
+                for (const l of linhas) {
+                    const m = normalizarTextoPdf(l).match(re);
+                    if (m) {
+                        let [dd, mm, yy] = m[1].split('/');
+                        if (yy.length === 2) yy = '20' + yy;
+                        return `${dd}/${mm}/${yy}`;
+                    }
+                }
+            }
+            return null;
         }
 
 

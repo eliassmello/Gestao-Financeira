@@ -1956,12 +1956,39 @@
                 ul.innerHTML = `<li class="px-4 py-6 text-center text-slate-400">Nenhuma informação. Crie a primeira acima.</li>`;
                 return;
             }
-            ul.innerHTML = arr.map(i => `
+            ul.innerHTML = arr.map(i => {
+                const sensivel = !!i.sensivel;
+                // Campo sensível: nasce OCULTO (type=password → ••••) com um olho p/ revelar.
+                const infoInput = `<input id="info-inp-${i.id}" type="${sensivel ? 'password' : 'text'}" maxlength="100" value="${_escAttr(i.info || '')}" onchange="editarInformacao('${i.id}','info',this.value)" autocomplete="off" class="flex-1 text-sm border ${sensivel ? 'border-amber-300 bg-amber-50/40' : 'border-slate-200'} rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">`;
+                const olho = sensivel ? `<button onclick="toggleMostrarInfo('${i.id}',this)" title="Mostrar/ocultar" class="text-slate-400 hover:text-indigo-600 text-lg shrink-0 px-1">👁️</button>` : '';
+                return `
                 <li class="flex flex-col sm:flex-row sm:items-center gap-2 px-4 py-3">
-                    <input type="text" maxlength="60" value="${escapeHtml(i.titulo || '')}" onchange="editarInformacao('${i.id}','titulo',this.value)" class="w-full sm:w-56 text-sm font-semibold border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
-                    <input type="text" maxlength="100" value="${escapeHtml(i.info || '')}" onchange="editarInformacao('${i.id}','info',this.value)" class="flex-1 text-sm border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
+                    <input type="text" maxlength="60" value="${_escAttr(i.titulo || '')}" onchange="editarInformacao('${i.id}','titulo',this.value)" class="w-full sm:w-56 text-sm font-semibold border border-slate-200 rounded-md p-2 outline-none focus:ring-1 focus:ring-indigo-500">
+                    ${infoInput}
+                    ${olho}
+                    <label class="flex items-center gap-1 text-[11px] text-slate-500 shrink-0 whitespace-nowrap cursor-pointer" title="Ocultar o valor com ••••">
+                        <input type="checkbox" ${sensivel ? 'checked' : ''} onchange="toggleSensivelInfo('${i.id}',this.checked)"> 🔒 sensível
+                    </label>
                     <button onclick="excluirInformacao('${i.id}')" title="Apagar" class="text-rose-500 hover:text-rose-700 font-bold text-xl shrink-0 self-end sm:self-auto px-2">&times;</button>
-                </li>`).join('');
+                </li>`;
+            }).join('');
+        }
+
+        // Alterna a exibição do valor sensível (••••) ↔ texto, sem re-renderizar a lista.
+        function toggleMostrarInfo(id, btn) {
+            const inp = document.getElementById('info-inp-' + id);
+            if (!inp) return;
+            const revelar = inp.type === 'password';
+            inp.type = revelar ? 'text' : 'password';
+            if (btn) btn.classList.toggle('text-indigo-600', revelar);
+        }
+        // Marca/desmarca a info como sensível (re-renderiza para (re)ocultar por padrão).
+        function toggleSensivelInfo(id, checked) {
+            const it = (appState.informacoes || []).find(x => x.id === id);
+            if (!it) return;
+            it.sensivel = !!checked;
+            renderInformacoes();
+            saveData();
         }
 
         function adicionarInformacao() {
@@ -1970,8 +1997,10 @@
             const info = (iEl?.value || '').trim().slice(0, 100);
             if (!titulo && !info) { alert('Preencha o título ou a info.'); return; }
             if (!Array.isArray(appState.informacoes)) appState.informacoes = [];
-            appState.informacoes.push({ id: 'info_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), titulo, info });
-            if (tEl) tEl.value = ''; if (iEl) iEl.value = '';
+            const sEl = document.getElementById('info-sensivel');
+            const sensivel = !!(sEl && sEl.checked);
+            appState.informacoes.push({ id: 'info_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), titulo, info, sensivel });
+            if (tEl) tEl.value = ''; if (iEl) iEl.value = ''; if (sEl) sEl.checked = false;
             renderInformacoes();
             saveData();
         }
