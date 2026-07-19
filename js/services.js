@@ -617,6 +617,17 @@
                 // Avisa se houver diferenca (indicio de lancamento nao reconhecido).
                 let msgReconc = '';
                 if (!ehCEF) {
+                    // Data de pagamento (vencimento) impressa na fatura: usa o DIA dela dentro
+                    // do mês/ano que o usuário selecionou (mantém a fatura no mm/aaaa escolhido).
+                    const vencPdf = extrairVencimentoFaturaSantander(linhas);
+                    const partes = (dataVencimentoFatura || '').split('/');
+                    if (vencPdf && partes.length === 3) {
+                        const diaPdf = vencPdf.slice(0, 2);
+                        if (diaPdf !== partes[0]) {
+                            dataVencimentoFatura = `${diaPdf}/${partes[1]}/${partes[2]}`;
+                            msgReconc += `\n📅 Vencimento detectado na fatura: dia ${diaPdf} — lançado em ${dataVencimentoFatura}.`;
+                        }
+                    }
                     const resumo = extrairResumoFaturaSantander(linhas);
                     const fmt = (v) => 'R$ ' + (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                     if (resumo.despesas !== null) {
@@ -785,6 +796,39 @@
             const totalPagar = pegar(new RegExp('SALDO DESTA FATURA\\s+' + V));
             const despesas = (despBrasil === null && despExt === null) ? null : (despBrasil || 0) + (despExt || 0);
             return { despesas: despesas, creditos: creditos, totalPagar: totalPagar };
+        }
+
+        // Procura a data de VENCIMENTO (pagamento) impressa na fatura Santander.
+        // Retorna "DD/MM/AAAA" (ano em 4 dígitos) ou null.
+        function extrairVencimentoFaturaSantander(linhas) {
+            const D4 = /(\d{2}\/\d{2}\/\d{4})/;
+            const fmt = (d) => { let [dd, mm, yy] = d.split('/'); if (yy.length === 2) yy = '20' + yy; return `${dd}/${mm}/${yy}`; };
+            // Layout "Débito Automático": um cabeçalho com "TOTAL A PAGAR ... VENCIMENTO ..."
+            // e, na(s) linha(s) seguinte(s), os valores "R$ <total> <vencimento> <melhor data>".
+            // O vencimento é a PRIMEIRA data dessa linha de valores.
+            for (let i = 0; i < linhas.length; i++) {
+                const n = normalizarTextoPdf(linhas[i]);
+                if (n.indexOf('VENCIMENTO') !== -1 && n.indexOf('TOTAL A PAGAR') !== -1) {
+                    for (let j = i + 1; j <= i + 4 && j < linhas.length; j++) {
+                        const m = linhas[j].match(D4);
+                        if (m) return fmt(m[1]);
+                    }
+                }
+            }
+            // Outros layouts: rótulo e data na mesma linha.
+            const D = '(\\d{2}/\\d{2}/\\d{2,4})';
+            const res = [
+                new RegExp('VENCIMENTO\\s+DA\\s+FATURA\\s*:?\\s*' + D),
+                new RegExp('DATA\\s+DE\\s+VENCIMENTO\\s*:?\\s*' + D),
+                new RegExp('VENCIMENTO\\s*:?\\s*' + D)
+            ];
+            for (const re of res) {
+                for (const l of linhas) {
+                    const m = normalizarTextoPdf(l).match(re);
+                    if (m) return fmt(m[1]);
+                }
+            }
+            return null;
         }
 
 
