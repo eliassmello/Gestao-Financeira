@@ -347,8 +347,9 @@
                         // identica (reimportar o mesmo extrato nao duplica); esgotada a contagem,
                         // os iguais SEGUINTES sao adicionados — assim lancamentos legitimamente
                         // repetidos no MESMO extrato (mesma data/valor/descricao) entram todos.
-                        const chaveDedupBco = (contaId, desc, data, valor) =>
-                            `${contaId || ''}|${desc}|${data}|${(Math.round((Number(valor) || 0) * 100) / 100).toFixed(2)}`;
+                        // Chave compartilhada com a Importação Seletiva (descrição normalizada),
+                        // para que os dois caminhos não dupliquem a mesma transação.
+                        const chaveDedupBco = (contaId, desc, data, valor) => chaveDedupContaCorrente(contaId, desc, data, valor);
                         const contagemBco = new Map();
                         for (const t of appState.transactions) {
                             if (t.contaId !== contaSelecionadaId) continue;
@@ -4039,3 +4040,196 @@
 
 
         function apagarLinhaBanco(id) { if(confirm("Tem certeza que deseja apagar esta transação?")) { appState.transactions = appState.transactions.filter(t => t.id !== id); saveData(); } }
+
+
+        // ===== Importação Seletiva (recurso extra e independente) =====
+        // Lê um extrato .xlsx/.xls/.csv, deixa o usuário mapear MANUALMENTE quais colunas
+        // são Data, Descrição, Documento, Crédito e Débito, e importa para a CONTA ATIVA.
+        // Não altera a importação padrão; usa a mesma chave de deduplicação por ocorrência
+        // (contaId|descrição|data|valor), então re-importar não duplica.
+        let _impSelRows = [], _impSelHeaderRow = 0;
+
+        function abrirImportSeletiva() {
+            if (!contaSelecionadaId || !getContaById(contaSelecionadaId)) { alert('Selecione (ou crie) uma Conta Corrente antes de usar a Importação Seletiva.'); return; }
+            const m = document.getElementById('modal-import-seletiva'); if (!m) return;
+            _impSelRows = []; _impSelHeaderRow = 0;
+            const nome = document.getElementById('imp-sel-nome'); if (nome) nome.textContent = '';
+            const map = document.getElementById('imp-sel-map'); if (map) map.classList.add('hidden');
+            const prev = document.getElementById('imp-sel-preview'); if (prev) prev.innerHTML = '';
+            const f = document.getElementById('imp-sel-file'); if (f) f.value = '';
+            const conta = getContaById(contaSelecionadaId);
+            const info = document.getElementById('imp-sel-conta'); if (info) info.innerHTML = `Os lançamentos entram na conta ativa: <b>${escapeHtml(conta.nome)}</b>.`;
+            m.classList.remove('hidden');
+        }
+        function fecharImportSeletiva() { const m = document.getElementById('modal-import-seletiva'); if (m) m.classList.add('hidden'); }
+
+        function importSelEscolherArquivo(input) {
+            const file = input && input.files && input.files[0]; if (!file) return;
+            if (typeof XLSX === 'undefined') { alert('A biblioteca de leitura de planilhas ainda não carregou. Verifique a conexão e tente novamente.'); return; }
+            const nomeEl = document.getElementById('imp-sel-nome'); if (nomeEl) nomeEl.textContent = 'Lendo ' + file.name + '…';
+            const isCsv = (file.name || '').toLowerCase().endsWith('.csv');
+            const reader = new FileReader();
+            reader.onload = function (evt) {
+                try {
+                    const data = new Uint8Array(evt.target.result);
+                    const wb = XLSX.read(data, isCsv ? { type: 'array', raw: true } : { type: 'array' });
+                    const ws = wb.Sheets[wb.SheetNames[0]];
+                    _impSelRows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: isCsv, defval: '', dateNF: 'dd/mm/yyyy' });
+                    if (nomeEl) nomeEl.textContent = `${file.name} — ${_impSelRows.length} linha(s)`;
+                    importSelPrepararMapeamento();
+                } catch (e) { alert('Erro ao ler o arquivo: ' + e.message); if (nomeEl) nomeEl.textContent = ''; }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function importSelPrepararMapeamento() {
+            const rows = _impSelRows;
+            let hr = rows.findIndex(r => Array.isArray(r) && r.filter(c => String(c || '').trim()).length >= 2);
+            _impSelHeaderRow = hr < 0 ? 0 : hr;
+            const hdr = (rows[_impSelHeaderRow] || []).map((c, i) => String(c || '').trim() || ('Coluna ' + (i + 1)));
+            const ncol = Math.max(hdr.length, ...rows.map(r => Array.isArray(r) ? r.length : 0));
+            const opts = ['<option value="-1">— nenhuma —</option>'];
+            for (let i = 0; i < ncol; i++) opts.push(`<option value="${i}">${escapeHtml(hdr[i] || ('Coluna ' + (i + 1)))}</option>`);
+            const optHtml = opts.join('');
+            const guess = re => hdr.findIndex(h => re.test(h.toLowerCase()));
+            const set = (id, idx) => { const el = document.getElementById(id); if (!el) return; el.innerHTML = optHtml; el.value = String(idx >= 0 && idx < ncol ? idx : -1); };
+            const gData = guess(/data|date|dt/), gDesc = guess(/hist|descr|lan|memo|detalhe|favorec/), gDoc = guess(/doc|cheque|control|autentic/),
+                gCred = guess(/cr[ée]d|entrada/), gDeb = guess(/d[ée]b|sa[íi]da/), gVal = guess(/valor|montante|amount|vlr/),
+                gCD = guess(/^c\/?d$|^d\/?c$|natureza|tipo|sinal|d[ée]b.*cr[ée]d|cr[ée]d.*d[ée]b/);
+            const dataCol = gData >= 0 ? gData : 0;
+            // Descrição não pode cair na mesma coluna da Data (ex.: "Dia do Lançamento").
+            let descCol = (gDesc >= 0 && gDesc !== dataCol) ? gDesc : (dataCol === 0 ? 1 : 0);
+            set('imp-sel-col-data', dataCol);
+            set('imp-sel-col-desc', descCol);
+            set('imp-sel-col-doc', gDoc);
+            if (gCD >= 0) {
+                // Layout: valor sem sinal + coluna C/D. Usa Valor único + C/D; zera Crédito/Débito.
+                set('imp-sel-col-valor', gVal); set('imp-sel-col-cd', gCD);
+                set('imp-sel-col-cred', -1); set('imp-sel-col-deb', -1);
+            } else if (gCred >= 0 && gDeb >= 0 && gCred !== gDeb) {
+                // Colunas separadas de Crédito e Débito.
+                set('imp-sel-col-valor', -1); set('imp-sel-col-cd', -1);
+                set('imp-sel-col-cred', gCred); set('imp-sel-col-deb', gDeb);
+            } else {
+                // Valor único (possivelmente com sinal).
+                set('imp-sel-col-valor', gVal); set('imp-sel-col-cd', -1);
+                set('imp-sel-col-cred', -1); set('imp-sel-col-deb', -1);
+            }
+            const map = document.getElementById('imp-sel-map'); if (map) map.classList.remove('hidden');
+            const prev = document.getElementById('imp-sel-preview'); if (prev) prev.innerHTML = '';
+        }
+
+        // Interpreta a natureza de uma célula C/D: retorna 'C' (crédito), 'D' (débito) ou ''.
+        function _impSelNatureza(v) {
+            const s = String(v == null ? '' : v).trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            if (!s) return '';
+            if (s[0] === 'D' || s.indexOf('DEB') !== -1 || s.indexOf('SAIDA') !== -1 || s === '-') return 'D';
+            if (s[0] === 'C' || s.indexOf('CRE') !== -1 || s.indexOf('ENTRADA') !== -1 || s === '+') return 'C';
+            return '';
+        }
+
+        // Converte um valor de célula (número, "1.234,56", "-50,00", "123,45 D", "(10,00)") em número com sinal.
+        function _impSelValor(s) {
+            if (typeof s === 'number') return s;
+            s = String(s == null ? '' : s).trim(); if (!s) return 0;
+            const cred = /c$/i.test(s), deb = /d$/i.test(s), par = /^\(.*\)$/.test(s), neg = /^-|-$/.test(s);
+            let n = s.replace(/[^\d.,-]/g, '');
+            if (/,\d{1,2}$/.test(n)) n = n.replace(/\./g, '').replace(',', '.'); else n = n.replace(/,/g, '');
+            let v = Math.abs(parseFloat(n) || 0);
+            if (deb || par || (neg && !cred)) v = -v;
+            return v;
+        }
+        // Converte uma célula de data em "dd/mm/aaaa" (aceita serial do Excel, ISO e dd/mm/aa[aa]).
+        function _impSelData(s) {
+            if (s == null) return '';
+            if (typeof s === 'number') {
+                const d = new Date(Math.round((s - 25569) * 86400000));
+                if (!isNaN(d)) return `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}/${d.getUTCFullYear()}`;
+            }
+            let t = String(s).trim().split(' ')[0];
+            let m = t.match(/^(\d{4})-(\d{2})-(\d{2})/); if (m) return `${m[3]}/${m[2]}/${m[1]}`;
+            m = t.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})$/);
+            if (m) { let y = m[3]; if (y.length === 2) y = '20' + y; const dd = parseInt(m[1], 10), mm = parseInt(m[2], 10); if (dd < 1 || dd > 31 || mm < 1 || mm > 12) return ''; return `${String(dd).padStart(2, '0')}/${String(mm).padStart(2, '0')}/${y}`; }
+            return '';
+        }
+
+        // Percorre as linhas aplicando o mapeamento escolhido e devolve os lançamentos válidos.
+        function _impSelColetar() {
+            const cv = id => parseInt((document.getElementById(id) || {}).value, 10);
+            const cData = cv('imp-sel-col-data'), cDesc = cv('imp-sel-col-desc'), cDoc = cv('imp-sel-col-doc'),
+                cCred = cv('imp-sel-col-cred'), cDeb = cv('imp-sel-col-deb'), cVal = cv('imp-sel-col-valor'), cCD = cv('imp-sel-col-cd');
+            const out = [];
+            for (let i = 0; i < _impSelRows.length; i++) {
+                if (i === _impSelHeaderRow) continue;
+                const r = _impSelRows[i] || [];
+                const data = _impSelData(r[cData]); if (!/^\d{2}\/\d{2}\/\d{4}$/.test(data)) continue;
+                let descricao = cDesc >= 0 ? String(r[cDesc] || '').replace(/\s+/g, ' ').trim() : '';
+                const doc = cDoc >= 0 ? String(r[cDoc] || '').trim() : '';
+                if (doc) descricao = descricao ? `${descricao} [${doc}]` : doc;
+                descricao = descricao.slice(0, 80);
+                let credito = 0, debito = 0;
+                if (cCD >= 0) {
+                    // Valor sem sinal + coluna C/D decide a natureza.
+                    const colVal = cVal >= 0 ? cVal : (cCred >= 0 ? cCred : cDeb);
+                    const v = Math.abs(_impSelValor(r[colVal]));
+                    const nat = _impSelNatureza(r[cCD]);
+                    if (!v || !nat) continue;
+                    if (nat === 'D') debito = v; else credito = v;
+                } else if (cVal >= 0) {
+                    // Valor único (com sinal: negativo = saída).
+                    const v = _impSelValor(r[cVal]); if (v >= 0) credito = v; else debito = Math.abs(v);
+                } else if (cCred === cDeb) {
+                    const v = _impSelValor(r[cCred]); if (v >= 0) credito = v; else debito = Math.abs(v);
+                } else {
+                    const vc = Math.abs(_impSelValor(cCred >= 0 ? r[cCred] : 0));
+                    const vd = Math.abs(_impSelValor(cDeb >= 0 ? r[cDeb] : 0));
+                    if (vc >= vd && vc > 0) credito = vc; else debito = vd;
+                }
+                if (credito === 0 && debito === 0) continue;
+                out.push({ data, descricao, credito, debito });
+            }
+            return out;
+        }
+
+        function importSelPreview() {
+            const linhas = _impSelColetar();
+            const el = document.getElementById('imp-sel-preview'); if (!el) return;
+            if (!linhas.length) { el.innerHTML = '<p class="text-rose-600 font-semibold mt-3">Nenhuma linha com data válida encontrada. Confira a coluna de Data no mapeamento.</p>'; return; }
+            const amostra = linhas.slice(0, 50);
+            el.innerHTML = `<div class="mt-3 border border-slate-100 rounded-lg overflow-hidden">
+                <div class="bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">${linhas.length} linha(s) reconhecida(s)${linhas.length > 50 ? ' — mostrando as 50 primeiras' : ''}</div>
+                <div class="max-h-64 overflow-y-auto"><table class="w-full text-xs">
+                    <thead class="bg-white sticky top-0"><tr class="text-slate-400"><th class="text-left p-2">Data</th><th class="text-left p-2">Descrição</th><th class="text-right p-2">Crédito</th><th class="text-right p-2">Débito</th></tr></thead>
+                    <tbody>${amostra.map(l => `<tr class="border-t border-slate-50"><td class="p-2 whitespace-nowrap">${l.data}</td><td class="p-2">${escapeHtml(l.descricao)}</td><td class="p-2 text-right text-emerald-600">${l.credito ? formatCurrency(l.credito) : ''}</td><td class="p-2 text-right text-rose-600">${l.debito ? formatCurrency(l.debito) : ''}</td></tr>`).join('')}</tbody>
+                </table></div></div>`;
+        }
+
+        function importSelImportar() {
+            if (!contaSelecionadaId || !getContaById(contaSelecionadaId)) { alert('Selecione uma Conta Corrente.'); return; }
+            const linhas = _impSelColetar();
+            if (!linhas.length) { alert('Nenhuma linha com data válida. Confira o mapeamento das colunas.'); return; }
+            // Mesma dedup por ocorrência do import padrão (descrição normalizada).
+            const chave = (desc, data, valor) => chaveDedupContaCorrente(contaSelecionadaId, desc, data, valor);
+            const contagem = new Map();
+            for (const t of appState.transactions) {
+                if (t.contaId !== contaSelecionadaId) continue;
+                const mag = (Number(t.debito) || 0) + (Number(t.credito) || 0);
+                const k = chave(t.descricao, t.data, mag);
+                contagem.set(k, (contagem.get(k) || 0) + 1);
+            }
+            let add = 0;
+            for (const l of linhas) {
+                const mag = l.debito || l.credito;
+                const k = chave(l.descricao, l.data, mag);
+                const rest = contagem.get(k) || 0;
+                if (rest > 0) { contagem.set(k, rest - 1); continue; }
+                const cat = findBestCategoryMatch(l.descricao, l.debito > 0);
+                appState.transactions.push({ id: 'sel_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9), data: l.data, descricao: l.descricao, contaId: contaSelecionadaId, credito: l.credito, debito: l.debito, categoria: cat || '', isDuplicate: false });
+                add++;
+            }
+            updateFilterMesBancoLight(); safeRun(updateFutureCategoriesDropdown); safeRun(updatePrevSumDropdown);
+            saveData();
+            fecharImportSeletiva();
+            switchTab('extrato'); renderTransactionsBanco();
+            alert(add > 0 ? `Importação Seletiva: ${add} lançamento(s) importado(s) para a conta ativa.` : 'Nenhum lançamento novo — os itens já existiam na conta.');
+        }
