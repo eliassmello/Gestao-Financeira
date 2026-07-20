@@ -4094,17 +4094,38 @@
             const guess = re => hdr.findIndex(h => re.test(h.toLowerCase()));
             const set = (id, idx) => { const el = document.getElementById(id); if (!el) return; el.innerHTML = optHtml; el.value = String(idx >= 0 && idx < ncol ? idx : -1); };
             const gData = guess(/data|date|dt/), gDesc = guess(/hist|descr|lan|memo|detalhe|favorec/), gDoc = guess(/doc|cheque|control|autentic/),
-                gCred = guess(/cr[ée]d|entrada/), gDeb = guess(/d[ée]b|sa[íi]da/), gVal = guess(/valor|montante|amount|vlr/);
+                gCred = guess(/cr[ée]d|entrada/), gDeb = guess(/d[ée]b|sa[íi]da/), gVal = guess(/valor|montante|amount|vlr/),
+                gCD = guess(/^c\/?d$|^d\/?c$|natureza|tipo|sinal|d[ée]b.*cr[ée]d|cr[ée]d.*d[ée]b/);
             const dataCol = gData >= 0 ? gData : 0;
             // Descrição não pode cair na mesma coluna da Data (ex.: "Dia do Lançamento").
             let descCol = (gDesc >= 0 && gDesc !== dataCol) ? gDesc : (dataCol === 0 ? 1 : 0);
             set('imp-sel-col-data', dataCol);
             set('imp-sel-col-desc', descCol);
             set('imp-sel-col-doc', gDoc);
-            set('imp-sel-col-cred', gCred >= 0 ? gCred : gVal);
-            set('imp-sel-col-deb', gDeb >= 0 ? gDeb : gVal);
+            if (gCD >= 0) {
+                // Layout: valor sem sinal + coluna C/D. Usa Valor único + C/D; zera Crédito/Débito.
+                set('imp-sel-col-valor', gVal); set('imp-sel-col-cd', gCD);
+                set('imp-sel-col-cred', -1); set('imp-sel-col-deb', -1);
+            } else if (gCred >= 0 && gDeb >= 0 && gCred !== gDeb) {
+                // Colunas separadas de Crédito e Débito.
+                set('imp-sel-col-valor', -1); set('imp-sel-col-cd', -1);
+                set('imp-sel-col-cred', gCred); set('imp-sel-col-deb', gDeb);
+            } else {
+                // Valor único (possivelmente com sinal).
+                set('imp-sel-col-valor', gVal); set('imp-sel-col-cd', -1);
+                set('imp-sel-col-cred', -1); set('imp-sel-col-deb', -1);
+            }
             const map = document.getElementById('imp-sel-map'); if (map) map.classList.remove('hidden');
             const prev = document.getElementById('imp-sel-preview'); if (prev) prev.innerHTML = '';
+        }
+
+        // Interpreta a natureza de uma célula C/D: retorna 'C' (crédito), 'D' (débito) ou ''.
+        function _impSelNatureza(v) {
+            const s = String(v == null ? '' : v).trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            if (!s) return '';
+            if (s[0] === 'D' || s.indexOf('DEB') !== -1 || s.indexOf('SAIDA') !== -1 || s === '-') return 'D';
+            if (s[0] === 'C' || s.indexOf('CRE') !== -1 || s.indexOf('ENTRADA') !== -1 || s === '+') return 'C';
+            return '';
         }
 
         // Converte um valor de célula (número, "1.234,56", "-50,00", "123,45 D", "(10,00)") em número com sinal.
@@ -4135,7 +4156,8 @@
         // Percorre as linhas aplicando o mapeamento escolhido e devolve os lançamentos válidos.
         function _impSelColetar() {
             const cv = id => parseInt((document.getElementById(id) || {}).value, 10);
-            const cData = cv('imp-sel-col-data'), cDesc = cv('imp-sel-col-desc'), cDoc = cv('imp-sel-col-doc'), cCred = cv('imp-sel-col-cred'), cDeb = cv('imp-sel-col-deb');
+            const cData = cv('imp-sel-col-data'), cDesc = cv('imp-sel-col-desc'), cDoc = cv('imp-sel-col-doc'),
+                cCred = cv('imp-sel-col-cred'), cDeb = cv('imp-sel-col-deb'), cVal = cv('imp-sel-col-valor'), cCD = cv('imp-sel-col-cd');
             const out = [];
             for (let i = 0; i < _impSelRows.length; i++) {
                 if (i === _impSelHeaderRow) continue;
@@ -4146,8 +4168,19 @@
                 if (doc) descricao = descricao ? `${descricao} [${doc}]` : doc;
                 descricao = descricao.slice(0, 80);
                 let credito = 0, debito = 0;
-                if (cCred === cDeb) { const v = _impSelValor(r[cCred]); if (v >= 0) credito = v; else debito = Math.abs(v); }
-                else {
+                if (cCD >= 0) {
+                    // Valor sem sinal + coluna C/D decide a natureza.
+                    const colVal = cVal >= 0 ? cVal : (cCred >= 0 ? cCred : cDeb);
+                    const v = Math.abs(_impSelValor(r[colVal]));
+                    const nat = _impSelNatureza(r[cCD]);
+                    if (!v || !nat) continue;
+                    if (nat === 'D') debito = v; else credito = v;
+                } else if (cVal >= 0) {
+                    // Valor único (com sinal: negativo = saída).
+                    const v = _impSelValor(r[cVal]); if (v >= 0) credito = v; else debito = Math.abs(v);
+                } else if (cCred === cDeb) {
+                    const v = _impSelValor(r[cCred]); if (v >= 0) credito = v; else debito = Math.abs(v);
+                } else {
                     const vc = Math.abs(_impSelValor(cCred >= 0 ? r[cCred] : 0));
                     const vd = Math.abs(_impSelValor(cDeb >= 0 ? r[cDeb] : 0));
                     if (vc >= vd && vc > 0) credito = vc; else debito = vd;

@@ -1195,10 +1195,18 @@
                                 <label class="text-xs text-slate-500 flex flex-col gap-1">Data <select id="imp-sel-col-data" class="text-sm border border-slate-200 rounded-md p-2"></select></label>
                                 <label class="text-xs text-slate-500 flex flex-col gap-1">Descrição <select id="imp-sel-col-desc" class="text-sm border border-slate-200 rounded-md p-2"></select></label>
                                 <label class="text-xs text-slate-500 flex flex-col gap-1">Documento (opcional) <select id="imp-sel-col-doc" class="text-sm border border-slate-200 rounded-md p-2"></select></label>
+                                <label class="text-xs text-slate-500 flex flex-col gap-1">Valor (único) <select id="imp-sel-col-valor" class="text-sm border border-slate-200 rounded-md p-2"></select></label>
+                                <label class="text-xs text-slate-500 flex flex-col gap-1">C/D (natureza) <select id="imp-sel-col-cd" class="text-sm border border-slate-200 rounded-md p-2"></select></label>
+                                <span class="hidden sm:block"></span>
                                 <label class="text-xs text-slate-500 flex flex-col gap-1">Crédito (entrada) <select id="imp-sel-col-cred" class="text-sm border border-slate-200 rounded-md p-2"></select></label>
                                 <label class="text-xs text-slate-500 flex flex-col gap-1">Débito (saída) <select id="imp-sel-col-deb" class="text-sm border border-slate-200 rounded-md p-2"></select></label>
                             </div>
-                            <p class="text-[11px] text-slate-400 mt-2">Crédito e Débito podem apontar para a <b>mesma coluna</b> (valor com sinal: negativo = saída). Só entram linhas com uma <b>data válida</b>.</p>
+                            <div class="text-[11px] text-slate-400 mt-2 space-y-0.5">
+                                <p>Escolha <b>um</b> dos jeitos de valor, conforme o seu extrato:</p>
+                                <p>• <b>Valor com sinal</b> (negativo = saída): mapeie só <b>Valor (único)</b>.</p>
+                                <p>• <b>Valor sem sinal + coluna C/D</b> (C = crédito, D = débito): mapeie <b>Valor (único)</b> + <b>C/D (natureza)</b>.</p>
+                                <p>• <b>Colunas separadas</b>: mapeie <b>Crédito</b> e <b>Débito</b>. Só entram linhas com uma <b>data válida</b>.</p>
+                            </div>
                             <div class="flex flex-wrap gap-2 mt-3">
                                 <button onclick="importSelPreview()" class="text-sm font-semibold bg-slate-200 text-slate-700 px-4 py-2 rounded-md hover:bg-slate-300">👁️ Pré-visualizar</button>
                                 <button onclick="importSelImportar()" class="text-sm font-semibold bg-emerald-600 text-white px-4 py-2 rounded-md hover:bg-emerald-700">⬇️ Importar para a conta ativa</button>
