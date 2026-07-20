@@ -1013,6 +1013,25 @@
             });
         }
 
+        // Descrição "canônica" só para a chave de deduplicação de conta corrente: ignora
+        // acentos, maiúsculas/minúsculas, pontuação, espaços repetidos, sufixos entre
+        // colchetes (ex.: "[doc]") e o comprimento. Assim a MESMA transação importada por
+        // caminhos diferentes (import padrão × Importação Seletiva) gera a MESMA chave e
+        // não duplica. Não altera a descrição guardada — é usada apenas na comparação.
+        function _normDescDedup(s) {
+            return String(s == null ? '' : s)
+                .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+                .toUpperCase()
+                .replace(/\[[^\]]*\]/g, ' ')
+                .replace(/[^A-Z0-9]+/g, ' ')
+                .trim()
+                .slice(0, 60);
+        }
+        // Chave única de dedup de conta corrente (usada pelos dois caminhos de importação).
+        function chaveDedupContaCorrente(contaId, descricao, data, valor) {
+            return `${contaId || ''}|${_normDescDedup(descricao)}|${data}|${(Math.round((Number(valor) || 0) * 100) / 100).toFixed(2)}`;
+        }
+
 
         // Se o lançamento pertence a uma compra parcelada efetivada, regenera os meses
         // ainda não realizados (a Projeção mês a mês passa a refletir a conciliação).

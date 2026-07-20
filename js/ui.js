@@ -347,8 +347,9 @@
                         // identica (reimportar o mesmo extrato nao duplica); esgotada a contagem,
                         // os iguais SEGUINTES sao adicionados — assim lancamentos legitimamente
                         // repetidos no MESMO extrato (mesma data/valor/descricao) entram todos.
-                        const chaveDedupBco = (contaId, desc, data, valor) =>
-                            `${contaId || ''}|${desc}|${data}|${(Math.round((Number(valor) || 0) * 100) / 100).toFixed(2)}`;
+                        // Chave compartilhada com a Importação Seletiva (descrição normalizada),
+                        // para que os dois caminhos não dupliquem a mesma transação.
+                        const chaveDedupBco = (contaId, desc, data, valor) => chaveDedupContaCorrente(contaId, desc, data, valor);
                         const contagemBco = new Map();
                         for (const t of appState.transactions) {
                             if (t.contaId !== contaSelecionadaId) continue;
@@ -4174,8 +4175,8 @@
             if (!contaSelecionadaId || !getContaById(contaSelecionadaId)) { alert('Selecione uma Conta Corrente.'); return; }
             const linhas = _impSelColetar();
             if (!linhas.length) { alert('Nenhuma linha com data válida. Confira o mapeamento das colunas.'); return; }
-            // Mesma dedup por ocorrência do import padrão: contaId|descrição|data|valor.
-            const chave = (desc, data, valor) => `${contaSelecionadaId || ''}|${desc}|${data}|${(Math.round((Number(valor) || 0) * 100) / 100).toFixed(2)}`;
+            // Mesma dedup por ocorrência do import padrão (descrição normalizada).
+            const chave = (desc, data, valor) => chaveDedupContaCorrente(contaSelecionadaId, desc, data, valor);
             const contagem = new Map();
             for (const t of appState.transactions) {
                 if (t.contaId !== contaSelecionadaId) continue;
