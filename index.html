@@ -40,6 +40,14 @@
            na tela; as fora da viewport são puladas, mantendo a rolagem fluida em listas
            grandes (Cartão e Conta Corrente). contain-intrinsic-size reserva a altura. */
         .virt-row { content-visibility: auto; contain-intrinsic-size: auto 64px; }
+        /* Relatório para impressão/PDF: some com o app e mostra só o relatório. */
+        #relatorio-print { display: none; }
+        @media print {
+            body * { visibility: hidden !important; }
+            #relatorio-print, #relatorio-print * { visibility: visible !important; }
+            #relatorio-print { display: block !important; position: absolute; left: 0; top: 0; width: 100%; }
+            @page { margin: 14mm; }
+        }
         .dark body { background-color: #0f172a; color: #e2e8f0; }
         .dark .bg-white { background-color: #1e293b !important; }
         .dark .bg-slate-50 { background-color: #0f172a !important; }
@@ -145,6 +153,7 @@
                         <label class="text-sm font-bold text-slate-600 ml-1 sm:ml-3">Período (meses):</label>
                         <input type="number" id="dash-range-filter" min="1" max="120" step="1" value="1" title="Quantos meses o relatório deve abranger, terminando no mês de Referência" oninput="debouncedRenderRelatorio()" class="w-20 text-sm border border-slate-300 rounded-md p-1.5 outline-none text-indigo-700 font-semibold focus:ring-1 focus:ring-indigo-500">
                     </div>
+                    <button onclick="gerarRelatorioPdf()" title="Gera um relatório do período para salvar em PDF (usa a impressão do navegador → Salvar como PDF)" class="text-sm font-semibold bg-slate-700 text-white px-3 py-1.5 rounded-md hover:bg-slate-800 transition whitespace-nowrap">🖨️ Relatório PDF</button>
                 </div>
             </div>
 
@@ -178,6 +187,18 @@
                     <p class="text-[10px] text-slate-400">Entradas × Saídas das contas marcadas + cartão, terminando no mês de referência</p>
                 </div>
                 <div class="relative w-full" style="height:280px"><canvas id="chartEvolucao"></canvas></div>
+            </div>
+
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+                <div class="flex justify-between items-center mb-4 gap-3 flex-wrap">
+                    <h3 class="text-sm font-bold text-slate-500">📉 Tendência por categoria (12 meses)</h3>
+                    <label class="flex items-center gap-2 text-sm">
+                        <span class="text-slate-500 font-medium">Categoria:</span>
+                        <select id="tend-cat" onchange="_onTendCatChange()" class="text-sm border border-slate-300 rounded-md p-1.5 outline-none text-indigo-700 font-semibold focus:ring-1 focus:ring-indigo-500 max-w-[200px]"></select>
+                    </label>
+                </div>
+                <div class="relative w-full" style="height:280px"><canvas id="chartTendencia"></canvas></div>
+                <p id="tend-nota" class="text-[10px] text-slate-400 mt-2"></p>
             </div>
 
             <details class="bg-white rounded-xl shadow-sm border border-slate-100 group">
@@ -1249,6 +1270,9 @@
             </div>
         </div>
     </main>
+
+    <!-- Container do relatório para impressão/PDF (preenchido por gerarRelatorioPdf). -->
+    <div id="relatorio-print"></div>
 
     <!-- Tela de bloqueio: exibida quando a proteção por senha está ligada e a sessão
          ainda não foi desbloqueada. Cobre todo o app até a senha correta ser digitada. -->
