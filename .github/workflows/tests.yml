@@ -1,0 +1,26 @@
+name: Testes e2e
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Instalar dependências
+        working-directory: tests
+        run: npm install
+      - name: Instalar navegador (Chromium)
+        working-directory: tests
+        run: npx playwright install --with-deps chromium
+      - name: Rodar testes
+        working-directory: tests
+        env:
+          CHROMIUM_PATH: ""
+        run: npm test

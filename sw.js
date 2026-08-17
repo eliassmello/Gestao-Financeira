@@ -1,19 +1,18 @@
-const CACHE_NAME = 'financas-pwa-v68';
+const CACHE_NAME = 'financas-pwa-v69';
 
-// Recursos essenciais para a aplicação abrir offline (o app + as bibliotecas de CDN).
+// Essenciais para abrir offline: só a "casca" leve do app + CSS estático + Dexie.
+// Chart.js, SheetJS (xlsx) e pdf.js NÃO entram aqui — são carregados sob demanda e o
+// próprio handler de fetch abaixo os guarda no cache no primeiro uso online.
 const urlsToCache = [
   './',
   './index.html',
   './manifest.json',
+  './css/tailwind.css',
   './js/services.js',
   './js/ui.js',
   './icon-192.png',
   './icon-512.png',
-  'https://cdn.tailwindcss.com',
-  'https://cdn.jsdelivr.net/npm/chart.js',
-  'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
-  'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js',
-  'https://unpkg.com/dexie/dist/dexie.js'
+  'https://cdn.jsdelivr.net/npm/dexie@4.4.5/dist/dexie.js'
 ];
 
 // Instala e pré-carrega os essenciais. Cada item é cacheado individualmente para

@@ -6,6 +6,35 @@
 
 
 
+        // ===== Carregamento sob demanda de bibliotecas pesadas =====
+        // Chart.js, SheetJS (xlsx) e pdf.js só são baixados quando realmente usados
+        // (abrir gráfico, importar/exportar planilha, ler fatura em PDF), deixando a
+        // abertura do app bem mais leve. Versões fixas para estabilidade e offline.
+        const _LIBS = {
+            xlsx:  'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
+            pdf:   'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js',
+            chart: 'https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js',
+        };
+        const _libPromessas = {};
+        function carregarScript(src) {
+            if (_libPromessas[src]) return _libPromessas[src];
+            _libPromessas[src] = new Promise((resolve, reject) => {
+                const s = document.createElement('script');
+                s.src = src; s.async = true;
+                s.onload = () => resolve();
+                s.onerror = () => { delete _libPromessas[src]; reject(new Error('Falha ao carregar ' + src)); };
+                document.head.appendChild(s);
+            });
+            return _libPromessas[src];
+        }
+        async function ensureXLSX()  { if (typeof XLSX === 'undefined')  { try { await carregarScript(_LIBS.xlsx); } catch (e) {} } return typeof XLSX !== 'undefined'; }
+        async function ensureChart() { if (typeof Chart === 'undefined') { try { await carregarScript(_LIBS.chart); } catch (e) {} } return typeof Chart !== 'undefined'; }
+        async function ensurePDF()   {
+            if (typeof pdfjsLib === 'undefined') { try { await carregarScript(_LIBS.pdf); } catch (e) {} }
+            if (typeof pdfjsLib !== 'undefined') pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+            return typeof pdfjsLib !== 'undefined';
+        }
+
         // Configuração do IndexedDB usando Dexie.js
         const db = new Dexie("AppFinancas_DB");
 
@@ -592,11 +621,10 @@
         // 12/12) vai no campo Parcela e a rotina o anexa a descricao.
         async function importarPdfFaturaCartao(file, e, dataVencimentoFatura, anoFaturaCartao) {
             try {
-                if (typeof pdfjsLib === 'undefined') {
-                    alert("A biblioteca de leitura de PDF nao foi carregada. Verifique sua conexao com a internet e recarregue a pagina.");
+                if (!(await ensurePDF())) {
+                    alert("A biblioteca de leitura de PDF nao pode ser carregada. Verifique sua conexao com a internet e tente novamente.");
                     e.target.value = ''; return;
                 }
-                pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
 
                 const linhas = await extrairLinhasPdf(file);
                 // Detecta o banco pelo conteudo: Caixa (CEF) tem layout proprio (secao
@@ -1676,10 +1704,10 @@
         }
 
 
-        function exportarExtratoExcel() {
+        async function exportarExtratoExcel() {
             const conta = getContaById(contaSelecionadaId);
             if (!conta) { alert("Selecione uma conta corrente."); return; }
-            if (typeof XLSX === 'undefined') { alert("Biblioteca de Excel não carregada."); return; }
+            if (!(await ensureXLSX())) { alert("Não foi possível carregar a biblioteca de Excel. Verifique a conexão e tente novamente."); return; }
             const ini = document.getElementById('export-data-ini').value;
             const fim = document.getElementById('export-data-fim').value;
             const linhas = appState.transactions
