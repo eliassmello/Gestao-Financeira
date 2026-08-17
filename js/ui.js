@@ -720,8 +720,121 @@
 
             safeRun(() => renderOrcamento(desMap, range));
             safeRun(() => renderEvolucaoMensal(endNum));
+            safeRun(() => renderTendenciaCategoria(endNum));
         }
 
+
+        // ===== Feature 4: Tendência de UMA categoria de despesa ao longo de 12 meses =====
+        let _tendChart = null, _dashEndNum = null;
+        function _onTendCatChange() { if (_dashEndNum !== null) renderTendenciaCategoria(_dashEndNum); }
+        function renderTendenciaCategoria(endNum) {
+            _dashEndNum = endNum;
+            const sel = document.getElementById('tend-cat');
+            const canvas = document.getElementById('chartTendencia');
+            const nota = document.getElementById('tend-nota');
+            if (!sel || !canvas) return;
+
+            const despesasCat = (appState.categories.despesas || []).slice().sort((a, b) => a.localeCompare(b, 'pt-BR'));
+            const anterior = sel.value;
+            sel.innerHTML = despesasCat.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+            if (!despesasCat.length) { if (nota) nota.textContent = 'Cadastre categorias de despesa para ver a tendência.'; if (_tendChart) { _tendChart.destroy(); _tendChart = null; } return; }
+            sel.value = (anterior && despesasCat.includes(anterior)) ? anterior : despesasCat[0];
+            const cat = sel.value;
+
+            const N = 12, start = endNum - N + 1;
+            const vals = new Array(N).fill(0);
+            const catsInvest = _catsMovimentacaoInvestimento();
+            const ehMov = (t) => !!t.categoria && catsInvest.has(t.categoria);
+            const soma = (t) => {
+                if (t.categoria !== cat) return;
+                const n = mesAnoNum(t.data);
+                if (n === null || n < start || n > endNum) return;
+                vals[n - start] += Number(t.debito) || 0;
+            };
+            for (const t of appState.transactions) { if (contaIncluida(t.contaId) && !ehPagamentoFaturaCartaoConta(t) && !ehMov(t)) soma(t); }
+            for (const t of appState.ccTransactions) { if (!ehMov(t)) soma(t); }
+
+            const labels = [];
+            for (let i = 0; i < N; i++) { const num = start + i; const y = Math.floor((num - 1) / 12); const m = ((num - 1) % 12) + 1; labels.push(`${String(m).padStart(2, '0')}/${String(y).slice(2)}`); }
+            const total = vals.reduce((a, b) => a + b, 0);
+            const media = total / N;
+            if (nota) nota.textContent = `Total no período: ${formatCurrency(total)} · média ${formatCurrency(media)}/mês.`;
+
+            if (typeof Chart === 'undefined') { ensureChart().then(ok => { if (ok) renderTendenciaCategoria(endNum); }); return; }
+            if (_tendChart) _tendChart.destroy();
+            _tendChart = new Chart(canvas.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [
+                        { label: cat, data: vals, backgroundColor: 'rgba(244, 63, 94, 0.65)', borderRadius: 3, order: 2 },
+                        { label: 'Média', data: new Array(N).fill(media), type: 'line', borderColor: '#4f46e5', borderWidth: 2, pointRadius: 0, borderDash: [5, 4], order: 1 },
+                    ],
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: true, labels: { boxWidth: 12 } } },
+                    scales: { y: { beginAtZero: true, ticks: { callback: v => formatCurrency(v) } } },
+                },
+            });
+        }
+
+        // ===== Feature 6: Relatório do período para salvar em PDF (via impressão) =====
+        function _mesAnoLabel(num) { const m = ((num - 1) % 12) + 1, y = Math.floor((num - 1) / 12); return `${String(m).padStart(2, '0')}/${y}`; }
+        // Agrega o período do Dashboard nas MESMAS regras de renderRelatorio (exclui
+        // pagamento de fatura de cartão e movimentação interna de investimento/transferência).
+        function _resumoPeriodoDashboard(endNum, range) {
+            const startNum = endNum - range + 1;
+            const inRange = (d) => { const n = mesAnoNum(d); return n !== null && n >= startNum && n <= endNum; };
+            const catsInvest = _catsMovimentacaoInvestimento();
+            const ehMov = (t) => !!t.categoria && catsInvest.has(t.categoria);
+            const transReais = appState.transactions.filter(t => contaIncluida(t.contaId) && inRange(t.data) && !ehPagamentoFaturaCartaoConta(t) && !ehMov(t));
+            const transCartoes = (appState.ccTransactions || []).filter(t => inRange(t.data) && !ehMov(t));
+            let recCaixa = 0, desCaixa = 0; const desMap = {}, recMap = {};
+            const add = (t) => {
+                const c = t.categoria || 'Não Categorizado';
+                if (t.debito > 0) { desCaixa += Number(t.debito) || 0; desMap[c] = (desMap[c] || 0) + (Number(t.debito) || 0); }
+                if (t.credito > 0) { recCaixa += Number(t.credito) || 0; recMap[c] = (recMap[c] || 0) + (Number(t.credito) || 0); }
+            };
+            for (const t of transReais) add(t);
+            for (const t of transCartoes) add(t);
+            const arr = (m) => Object.keys(m).filter(k => m[k] > 0 && k !== 'Não Categorizado').map(k => ({ cat: k, val: m[k] })).sort((a, b) => b.val - a.val);
+            return { recCaixa, desCaixa, balanco: recCaixa - desCaixa, arrDespesas: arr(desMap), arrReceitas: arr(recMap) };
+        }
+        function gerarRelatorioPdf() {
+            const filterEl = document.getElementById('dash-month-filter');
+            let fv = filterEl ? filterEl.value : '';
+            if (!fv) { const d = new Date(); fv = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
+            const rangeEl = document.getElementById('dash-range-filter');
+            const range = rangeEl ? Math.max(1, parseInt(rangeEl.value, 10) || 1) : 1;
+            const [ano, mes] = fv.split('-');
+            const endNum = parseInt(ano, 10) * 12 + parseInt(mes, 10);
+            const r = _resumoPeriodoDashboard(endNum, range);
+            const periodoTxt = range > 1 ? `${_mesAnoLabel(endNum - range + 1)} a ${_mesAnoLabel(endNum)}` : _mesAnoLabel(endNum);
+
+            const linhas = (arrv, cor) => arrv.length
+                ? arrv.map(i => `<tr><td style="padding:5px 8px;border-bottom:1px solid #eef2f7">${escapeHtml(i.cat)}</td><td style="padding:5px 8px;border-bottom:1px solid #eef2f7;text-align:right;color:${cor};font-weight:600">${formatCurrency(i.val)}</td></tr>`).join('')
+                : `<tr><td colspan="2" style="padding:5px 8px;color:#94a3b8">— sem lançamentos —</td></tr>`;
+            const linhaResumo = (rot, val, cor) => `<tr><td style="padding:6px 8px;background:#f1f5f9">${rot}</td><td style="padding:6px 8px;background:#f1f5f9;text-align:right;font-weight:700;color:${cor}">${formatCurrency(val)}</td></tr>`;
+
+            const el = document.getElementById('relatorio-print');
+            el.innerHTML = `
+                <div style="font-family:system-ui,-apple-system,'Segoe UI',sans-serif;color:#0f172a;max-width:720px;margin:0 auto;font-variant-numeric:tabular-nums">
+                    <h1 style="font-size:20px;margin:0 0 2px">Relatório Financeiro</h1>
+                    <div style="font-size:12px;color:#475569;margin-bottom:14px">Período: <b>${periodoTxt}</b> &middot; Gerado em ${new Date().toLocaleDateString('pt-BR')}</div>
+                    <table style="width:100%;border-collapse:collapse;margin-bottom:18px;font-size:13px">
+                        ${linhaResumo('Entradas', r.recCaixa, '#059669')}
+                        ${linhaResumo('Saídas', r.desCaixa, '#e11d48')}
+                        ${linhaResumo('Balanço', r.balanco, r.balanco >= 0 ? '#4f46e5' : '#e11d48')}
+                    </table>
+                    <h2 style="font-size:14px;border-bottom:1px solid #e2e8f0;padding-bottom:4px;margin:0 0 6px">Despesas por categoria</h2>
+                    <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:18px">${linhas(r.arrDespesas, '#e11d48')}</table>
+                    <h2 style="font-size:14px;border-bottom:1px solid #e2e8f0;padding-bottom:4px;margin:0 0 6px">Receitas por categoria</h2>
+                    <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:18px">${linhas(r.arrReceitas, '#059669')}</table>
+                    <div style="font-size:10px;color:#94a3b8;margin-top:22px">Gestão Financeira &middot; relatório gerado localmente no navegador. Não inclui pagamento de fatura de cartão nem movimentação interna (investimento/transferência).</div>
+                </div>`;
+            window.print();
+        }
 
         // Gráfico de barras Entradas x Saídas (+ linha de balanço) dos 12 meses que
         // terminam no mês de referência do Dashboard. Usa as mesmas fontes do relatório:
