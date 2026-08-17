@@ -27,6 +27,35 @@
         // Aplica o tema salvo o quanto antes (ui.js roda no fim do body)
         aplicarTema((() => { try { return localStorage.getItem('tema'); } catch (e) { return null; } })() || 'light');
 
+        // ===== Tamanho da fonte (A− / A / A+), persistido em localStorage =====
+        // Multiplica o baseline (--fs-base, maior no celular) por --fs-user. O valor é
+        // aplicado no <html> e salvo; o <head> já reaplica antes da 1ª pintura.
+        const _FS_STEPS = [0.9, 1.0, 1.12, 1.25, 1.4];
+        const _FS_LABELS = ['Menor', 'Padrão', 'Maior', 'Grande', 'Extra'];
+        function _fsIndexAtual() {
+            let v = 1.0;
+            try { v = parseFloat(localStorage.getItem('app_fontscale')) || 1.0; } catch (e) {}
+            let idx = _FS_STEPS.indexOf(v);
+            if (idx < 0) { // acha o mais próximo
+                idx = _FS_STEPS.reduce((best, s, i) => Math.abs(s - v) < Math.abs(_FS_STEPS[best] - v) ? i : best, 1);
+            }
+            return idx;
+        }
+        function aplicarTamanhoFonte(idx) {
+            idx = Math.max(0, Math.min(_FS_STEPS.length - 1, idx));
+            const mult = _FS_STEPS[idx];
+            document.documentElement.style.setProperty('--fs-user', String(mult));
+            try { localStorage.setItem('app_fontscale', String(mult)); } catch (e) {}
+            const lbl = document.getElementById('fonte-nivel');
+            if (lbl) lbl.textContent = _FS_LABELS[idx] + (mult === 1.0 ? '' : ` (${Math.round(mult * 100)}%)`);
+        }
+        function ajustarFonte(delta) {
+            const idx = delta === 0 ? 1 : _fsIndexAtual() + delta;   // 0 = voltar ao padrão
+            aplicarTamanhoFonte(idx);
+        }
+        // Sincroniza o rótulo com o valor salvo na carga.
+        aplicarTamanhoFonte(_fsIndexAtual());
+
 
         function debouncedRenderRelatorio() { debounce('renderRelatorio', () => renderRelatorio(), 100); }
 
@@ -295,8 +324,9 @@
                 // data chega ao parser abaixo exatamente como está no arquivo.
                 const isCsv = (file.name || '').toLowerCase().endsWith('.csv');
                 const reader = new FileReader();
-                reader.onload = function(evt) {
+                reader.onload = async function(evt) {
                     try {
+                        if (!(await ensureXLSX())) { alert("Não foi possível carregar a biblioteca de planilhas. Verifique a conexão e tente novamente."); e.target.value = ''; return; }
                         const data = new Uint8Array(evt.target.result);
                         const workbook = XLSX.read(data, isCsv ? { type: 'array', raw: true } : { type: 'array' });
                         const firstSheetName = workbook.SheetNames[0];
@@ -555,6 +585,9 @@
         }
 
         function renderRelatorio() {
+            // Chart.js é carregado sob demanda: os KPIs/listas aparecem já; quando a lib
+            // termina de carregar, re-renderiza para desenhar os gráficos (sem travar a abertura).
+            if (typeof Chart === 'undefined') { ensureChart().then(ok => { if (ok) renderRelatorio(); }); }
             const filterEl = document.getElementById('dash-month-filter');
             let filterVal = filterEl ? filterEl.value : '';
             
@@ -1438,6 +1471,7 @@
 
 
         function renderSimulacaoQuitacao() {
+            if (typeof Chart === 'undefined') { ensureChart().then(ok => { if (ok) renderSimulacaoQuitacao(); }); }
             const res = document.getElementById('quitacao-resultado');
             if (!res) return;
             const compraAtual = appState.comprasParceladas.find(c => c.id === compraQuitacaoId);
@@ -4063,10 +4097,11 @@
         }
         function fecharImportSeletiva() { const m = document.getElementById('modal-import-seletiva'); if (m) m.classList.add('hidden'); }
 
-        function importSelEscolherArquivo(input) {
+        async function importSelEscolherArquivo(input) {
             const file = input && input.files && input.files[0]; if (!file) return;
-            if (typeof XLSX === 'undefined') { alert('A biblioteca de leitura de planilhas ainda não carregou. Verifique a conexão e tente novamente.'); return; }
-            const nomeEl = document.getElementById('imp-sel-nome'); if (nomeEl) nomeEl.textContent = 'Lendo ' + file.name + '…';
+            const nomeEl = document.getElementById('imp-sel-nome'); if (nomeEl) nomeEl.textContent = 'Carregando…';
+            if (!(await ensureXLSX())) { alert('Não foi possível carregar a biblioteca de leitura de planilhas. Verifique a conexão e tente novamente.'); if (nomeEl) nomeEl.textContent = ''; return; }
+            if (nomeEl) nomeEl.textContent = 'Lendo ' + file.name + '…';
             const isCsv = (file.name || '').toLowerCase().endsWith('.csv');
             const reader = new FileReader();
             reader.onload = function (evt) {

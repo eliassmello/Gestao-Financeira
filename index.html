@@ -3,22 +3,39 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Controle Financeiro Pessoal - PWA IndexedDB</title>
-    
+    <title>Gestão Financeira</title>
+
     <link rel="manifest" href="./manifest.json">
     <meta name="theme-color" content="#4f46e5">
     <link rel="apple-touch-icon" href="./icon-192.png">
 
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-    <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
+    <!-- CSS do Tailwind pré-compilado (estático) — substitui o CDN de desenvolvimento,
+         que trazia o motor inteiro e recompilava tudo no navegador a cada abertura.
+         Regenerar com: npx tailwindcss -i css/input.css -o css/tailwind.css --minify -->
+    <link rel="stylesheet" href="./css/tailwind.css">
+    <!-- Dexie (IndexedDB) precisa existir antes do services.js: carga direta e com versão fixa.
+         Chart.js, SheetJS (xlsx) e pdf.js são carregados SOB DEMANDA (ver ensureChart/ensureXLSX/
+         ensurePDF em services.js) para não pesar na abertura. -->
+    <script src="https://cdn.jsdelivr.net/npm/dexie@4.4.5/dist/dexie.js"></script>
+    <!-- Aplica o tamanho de fonte salvo antes da 1ª pintura (evita "pulo" de layout). -->
+    <script>try{var _fs=localStorage.getItem('app_fontscale');if(_fs)document.documentElement.style.setProperty('--fs-user',_fs);}catch(e){}</script>
 
     <!-- Tema escuro centralizado: remapeia as cores neutras/pastel do Tailwind quando
          <html> tem a classe .dark. As cores semânticas (verde/vermelho/indigo dos
          valores) permanecem, apenas mais legíveis sobre o fundo escuro. -->
     <style>
+        /* Tipografia: a classe `font-sans` do Tailwind no <body> já entrega um stack de
+           fontes do sistema (nítido em cada SO, sem depender de rede/offline). */
+        html { -webkit-text-size-adjust: 100%; }
+        /* Dígitos com largura fixa: alinha as colunas de valores (R$) verticalmente. */
+        body { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+        /* Tamanho da fonte = baseline × escolha do usuário. No celular o baseline é um
+           pouco maior (melhor leitura); o controle A− / A / A+ multiplica por cima
+           (--fs-user, persistido em localStorage 'app_fontscale'). */
+        :root { --fs-base: 1; --fs-user: 1; }
+        @media (max-width: 640px) { :root { --fs-base: 1.0625; } }
+        html { font-size: calc(var(--fs-base) * var(--fs-user) * 100%); }
+
         /* Virtualização leve: o navegador só renderiza (layout/paint) as linhas visíveis
            na tela; as fora da viewport são puladas, mantendo a rolagem fluida em listas
            grandes (Cartão e Conta Corrente). contain-intrinsic-size reserva a altura. */
@@ -1009,6 +1026,20 @@
         </section>
 
         <section id="tab-config" class="tab-content hidden space-y-6">
+
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+                <h2 class="font-bold text-slate-700 text-lg mb-1">🅰️ Aparência</h2>
+                <p class="text-sm text-slate-500 mb-3">Ajuste o <b>tamanho da fonte</b> de todo o app. A preferência fica salva neste dispositivo.</p>
+                <div class="flex items-center flex-wrap gap-3">
+                    <span class="text-sm font-semibold text-slate-600">Tamanho do texto:</span>
+                    <div class="inline-flex items-stretch rounded-lg border border-slate-300 overflow-hidden">
+                        <button onclick="ajustarFonte(-1)" title="Diminuir" class="px-3 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold text-xs">A−</button>
+                        <button onclick="ajustarFonte(0)" title="Padrão" class="px-3 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold text-sm border-l border-r border-slate-300">A</button>
+                        <button onclick="ajustarFonte(1)" title="Aumentar" class="px-3 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold text-lg">A+</button>
+                    </div>
+                    <span id="fonte-nivel" class="text-xs text-slate-400"></span>
+                </div>
+            </div>
 
             <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
                 <h2 class="font-bold text-slate-700 text-lg mb-1">🔔 Notificações de contas a vencer</h2>
