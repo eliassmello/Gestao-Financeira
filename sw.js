@@ -1,4 +1,4 @@
-const CACHE_NAME = 'financas-pwa-v70';
+const CACHE_NAME = 'financas-pwa-v71';
 
 // Essenciais para abrir offline: só a "casca" leve do app + CSS estático + Dexie.
 // Chart.js, SheetJS (xlsx) e pdf.js NÃO entram aqui — são carregados sob demanda e o
