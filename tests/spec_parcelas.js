@@ -1,20 +1,21 @@
-// Regressão: parcelamentos futuros do cartão não devem DUPLICAR nem reprojetar
-// parcelas já pagas quando as parcelas da MESMA compra têm centavos diferentes
-// entre faturas (a dedup agrupa por descrição + total, sem o valor).
+// Parcelamentos futuros do cartão: reconstrução pelo VENCIMENTO.
+// Cobre: (a) dedup por descrição+total (sem duplicar / sem reprojetar parcela paga),
+// (b) fatura que vence no mês seguinte aparece, (c) parcela já vencida some,
+// (d) parcela que vence hoje aparece no mês corrente, (e) Previsão sem contar em
+// dobro com a recorrência da fatura, (f) compras distintas não se fundem.
 const { abrirApp, fechar, novoRelatorio } = require('./harness');
 
-const H = () => { const d = new Date(); return d.getFullYear() * 12 + (d.getMonth() + 1); };
-const venc = n => { const y = Math.floor((n - 1) / 12), m = ((n - 1) % 12) + 1; return `10/${String(m).padStart(2, '0')}/${y}`; };
+const brToday = () => { const d = new Date(); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`; };
 
-async function porMes(page, ccTransactions) {
-  return page.evaluate((txs) => {
-    appState.cartoes = [{ id: 'c1', nome: 'Nubank', diaVencimento: 10 }];
-    appState.ccTransactions = txs;
-    const pm = calcularParcelamentosFuturos('c1');
+async function pm(page, txs, cartoes) {
+  return page.evaluate((a) => {
+    appState.cartoes = a.cartoes || [{ id: 'c1', nome: 'Nubank', diaVencimento: 10 }];
+    appState.ccTransactions = a.txs;
+    const p = calcularParcelamentosFuturos('c1');
     const out = {};
-    Object.keys(pm).map(Number).sort((a, b) => a - b).forEach(n => { out[n] = pm[n].map(p => `${p.parcela}/${p.total}`); });
+    Object.keys(p).map(Number).sort((x, y) => x - y).forEach(n => { out[n] = p[n].map(z => `${z.parcela}/${z.total}`); });
     return out;
-  }, ccTransactions);
+  }, { txs, cartoes });
 }
 
 async function run() {
@@ -22,36 +23,65 @@ async function run() {
   const { page } = ctx;
   const { ok, resumo } = novoRelatorio();
   try {
-    const h = await page.evaluate(H);
+    const H = await page.evaluate(() => { const d = new Date(); return d.getFullYear() * 12 + (d.getMonth() + 1); });
+    const proxVenc = await page.evaluate(() => { const d = new Date(); const n = d.getFullYear() * 12 + (d.getMonth() + 1) + 1; const y = Math.floor((n - 1) / 12), m = ((n - 1) % 12) + 1; return `10/${String(m).padStart(2, '0')}/${y}`; });
+    const today = await page.evaluate(brToday);
 
-    // A) mesma compra, parcelas com centavos diferentes em faturas de meses distintos
-    let pm = await porMes(page, [
-      { id: 't1', cartaoId: 'c1', data: venc(h - 1), descricao: 'GELADEIRA (Parc. 01/03)', debito: 333.34, credito: 0 },
-      { id: 't2', cartaoId: 'c1', data: venc(h), descricao: 'GELADEIRA (Parc. 02/03)', debito: 333.33, credito: 0 },
+    // (a) dedup — mesma compra, centavos diferentes, fatura passada + atual
+    const vencAnt = await page.evaluate(() => { const n = new Date().getFullYear() * 12 + (new Date().getMonth() + 1) - 1; const y = Math.floor((n - 1) / 12), m = ((n - 1) % 12) + 1; return `10/${String(m).padStart(2, '0')}/${y}`; });
+    let p = await pm(page, [
+      { id: 'a1', cartaoId: 'c1', data: vencAnt, descricao: 'GELADEIRA (Parc. 01/03)', debito: 333.34, credito: 0 },
+      { id: 'a2', cartaoId: 'c1', data: proxVenc, descricao: 'GELADEIRA (Parc. 02/03)', debito: 333.33, credito: 0 },
     ]);
-    const todas = Object.values(pm).flat();
-    ok('sem duplicar a 3/3', todas.filter(x => x === '3/3').length === 1, JSON.stringify(pm));
-    ok('não reprojeta a parcela já paga (2/3)', !todas.includes('2/3'), JSON.stringify(pm));
-    ok('mês corrente sem parcela já faturada', !(pm[h] || []).length, JSON.stringify(pm[h] || []));
-    ok('3/3 fica no mês seguinte', (pm[h + 1] || []).includes('3/3'), JSON.stringify(pm[h + 1] || []));
+    const flat = Object.values(p).flat();
+    ok('(a) sem duplicar 3/3', flat.filter(x => x === '3/3').length === 1, JSON.stringify(p));
+    ok('(a) não reprojeta paga 1/3', !flat.includes('1/3'), JSON.stringify(p));
 
-    // B) compra nova única (1/10): projeta 2..10, sem duplicar
-    pm = await porMes(page, [
-      { id: 'b1', cartaoId: 'c1', data: venc(h), descricao: 'TV (Parc. 01/10)', debito: 500, credito: 0 },
-    ]);
-    const seq = Object.keys(pm).map(Number).sort((a, b) => a - b).map(n => (pm[n] || [])).flat();
-    ok('projeta 2..10 (9 parcelas)', seq.length === 9 && seq[0] === '2/10' && seq[8] === '10/10', JSON.stringify(seq));
+    // (b) fatura vence mês seguinte → parcela aparece no mês seguinte
+    p = await pm(page, [{ id: 'b1', cartaoId: 'c1', data: proxVenc, descricao: 'TV (Parc. 01/10)', debito: 500, credito: 0 }]);
+    ok('(b) mês seguinte mostra 1/10', (p[H + 1] || []).includes('1/10'), JSON.stringify(p[H + 1] || []));
+    ok('(b) mês corrente vazio (vence dia 10 do mês que vem)', !(p[H] || []).length, JSON.stringify(p[H] || []));
 
-    // C) duas compras DIFERENTES não são fundidas
-    pm = await porMes(page, [
-      { id: 'c1a', cartaoId: 'c1', data: venc(h), descricao: 'NOTEBOOK (Parc. 01/04)', debito: 250, credito: 0 },
-      { id: 'c2a', cartaoId: 'c1', data: venc(h), descricao: 'CELULAR (Parc. 01/04)', debito: 300, credito: 0 },
-    ]);
-    const desc = await page.evaluate(() => {
-      const pm2 = calcularParcelamentosFuturos('c1');
-      return Object.values(pm2).flat().map(p => p.desc);
-    });
-    ok('compras diferentes mantidas separadas', desc.some(d => /NOTEBOOK/i.test(d)) && desc.some(d => /CELULAR/i.test(d)), JSON.stringify([...new Set(desc)]));
+    // (c) parcela já vencida (mês passado) some
+    ok('(c) nada em meses passados', !Object.keys(await pm(page, [{ id: 'c1x', cartaoId: 'c1', data: vencAnt, descricao: 'RADIO (Parc. 05/06)', debito: 50, credito: 0 }])).map(Number).some(n => n < H), 'ok');
+
+    // (d) parcela que vence HOJE aparece no mês corrente
+    p = await pm(page, [{ id: 'd1', cartaoId: 'c1', data: today, descricao: 'CAMA (Parc. 02/05)', debito: 120, credito: 0 }]);
+    ok('(d) vence hoje → aparece no mês corrente', (p[H] || []).includes('2/5'), JSON.stringify(p[H] || []));
+
+    // (e) Previsão: não conta em dobro com a recorrência da fatura
+    const dob = await page.evaluate((pv) => {
+      appState.cartoes = [{ id: 'c1', nome: 'Nubank', diaVencimento: 10 }];
+      appState.despesasCartao = [];
+      appState.ccTransactions = [
+        { id: 'e1', cartaoId: 'c1', data: pv, descricao: 'TV (Parc. 01/10)', debito: 500, credito: 0 },
+        { id: 'e2', cartaoId: 'c1', data: pv, descricao: 'SOFA (Parc. 04/06)', debito: 200, credito: 0 },
+      ];
+      appState.recorrencias = [{ id: 'r1', nome: 'Fatura Nubank', valor: 1000, categoria: 'Nubank', tipo: 'debito' }];
+      const ym = pv.split('/'); const dataRec = pv;
+      appState.futureTransactions = [{ id: 'ft1', recorrenciaId: 'r1', categoria: 'Nubank', data: dataRec, valor: 1000, tipo: 'debito', conciliado: false }];
+      sincronizarParcelasCartao();
+      const nApos1 = appState.futureTransactions.filter(f => f.origemCartaoId === 'c1').length;
+      sincronizarParcelasCartao();
+      const nApos2 = appState.futureTransactions.filter(f => f.origemCartaoId === 'c1').length;
+      // total do mês (mesma data pv): parcelas (origemCartaoId) + recorrência reduzida
+      const doMes = appState.futureTransactions.filter(f => f.data === dataRec);
+      const total = doMes.reduce((s, f) => s + (Number(f.valor) || 0), 0);
+      return { total, idempotente: nApos1 === nApos2 };
+    }, proxVenc);
+    ok('(e) total do mês = base 1000 (sem dobrar)', Math.abs(dob.total - 1000) < 0.01, 'total=' + dob.total);
+    ok('(e) sincronizar idempotente', dob.idempotente);
+
+    // (f) compras distintas não se fundem
+    const desc = await page.evaluate((pv) => {
+      appState.cartoes = [{ id: 'c1', nome: 'Nubank', diaVencimento: 10 }];
+      appState.ccTransactions = [
+        { id: 'f1', cartaoId: 'c1', data: pv, descricao: 'NOTEBOOK (Parc. 01/04)', debito: 250, credito: 0 },
+        { id: 'f2', cartaoId: 'c1', data: pv, descricao: 'CELULAR (Parc. 01/04)', debito: 300, credito: 0 },
+      ];
+      return [...new Set(Object.values(calcularParcelamentosFuturos('c1')).flat().map(p => p.desc))];
+    }, proxVenc);
+    ok('(f) compras diferentes separadas', desc.some(d => /NOTEBOOK/i.test(d)) && desc.some(d => /CELULAR/i.test(d)), JSON.stringify(desc));
 
     ok('sem erros de página', ctx.errs.length === 0, ctx.errs.slice(0, 4).join(' | '));
   } finally {

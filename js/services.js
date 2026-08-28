@@ -1110,19 +1110,31 @@
                 const key = normalizeDesc(descBase) + '|' + total;
                 const ex = compras[key];
                 if (!ex || baseNum > ex.baseNum || (baseNum === ex.baseNum && atual > ex.atual)) {
-                    compras[key] = { descBase, atual, total, valor: val, baseNum };
+                    compras[key] = { descBase, atual, total, valor: val, baseNum, dataAtual: t.data };
                 }
             }
-            const hoje = new Date();
-            const hojeNum = hoje.getFullYear() * 12 + (hoje.getMonth() + 1);
+            const hoje0 = new Date(); hoje0.setHours(0, 0, 0, 0);
+            const addMesesClamp = (d, delta) => {
+                const y = d.getFullYear(), mm = d.getMonth() + delta, day = d.getDate();
+                const last = new Date(y, mm + 1, 0).getDate();
+                return new Date(y, mm, Math.min(day, last));
+            };
             const porMes = {};
             for (let k in compras) {
                 const c = compras[k];
-                for (let i = 1; i <= c.total - c.atual; i++) {
-                    const n = c.baseNum + i;
-                    if (n < hojeNum) continue;
+                const ancora = converterDataBRParaDate(c.dataAtual); // vencimento da parcela c.atual
+                if (!(ancora instanceof Date) || isNaN(ancora.getTime())) continue;
+                // Reconstrói o cronograma COMPLETO a partir da parcela mais recente vista
+                // (c.atual vence em `ancora`) e mostra toda parcela cujo vencimento ainda NÃO
+                // passou. Assim aparecem a parcela do mês em curso e a do mês seguinte (a fatura
+                // importada normalmente vence no mês seguinte), e as parcelas já vencidas (pagas)
+                // somem — sem depender de qual fatura foi a última importada.
+                for (let j = 1; j <= c.total; j++) {
+                    const venc = addMesesClamp(ancora, j - c.atual);
+                    if (venc < hoje0) continue;
+                    const n = venc.getFullYear() * 12 + (venc.getMonth() + 1);
                     if (!porMes[n]) porMes[n] = [];
-                    porMes[n].push({ desc: c.descBase, parcela: c.atual + i, total: c.total, valor: c.valor });
+                    porMes[n].push({ desc: c.descBase, parcela: j, total: c.total, valor: c.valor });
                 }
             }
             return porMes;
