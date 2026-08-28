@@ -1100,7 +1100,14 @@
                 const baseNum = mesAnoNum(t.data);
                 if (baseNum === null) continue;
                 const descBase = String(t.descricao).replace(RE_PARC, '').replace(/\(\s*\)/g, '').replace(/\s{2,}/g, ' ').trim();
-                const key = normalizeDesc(descBase) + '|' + total + '|' + val.toFixed(2);
+                // Agrupa as parcelas de UMA MESMA compra por descrição + total de parcelas.
+                // NÃO usa o valor na chave: as parcelas costumam variar alguns centavos entre
+                // faturas (ex.: 333,34 / 333,33 / 333,33) — se o valor entrasse na chave, a
+                // mesma compra viraria vários registros, gerando parcelas DUPLICADAS e a
+                // reprojeção de parcelas já pagas (a partir de um registro defasado). Mantém
+                // sempre a parcela MAIS RECENTE vista (maior fatura; empate: maior nº) e projeta
+                // só as seguintes.
+                const key = normalizeDesc(descBase) + '|' + total;
                 const ex = compras[key];
                 if (!ex || baseNum > ex.baseNum || (baseNum === ex.baseNum && atual > ex.atual)) {
                     compras[key] = { descBase, atual, total, valor: val, baseNum };
