@@ -719,6 +719,10 @@
         const _SANT_YEAR = /\/(20\d{2})\b/;
         const _SANT_END_MOV = /^(Saldos por Per|D.bito Autom.tico em Conta|Compras com Cart|Sevoc)/;
         const _SANT_SWEEP = /^(aplica|resgate)/i;
+        // Marcadores de SALDO em QUALQUER posição da linha (com ou sem data/prefixo):
+        // "SALDO EM", "SALDO ANTERIOR", "SALDO FINAL/INICIAL/ATUAL/DO DIA/DISPONÍVEL"...
+        // Nunca são lançamentos; se entrarem, o saldo é contado em dobro.
+        const _SANT_SALDO_LABEL = /\bSALDO\s+(EM|ANTERIOR|FINAL|INICIAL|ATUAL|DISPON|BLOQUEAD|APLICAD|DO\s+DIA)/i;
         function _santMonies(s) { return [...String(s).matchAll(/\d{1,3}(?:\.\d{3})*,\d{2}-?/g)]; }
         function _santMoneyToFloat(tok) {
             const neg = tok.endsWith('-');
@@ -735,8 +739,9 @@
             if (!s) return true;
             // Linhas de SALDO (SALDO EM, SALDO ANTERIOR, SALDO DO DIA, SALDO ATUAL...) são
             // marcadores de saldo, NUNCA lançamentos — não podem virar linha na conta corrente
-            // (senão o saldo é somado duas vezes e o total final fica errado).
-            if (/^SALDO\b/i.test(s)) return true;
+            // (senão o saldo é somado duas vezes e o total final fica errado). Pega mesmo com
+            // prefixo de data (ex.: "31/12 SALDO EM 31/12/2026 1.234,56").
+            if (/^SALDO\b/i.test(s) || _SANT_SALDO_LABEL.test(s)) return true;
             if (/^PER.ODO/i.test(s)) return true;
             if (s.includes('Movimento (R$)') || s.includes('Movimentos (R$)')) return true;
             if (s.startsWith('Data ') && s.includes('Documento')) return true;
@@ -796,7 +801,10 @@
             const layout_com_saldo = saldo_idxs.length >= 2;
             let saldo_ini_expl = null, saldo_fim_expl = null, mes_extrato = null, block;
             if (layout_com_saldo) {
-                const i_ini = saldo_idxs[0], i_fim = saldo_idxs[1];
+                // Primeiro SALDO EM = saldo inicial; ÚLTIMO = saldo final (abrange o período
+                // inteiro, mesmo com SALDO EM intermediários — que ficam no bloco e são
+                // ignorados como marcadores de saldo).
+                const i_ini = saldo_idxs[0], i_fim = saldo_idxs[saldo_idxs.length - 1];
                 saldo_ini_expl = _santMoneyToFloat(lines[i_ini].match(_SANT_SALDO_EM)[3]);
                 const m_fim = lines[i_fim].match(_SANT_SALDO_EM);
                 saldo_fim_expl = _santMoneyToFloat(m_fim[3]);
@@ -835,6 +843,8 @@
             let n_suprimidos = 0;
             for (const t of trans) {
                 if (!t.dm) continue;
+                // Rede de segurança: nunca exporta uma linha de saldo como lançamento.
+                if (/^SALDO\b/i.test((t.desc || '').trim()) || _SANT_SALDO_LABEL.test(t.desc || '')) continue;
                 if (semAplicacoes && _santIsSweep(t.desc)) { n_suprimidos++; continue; }
                 const [dd, mm] = t.dm.split('/');
                 let ano = year;

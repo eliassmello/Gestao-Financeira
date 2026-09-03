@@ -57,6 +57,29 @@ async function run() {
     ok('SALDO EM com ano → layout A, 2 lançamentos', ry.info.layout === 'A' && ry.rows.length === 2, JSON.stringify({ l: ry.info.layout, n: ry.rows.length }));
     ok('SALDO EM com ano: saldo confere e não vira linha', ry.info.ok && !ry.rows.some(x => Math.abs(x.valor) === 1000 || Math.abs(x.valor) === 1105), JSON.stringify(ry.info));
 
+    // ---- Parser: SALDO EM com PREFIXO DE DATA não vira lançamento (caso do bug) ----
+    const Bprefix = [
+      'janeiro/2026', 'Movimentacao', 'Data Descricao Documento Movimento (R$) Saldo (R$)',
+      '05/01 COMPRA 100,00- 900,00',
+      '10/01 SALARIO 2.000,00 2.900,00',
+      '31/01 SALDO EM 31/01/2026 2.900,00', 'Saldos por Periodo',
+    ];
+    let rp = await page.evaluate(a => _santProcessarLinhas(a, false), Bprefix);
+    ok('SALDO EM com data-prefixo não é lançamento', rp.rows.length === 2 && !rp.rows.some(x => Math.abs(x.valor) === 2900) && !rp.rows.some(x => /SALDO/i.test(x.desc)), JSON.stringify(rp.rows));
+    ok('saldo confere com prefixo (não conta em dobro)', rp.info.ok && Math.abs(rp.info.saldo_fim - 2900) < 0.01, JSON.stringify(rp.info));
+
+    // ---- Parser: layout A com SALDO EM prefixado por data (inicial + final) ----
+    const Aprefix = [
+      'EXTRATO CONSOLIDADO INTELIGENTE', 'marco/2026', 'Movimentacao',
+      'Data Descricao Documento Movimento (R$) Saldo (R$)',
+      '28/02 SALDO EM 28/02/2026 500,00',
+      '05/03 COMPRA 100,00- 400,00',
+      '31/03 SALDO EM 31/03/2026 400,00', 'Saldos por Periodo',
+    ];
+    let rap = await page.evaluate(a => _santProcessarLinhas(a, false), Aprefix);
+    ok('A prefixado: 1 lançamento, saldo fora', rap.info.layout === 'A' && rap.rows.length === 1 && !rap.rows.some(x => /SALDO/i.test(x.desc)), JSON.stringify({ l: rap.info.layout, rows: rap.rows }));
+    ok('A prefixado: saldo confere (500→400)', rap.info.ok && Math.abs(rap.info.saldo_ini - 500) < 0.01 && Math.abs(rap.info.saldo_fim - 400) < 0.01, JSON.stringify(rap.info));
+
     // ---- Parser: sem aplicações ----
     let r2 = await page.evaluate(a => _santProcessarLinhas(a, true), A);
     ok('A/semAplic: oculta CONTAMAX (2 linhas, 1 suprimido)', r2.rows.length === 2 && r2.info.suprimidos === 1, JSON.stringify({ n: r2.rows.length, s: r2.info.suprimidos }));
