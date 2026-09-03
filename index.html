@@ -531,6 +531,18 @@
                         <button onclick="abrirImportSeletiva()" class="text-sm font-semibold bg-slate-800 text-white px-4 py-2 rounded-md hover:bg-slate-900 transition">🧩 Importação Seletiva</button>
                         <p class="text-[11px] text-slate-400 mt-1">Para qualquer extrato (.xlsx/.xls/.csv): você escolhe <b>quais colunas</b> são Data, Descrição, Crédito e Débito. Cai na <b>conta ativa</b> e usa a mesma proteção contra duplicados.</p>
                     </div>
+                    <div class="mt-3 pt-3 border-t border-slate-100">
+                        <label class="inline-flex items-center gap-2 text-sm font-semibold bg-rose-700 text-white px-4 py-2 rounded-md hover:bg-rose-800 transition cursor-pointer">
+                            🏦 Importação Extrato Consolidado Santander
+                            <input type="file" id="fileInputSantander" accept=".pdf" multiple hidden onchange="importarExtratoSantander(this)">
+                        </label>
+                        <label class="flex items-center justify-center gap-2 text-[11px] text-slate-500 mt-2">
+                            <input type="checkbox" id="santander-sem-aplic" class="w-3.5 h-3.5 accent-rose-600">
+                            Ocultar aplicações/resgates automáticos (CONTAMAX, CDB/RDB)
+                        </label>
+                        <p class="text-[11px] text-slate-400 mt-1">Lê o <b>Extrato Consolidado Inteligente</b> (PDF) do Santander — pode selecionar <b>vários</b> de uma vez. Extrai a movimentação da <b>conta corrente</b>, <b>confere o saldo</b> de cada extrato e importa para a <b>conta ativa</b> (mesma proteção contra duplicados).</p>
+                        <div id="santander-resultado" class="text-left text-xs mt-2"></div>
+                    </div>
                 </div>
             </div>
 
