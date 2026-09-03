@@ -715,7 +715,7 @@
         //  extraídas (testável); a extração do PDF fica em _santExtrairLinhas.
         // ============================================================
         const _SANT_DATE_START = /^(\d{2}\/\d{2})\b/;
-        const _SANT_SALDO_EM = /SALDO EM\s+(\d{2})\/(\d{2})\s+(\d{1,3}(?:\.\d{3})*,\d{2}-?)/;
+        const _SANT_SALDO_EM = /SALDO\s+EM\s+(\d{2})\/(\d{2})(?:\/\d{2,4})?\s+(\d{1,3}(?:\.\d{3})*,\d{2}-?)/;
         const _SANT_YEAR = /\/(20\d{2})\b/;
         const _SANT_END_MOV = /^(Saldos por Per|D.bito Autom.tico em Conta|Compras com Cart|Sevoc)/;
         const _SANT_SWEEP = /^(aplica|resgate)/i;
@@ -733,6 +733,10 @@
         function _santIsJunk(line) {
             const s = String(line).trim();
             if (!s) return true;
+            // Linhas de SALDO (SALDO EM, SALDO ANTERIOR, SALDO DO DIA, SALDO ATUAL...) são
+            // marcadores de saldo, NUNCA lançamentos — não podem virar linha na conta corrente
+            // (senão o saldo é somado duas vezes e o total final fica errado).
+            if (/^SALDO\b/i.test(s)) return true;
             if (/^PER.ODO/i.test(s)) return true;
             if (s.includes('Movimento (R$)') || s.includes('Movimentos (R$)')) return true;
             if (s.startsWith('Data ') && s.includes('Documento')) return true;

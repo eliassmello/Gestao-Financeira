@@ -2533,7 +2533,7 @@
                         <span class="text-sm text-slate-700 truncate col-span-2" title="${escapeHtml(t.descricao)}">${escapeHtml(t.descricao)}</span>
                         <div class="flex items-center justify-end gap-2">
                             <span class="${corValor} font-semibold">${isDeb ? '-' : '+'} ${formatCurrency(val)}</span>
-                            <button onclick="${fnApagar}('${t.id}')" class="text-rose-400 hover:text-rose-600 font-bold ml-2 text-xl" title="Apagar transação">&times;</button>
+                            <button onclick="${fnApagar}('${t.id}')" class="text-rose-400 hover:text-rose-600 ml-2 text-base leading-none" title="Apagar esta linha">🗑️</button>
                         </div>
                     </div>
                     <div class="flex flex-col sm:flex-row gap-2 md:items-center shrink-0">
