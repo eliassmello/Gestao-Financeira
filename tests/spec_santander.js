@@ -99,6 +99,22 @@ async function run() {
     ok('B: saldo inicial derivado = 1000', rb.info.saldo_ini_derivado && Math.abs(rb.info.saldo_ini - 1000) < 0.01, JSON.stringify(rb.info));
     ok('B: saldo confere', rb.info.ok, JSON.stringify(rb.info));
 
+    // ---- Parser: SALDO quebrado em 2 linhas (valor solto = saldo final) ----
+    // Removido só da LISTA; a conferência de saldo NÃO muda (não gera discrepância).
+    const Bghost = [
+      'janeiro/2026', 'Movimentacao', 'Data Descricao Documento Movimento (R$) Saldo (R$)',
+      '05/01 COMPRA 100,00- 900,00',
+      '31/01 PIX RECEBIDO FULANO - 1.500,00 2.400,00',
+      'SALDO EM 31/01', '2.400,00', 'Saldos por Periodo',
+    ];
+    let rg = await page.evaluate(a => _santProcessarLinhas(a, false), Bghost);
+    ok('saldo solto (=saldo final) fora da lista', rg.rows.length === 2 && !rg.rows.some(x => Math.abs(x.valor) === 2400 && !x.desc), JSON.stringify(rg.rows));
+    ok('saldo solto não vira discrepância (ok)', rg.info.ok === true, JSON.stringify({ ok: rg.info.ok }));
+    // um valor solto que NÃO é o saldo final permanece (não é descartado à toa)
+    const Bkeep = Bghost.map(l => l === '2.400,00' ? '77,00' : l);
+    let rk = await page.evaluate(a => _santProcessarLinhas(a, false), Bkeep);
+    ok('valor solto diferente do saldo é preservado', rk.rows.some(x => Math.abs(x.valor) === 77), JSON.stringify(rk.rows));
+
     // ---- Integração: importarExtratoSantander (extração de PDF stubada) ----
     const imp = await page.evaluate(async (linhasA) => {
       if (!appState.contas.length) garantirContas();

@@ -845,6 +845,10 @@
                 if (!t.dm) continue;
                 // Rede de segurança: nunca exporta uma linha de saldo como lançamento.
                 if (/^SALDO\b/i.test((t.desc || '').trim()) || _SANT_SALDO_LABEL.test(t.desc || '')) continue;
+                // Valor SEM descrição igual ao SALDO FINAL = valor do "SALDO EM" que o pdf.js
+                // quebrou em duas linhas (texto numa, valor noutra). Remove só da LISTA — a
+                // conferência de saldo acima não é alterada, então não gera discrepância.
+                if (!(t.desc || '').trim() && Math.abs(_santMoneyToFloat(t.val_tok) - saldo_fim) < 0.005) continue;
                 if (semAplicacoes && _santIsSweep(t.desc)) { n_suprimidos++; continue; }
                 const [dd, mm] = t.dm.split('/');
                 let ano = year;
