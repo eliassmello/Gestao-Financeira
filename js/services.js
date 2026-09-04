@@ -717,7 +717,10 @@
         const _SANT_DATE_START = /^(\d{2}\/\d{2})\b/;
         const _SANT_SALDO_EM = /SALDO\s+EM\s+(\d{2})\/(\d{2})(?:\/\d{2,4})?\s+(\d{1,3}(?:\.\d{3})*,\d{2}-?)/;
         const _SANT_YEAR = /\/(20\d{2})\b/;
-        const _SANT_END_MOV = /^(Saldos por Per|D.bito Autom.tico em Conta|Compras com Cart|Sevoc)/;
+        // Fim do bloco de movimentação. "Se ?voc" pega o aviso legal do rodapé tanto colado
+        // ("Sevocê...") quanto com espaço ("Se você não tem Limite da Conta..."), que o pdf.js
+        // mantém separado — senão esse parágrafo entra junto com um valor de saldo solto.
+        const _SANT_END_MOV = /^(Saldos por Per|D.bito Autom.tico em Conta|Compras com Cart|Se ?voc)/;
         const _SANT_SWEEP = /^(aplica|resgate)/i;
         // Marcadores de SALDO em QUALQUER posição da linha (com ou sem data/prefixo):
         // "SALDO EM", "SALDO ANTERIOR", "SALDO FINAL/INICIAL/ATUAL/DO DIA/DISPONÍVEL"...
@@ -774,13 +777,21 @@
         function _santParseBlock(block) {
             const trans = [];
             let current_date = null;
+            let aposSaldo = false;   // a linha anterior foi um marcador de SALDO?
             for (const line of block) {
-                if (_santIsJunk(line)) continue;
+                const ehSaldo = /^SALDO\b/i.test(String(line).trim()) || _SANT_SALDO_LABEL.test(line);
+                if (_santIsJunk(line)) { if (ehSaldo) aposSaldo = true; continue; }
                 const p = _santParseLine(line);
                 if (p.tipo === 'trans') {
+                    // Valor SOLTO (sem descrição) logo após uma linha de SALDO = o saldo que o
+                    // pdf.js quebrou em duas linhas. Ignora por completo: não é lançamento e não
+                    // entra na conferência (evita que o aviso legal seguinte seja anexado a ele).
+                    if (aposSaldo && !(p.desc || '').trim()) { aposSaldo = false; continue; }
+                    aposSaldo = false;
                     if (p.data) current_date = p.data;
                     trans.push({ dm: current_date, doc: p.doc, desc: (p.desc || '').trim(), val_tok: p.value_tok, saldo_tok: p.saldo_tok });
                 } else {
+                    aposSaldo = false;
                     let cont = p.texto;
                     if (p.data && cont.startsWith(p.data)) cont = cont.slice(p.data.length).trim();
                     if (trans.length && cont) trans[trans.length - 1].desc = (trans[trans.length - 1].desc + ' ' + cont).trim();

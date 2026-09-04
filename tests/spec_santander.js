@@ -99,21 +99,32 @@ async function run() {
     ok('B: saldo inicial derivado = 1000', rb.info.saldo_ini_derivado && Math.abs(rb.info.saldo_ini - 1000) < 0.01, JSON.stringify(rb.info));
     ok('B: saldo confere', rb.info.ok, JSON.stringify(rb.info));
 
-    // ---- Parser: SALDO quebrado em 2 linhas (valor solto = saldo final) ----
-    // Removido só da LISTA; a conferência de saldo NÃO muda (não gera discrepância).
-    const Bghost = [
-      'janeiro/2026', 'Movimentacao', 'Data Descricao Documento Movimento (R$) Saldo (R$)',
+    // ---- Parser: SALDO quebrado em 2 linhas + AVISO LEGAL anexado (caso real) ----
+    // "SALDO EM 31/01" numa linha, o valor "9.413,68" solto na seguinte, e o parágrafo
+    // "Se você não tem Limite da Conta..." logo abaixo — que virava a descrição do valor.
+    const Bdisc = [
+      'janeiro/2023', 'Movimentacao', 'Data Descricao Documento Movimento (R$) Saldo (R$)',
       '05/01 COMPRA 100,00- 900,00',
-      '31/01 PIX RECEBIDO FULANO - 1.500,00 2.400,00',
-      'SALDO EM 31/01', '2.400,00', 'Saldos por Periodo',
+      '31/01 PIX RECEBIDO FULANO - 8.513,68 9.413,68',
+      'SALDO EM 31/01', '9.413,68',
+      'Se você não tem Limite da Conta e a sua conta ficou com saldo devedor, terá sido prestado o serviço de Adiantamento a Depositantes',
+      'juros moratórios mensais de 1% e multa contratual de 2% sobre o saldo devedor total',
+      'Saldos por Periodo',
     ];
-    let rg = await page.evaluate(a => _santProcessarLinhas(a, false), Bghost);
-    ok('saldo solto (=saldo final) fora da lista', rg.rows.length === 2 && !rg.rows.some(x => Math.abs(x.valor) === 2400 && !x.desc), JSON.stringify(rg.rows));
-    ok('saldo solto não vira discrepância (ok)', rg.info.ok === true, JSON.stringify({ ok: rg.info.ok }));
-    // um valor solto que NÃO é o saldo final permanece (não é descartado à toa)
-    const Bkeep = Bghost.map(l => l === '2.400,00' ? '77,00' : l);
+    let rg = await page.evaluate(a => _santProcessarLinhas(a, false), Bdisc);
+    ok('só 2 lançamentos (sem saldo/aviso)', rg.rows.length === 2, JSON.stringify(rg.rows));
+    ok('aviso legal não vira lançamento', !rg.rows.some(x => /Limite da Conta|Adiantamento|saldo devedor/i.test(x.desc)), JSON.stringify(rg.rows.map(x => x.desc)));
+    ok('valor 9.413,68 do saldo fora da lista', !rg.rows.some(x => Math.abs(x.valor) === 9413.68), JSON.stringify(rg.rows.map(x => x.valor)));
+    ok('saldo confere e soma limpa (init+soma=fim)', rg.info.ok && Math.abs((rg.info.saldo_ini + rg.info.soma) - rg.info.saldo_fim) < 0.01, JSON.stringify(rg.info));
+
+    // ---- Parser: valor solto que NÃO está após SALDO é preservado (skip é targeted) ----
+    const Bkeep = [
+      'janeiro/2026', 'Movimentacao', 'Data Descricao Documento Movimento (R$) Saldo (R$)',
+      '05/01 COMPRA 100,00- 900,00', '77,00',
+      '10/01 SALARIO 2.000,00 2.977,00', 'Saldos por Periodo',
+    ];
     let rk = await page.evaluate(a => _santProcessarLinhas(a, false), Bkeep);
-    ok('valor solto diferente do saldo é preservado', rk.rows.some(x => Math.abs(x.valor) === 77), JSON.stringify(rk.rows));
+    ok('valor solto fora de SALDO é preservado', rk.rows.some(x => Math.abs(x.valor) === 77), JSON.stringify(rk.rows));
 
     // ---- Integração: importarExtratoSantander (extração de PDF stubada) ----
     const imp = await page.evaluate(async (linhasA) => {
