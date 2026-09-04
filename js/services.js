@@ -706,6 +706,197 @@
             return linhas;
         }
 
+        // ============================================================
+        //  Importação: Extrato Consolidado Inteligente Santander (PDF)
+        //  Porte de importar_extratos_santander.py. Lê a movimentação da CONTA
+        //  CORRENTE, com conferência de saldo (inicial + soma == final). Suporta
+        //  os layouts A (linhas "SALDO EM"), B (antigo, cadeia de saldos correntes)
+        //  e C (PJ, valor com sinal). A lógica de parsing recebe as LINHAS já
+        //  extraídas (testável); a extração do PDF fica em _santExtrairLinhas.
+        // ============================================================
+        const _SANT_DATE_START = /^(\d{2}\/\d{2})\b/;
+        const _SANT_SALDO_EM = /SALDO\s+EM\s+(\d{2})\/(\d{2})(?:\/\d{2,4})?\s+(\d{1,3}(?:\.\d{3})*,\d{2}-?)/;
+        const _SANT_YEAR = /\/(20\d{2})\b/;
+        // Fim do bloco de movimentação. "Se ?voc" pega o aviso legal do rodapé tanto colado
+        // ("Sevocê...") quanto com espaço ("Se você não tem Limite da Conta..."), que o pdf.js
+        // mantém separado — senão esse parágrafo entra junto com um valor de saldo solto.
+        const _SANT_END_MOV = /^(Saldos por Per|D.bito Autom.tico em Conta|Compras com Cart|Se ?voc)/;
+        const _SANT_SWEEP = /^(aplica|resgate)/i;
+        // Marcadores de SALDO em QUALQUER posição da linha (com ou sem data/prefixo):
+        // "SALDO EM", "SALDO ANTERIOR", "SALDO FINAL/INICIAL/ATUAL/DO DIA/DISPONÍVEL"...
+        // Nunca são lançamentos; se entrarem, o saldo é contado em dobro.
+        const _SANT_SALDO_LABEL = /\bSALDO\s+(EM|ANTERIOR|FINAL|INICIAL|ATUAL|DISPON|BLOQUEAD|APLICAD|DO\s+DIA)/i;
+        function _santMonies(s) { return [...String(s).matchAll(/\d{1,3}(?:\.\d{3})*,\d{2}-?/g)]; }
+        function _santMoneyToFloat(tok) {
+            const neg = tok.endsWith('-');
+            const t = tok.replace(/-$/, '').replace(/\./g, '').replace(',', '.');
+            const v = parseFloat(t) || 0;
+            return neg ? -v : v;
+        }
+        function _santIsSweep(desc) {
+            const s = String(desc || '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            return _SANT_SWEEP.test(s);
+        }
+        function _santIsJunk(line) {
+            const s = String(line).trim();
+            if (!s) return true;
+            // Linhas de SALDO (SALDO EM, SALDO ANTERIOR, SALDO DO DIA, SALDO ATUAL...) são
+            // marcadores de saldo, NUNCA lançamentos — não podem virar linha na conta corrente
+            // (senão o saldo é somado duas vezes e o total final fica errado). Pega mesmo com
+            // prefixo de data (ex.: "31/12 SALDO EM 31/12/2026 1.234,56").
+            if (/^SALDO\b/i.test(s) || _SANT_SALDO_LABEL.test(s)) return true;
+            if (/^PER.ODO/i.test(s)) return true;
+            if (s.includes('Movimento (R$)') || s.includes('Movimentos (R$)')) return true;
+            if (s.startsWith('Data ') && s.includes('Documento')) return true;
+            if (/^Cr.ditos\s+D.bitos$/.test(s)) return true;
+            if (s.startsWith('EXTRATO CONSOLIDADO')) return true;
+            if (s.startsWith('Extrato_P')) return true;
+            if (s.startsWith('BALP')) return true;
+            if (/^P.gina/i.test(s)) return true;
+            if (/^\S+\/20\d{2}$/.test(s)) return true;
+            return false;
+        }
+        function _santParseLine(line) {
+            const s = String(line).trim();
+            const mDate = s.match(_SANT_DATE_START);
+            const data = mDate ? mDate[1] : null;
+            const monies = _santMonies(s);
+            if (!monies.length) return { tipo: 'cont', data, texto: s };
+            const value_tok = monies[0][0];
+            const saldo_tok = monies.length >= 2 ? monies[1][0] : null;
+            let prefix = s.slice(0, monies[0].index).trim();
+            if (data && prefix.startsWith(data)) prefix = prefix.slice(data.length).trim();
+            let doc = '', desc;
+            const toks = prefix.split(/\s+/).filter(Boolean);
+            if (toks.length && (toks[toks.length - 1] === '-' || /^\d+$/.test(toks[toks.length - 1]))) {
+                if (toks[toks.length - 1] !== '-') doc = toks[toks.length - 1];
+                desc = toks.slice(0, -1).join(' ');
+            } else desc = prefix;
+            return { tipo: 'trans', data, doc, desc, value_tok, saldo_tok };
+        }
+        function _santParseBlock(block) {
+            const trans = [];
+            let current_date = null;
+            let aposSaldo = false;   // a linha anterior foi um marcador de SALDO?
+            for (const line of block) {
+                const ehSaldo = /^SALDO\b/i.test(String(line).trim()) || _SANT_SALDO_LABEL.test(line);
+                if (_santIsJunk(line)) { if (ehSaldo) aposSaldo = true; continue; }
+                const p = _santParseLine(line);
+                if (p.tipo === 'trans') {
+                    // Valor SOLTO (sem descrição) logo após uma linha de SALDO = o saldo que o
+                    // pdf.js quebrou em duas linhas. Ignora por completo: não é lançamento e não
+                    // entra na conferência (evita que o aviso legal seguinte seja anexado a ele).
+                    if (aposSaldo && !(p.desc || '').trim()) { aposSaldo = false; continue; }
+                    aposSaldo = false;
+                    if (p.data) current_date = p.data;
+                    trans.push({ dm: current_date, doc: p.doc, desc: (p.desc || '').trim(), val_tok: p.value_tok, saldo_tok: p.saldo_tok });
+                } else {
+                    aposSaldo = false;
+                    let cont = p.texto;
+                    if (p.data && cont.startsWith(p.data)) cont = cont.slice(p.data.length).trim();
+                    if (trans.length && cont) trans[trans.length - 1].desc = (trans[trans.length - 1].desc + ' ' + cont).trim();
+                }
+            }
+            return trans;
+        }
+        // Recebe as linhas do PDF e devolve { rows, info } (rows: {data,desc,doc,valor}).
+        function _santProcessarLinhas(lines, semAplicacoes) {
+            const fullText = lines.join('\n');
+            const ym = fullText.match(_SANT_YEAR);
+            if (!ym) throw new Error('Não encontrei o ano do extrato.');
+            const year = parseInt(ym[1], 10);
+            const mov_idx = lines.findIndex(l => l.trim().startsWith('Movimenta'));
+            if (mov_idx < 0) throw new Error('Não encontrei a seção de Movimentação (extrato consolidado?).');
+            const saldo_idxs = [];
+            for (let i = mov_idx; i < lines.length; i++) if (_SANT_SALDO_EM.test(lines[i])) saldo_idxs.push(i);
+            const layout_com_saldo = saldo_idxs.length >= 2;
+            let saldo_ini_expl = null, saldo_fim_expl = null, mes_extrato = null, block;
+            if (layout_com_saldo) {
+                // Primeiro SALDO EM = saldo inicial; ÚLTIMO = saldo final (abrange o período
+                // inteiro, mesmo com SALDO EM intermediários — que ficam no bloco e são
+                // ignorados como marcadores de saldo).
+                const i_ini = saldo_idxs[0], i_fim = saldo_idxs[saldo_idxs.length - 1];
+                saldo_ini_expl = _santMoneyToFloat(lines[i_ini].match(_SANT_SALDO_EM)[3]);
+                const m_fim = lines[i_fim].match(_SANT_SALDO_EM);
+                saldo_fim_expl = _santMoneyToFloat(m_fim[3]);
+                mes_extrato = parseInt(m_fim[2], 10);
+                block = lines.slice(i_ini + 1, i_fim);
+            } else {
+                let end = lines.length;
+                for (let i = mov_idx + 1; i < lines.length; i++) { if (_SANT_END_MOV.test(lines[i].trim())) { end = i; break; } }
+                block = lines.slice(mov_idx + 1, end);
+            }
+            const trans = _santParseBlock(block);
+            // Conferência pela cadeia de saldos correntes.
+            let prev = saldo_ini_expl, cum = 0, soma = 0, ok = true;
+            let saldo_ini_calc = saldo_ini_expl, saldo_fim_calc = saldo_ini_expl, n_ancoras = 0;
+            for (const t of trans) {
+                const v = _santMoneyToFloat(t.val_tok);
+                soma += v; cum += v;
+                if (t.saldo_tok != null) {
+                    const s = _santMoneyToFloat(t.saldo_tok);
+                    n_ancoras++;
+                    if (prev != null) { if (Math.abs((prev + cum) - s) > 0.005) ok = false; }
+                    else saldo_ini_calc = s - cum;
+                    prev = s; saldo_fim_calc = s; cum = 0;
+                }
+            }
+            let saldo_ini, saldo_fim;
+            if (layout_com_saldo) {
+                saldo_ini = saldo_ini_expl; saldo_fim = saldo_fim_expl;
+                if (Math.abs((saldo_ini + soma) - saldo_fim) > 0.005) ok = false;
+            } else {
+                saldo_ini = saldo_ini_calc != null ? saldo_ini_calc : 0;
+                saldo_fim = saldo_fim_calc != null ? saldo_fim_calc : saldo_ini;
+                mes_extrato = trans.length ? parseInt(trans[trans.length - 1].dm.split('/')[1], 10) : 1;
+            }
+            const rows = [];
+            let n_suprimidos = 0;
+            for (const t of trans) {
+                if (!t.dm) continue;
+                // Rede de segurança: nunca exporta uma linha de saldo como lançamento.
+                if (/^SALDO\b/i.test((t.desc || '').trim()) || _SANT_SALDO_LABEL.test(t.desc || '')) continue;
+                // Valor SEM descrição igual ao SALDO FINAL = valor do "SALDO EM" que o pdf.js
+                // quebrou em duas linhas (texto numa, valor noutra). Remove só da LISTA — a
+                // conferência de saldo acima não é alterada, então não gera discrepância.
+                if (!(t.desc || '').trim() && Math.abs(_santMoneyToFloat(t.val_tok) - saldo_fim) < 0.005) continue;
+                if (semAplicacoes && _santIsSweep(t.desc)) { n_suprimidos++; continue; }
+                const [dd, mm] = t.dm.split('/');
+                let ano = year;
+                if (parseInt(mm, 10) === 12 && mes_extrato < 12) ano = year - 1;
+                rows.push({
+                    data: `${dd}/${mm}/${String(ano).padStart(4, '0')}`,
+                    desc: (t.desc || '').split(/\s+/).join(' ').trim(),
+                    doc: t.doc || '',
+                    valor: _santMoneyToFloat(t.val_tok),
+                    sort: ano * 10000 + parseInt(mm, 10) * 100 + parseInt(dd, 10),
+                });
+            }
+            const info = {
+                layout: layout_com_saldo ? 'A' : 'B',
+                saldo_ini, saldo_ini_derivado: !layout_com_saldo, saldo_fim, soma,
+                diff: (saldo_ini + soma) - saldo_fim, ok, ancoras: n_ancoras, n: rows.length, suprimidos: n_suprimidos,
+            };
+            return { rows, info };
+        }
+        // Extrai as linhas do PDF (agrupa itens por Y, ordena por X) — layout simples,
+        // diferente do extrator do cartão (que separa 2 colunas por posição).
+        async function _santExtrairLinhas(file) {
+            const buf = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+            const linhas = [];
+            for (let p = 1; p <= pdf.numPages; p++) {
+                const tc = await (await pdf.getPage(p)).getTextContent();
+                const byY = {};
+                tc.items.forEach(it => { const y = Math.round(it.transform[5]); (byY[y] = byY[y] || []).push({ x: it.transform[4], s: it.str }); });
+                Object.keys(byY).map(Number).sort((a, b) => b - a).forEach(y => {
+                    const l = byY[y].sort((a, b) => a.x - b.x).map(o => o.s).join(' ').replace(/\s+/g, ' ').trim();
+                    if (l) linhas.push(l);
+                });
+            }
+            return linhas;
+        }
+
 
         function normalizarTextoPdf(t) {
             return t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().trim();

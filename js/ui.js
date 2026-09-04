@@ -2533,7 +2533,7 @@
                         <span class="text-sm text-slate-700 truncate col-span-2" title="${escapeHtml(t.descricao)}">${escapeHtml(t.descricao)}</span>
                         <div class="flex items-center justify-end gap-2">
                             <span class="${corValor} font-semibold">${isDeb ? '-' : '+'} ${formatCurrency(val)}</span>
-                            <button onclick="${fnApagar}('${t.id}')" class="text-rose-400 hover:text-rose-600 font-bold ml-2 text-xl" title="Apagar transação">&times;</button>
+                            <button onclick="${fnApagar}('${t.id}')" class="text-rose-400 hover:text-rose-600 ml-2 text-base leading-none" title="Apagar esta linha">🗑️</button>
                         </div>
                     </div>
                     <div class="flex flex-col sm:flex-row gap-2 md:items-center shrink-0">
@@ -4380,4 +4380,88 @@
             fecharImportSeletiva();
             switchTab('extrato'); renderTransactionsBanco();
             alert(add > 0 ? `Importação Seletiva: ${add} lançamento(s) importado(s) para a conta ativa.` : 'Nenhum lançamento novo — os itens já existiam na conta.');
+        }
+
+        // ===== Importação: Extrato Consolidado Santander (PDF) → conta ativa =====
+        // Recurso extra e independente. Usa o parser _santProcessarLinhas (services.js),
+        // confere o saldo de cada extrato e importa com a MESMA dedup do extrato padrão.
+        async function importarExtratoSantander(input) {
+            const files = input && input.files ? Array.from(input.files) : [];
+            if (!files.length) return;
+            const out = document.getElementById('santander-resultado');
+            const setOut = html => { if (out) out.innerHTML = html; };
+            if (!contaSelecionadaId || !getContaById(contaSelecionadaId)) { alert('Selecione (ou crie) uma Conta Corrente antes de importar.'); input.value = ''; return; }
+            setOut('<p class="text-slate-400">Carregando leitor de PDF…</p>');
+            if (!(await ensurePDF())) { alert('Não foi possível carregar a biblioteca de leitura de PDF. Verifique a conexão e tente novamente.'); setOut(''); input.value = ''; return; }
+            const semAplic = !!(document.getElementById('santander-sem-aplic') || {}).checked;
+
+            const conta = getContaById(contaSelecionadaId);
+            const relatorio = [];
+            const novos = [];
+            for (const file of files) {
+                setOut(`<p class="text-slate-400">Lendo ${escapeHtml(file.name)}…</p>`);
+                try {
+                    const linhas = await _santExtrairLinhas(file);
+                    const { rows, info } = _santProcessarLinhas(linhas, semAplic);
+                    for (const r of rows) {
+                        const v = Number(r.valor) || 0;
+                        if (v === 0) continue;
+                        novos.push({
+                            data: r.data,
+                            descricao: r.desc || r.doc || 'Lançamento',
+                            credito: v > 0 ? v : 0,
+                            debito: v < 0 ? Math.abs(v) : 0,
+                        });
+                    }
+                    relatorio.push({ nome: file.name, info });
+                } catch (e) {
+                    relatorio.push({ nome: file.name, erro: e.message });
+                }
+            }
+
+            // Dedup por ocorrência (mesma chave do extrato padrão).
+            const chave = (desc, data, valor) => chaveDedupContaCorrente(contaSelecionadaId, desc, data, valor);
+            const contagem = new Map();
+            for (const t of appState.transactions) {
+                if (t.contaId !== contaSelecionadaId) continue;
+                const mag = (Number(t.debito) || 0) + (Number(t.credito) || 0);
+                const k = chave(t.descricao, t.data, mag);
+                contagem.set(k, (contagem.get(k) || 0) + 1);
+            }
+            let add = 0;
+            for (const l of novos) {
+                const mag = l.debito || l.credito;
+                const k = chave(l.descricao, l.data, mag);
+                const rest = contagem.get(k) || 0;
+                if (rest > 0) { contagem.set(k, rest - 1); continue; }
+                const cat = findBestCategoryMatch(l.descricao, l.debito > 0);
+                appState.transactions.push({ id: 'sant_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9), data: l.data, descricao: l.descricao, contaId: contaSelecionadaId, credito: l.credito, debito: l.debito, categoria: cat || '', isDuplicate: false });
+                add++;
+            }
+            if (add > 0) { updateFilterMesBancoLight(); safeRun(updateFutureCategoriesDropdown); safeRun(updatePrevSumDropdown); saveData(); safeRun(renderTransactionsBanco); }
+
+            // Relatório por arquivo (com a conferência de saldo).
+            let temDiscrep = false;
+            const linhasRel = relatorio.map(r => {
+                if (r.erro) { temDiscrep = true; return `<div class="py-1 border-b border-slate-50"><b>${escapeHtml(r.nome)}</b> — <span class="text-rose-600">erro: ${escapeHtml(r.erro)}</span></div>`; }
+                const i = r.info;
+                const okTxt = i.ok ? '<span class="text-emerald-600 font-semibold">saldo confere ✓</span>' : '<span class="text-rose-600 font-semibold">⚠️ discrepância de ' + formatCurrency(Math.abs(i.diff)) + '</span>';
+                if (!i.ok) temDiscrep = true;
+                const supr = i.suprimidos ? ` · ${i.suprimidos} aplic./resg. ocultados` : '';
+                const iniLbl = i.saldo_ini_derivado ? 'saldo inicial* ' : 'saldo inicial ';
+                return `<div class="py-1 border-b border-slate-50"><b>${escapeHtml(r.nome)}</b> — ${i.n} lançamento(s) [layout ${i.layout}]${supr} · ${okTxt}<br>
+                    <span class="text-slate-400">${iniLbl}${formatCurrency(i.saldo_ini)} + soma ${formatCurrency(i.soma)} = ${formatCurrency(i.saldo_fim)}</span></div>`;
+            }).join('');
+            setOut(`<div class="border border-slate-100 rounded-lg p-2 bg-slate-50">
+                <p class="font-semibold text-slate-700 mb-1">${add} lançamento(s) importado(s) para <b>${escapeHtml(conta.nome)}</b>${novos.length - add > 0 ? ` · ${novos.length - add} já existiam (não duplicados)` : ''}.</p>
+                ${linhasRel}
+                ${i_derivadoNota(relatorio)}
+                ${temDiscrep ? '<p class="text-rose-600 mt-1">Confira os extratos marcados: a soma dos lançamentos não bateu com o saldo declarado (pode faltar/sobrar lançamento na leitura do PDF).</p>' : ''}
+            </div>`);
+            input.value = '';
+        }
+        function i_derivadoNota(relatorio) {
+            return relatorio.some(r => r.info && r.info.saldo_ini_derivado)
+                ? '<p class="text-[10px] text-slate-400 mt-1">* Saldo inicial derivado: este layout não imprime o saldo inicial; foi calculado pela cadeia de saldos.</p>'
+                : '';
         }

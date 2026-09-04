@@ -1,0 +1,158 @@
+// Importação do Extrato Consolidado Santander (PDF): valida o PARSER
+// (_santProcessarLinhas) com linhas sintéticas e a INTEGRAÇÃO
+// (importarExtratoSantander) com a extração de PDF stubada.
+const { abrirApp, fechar, novoRelatorio } = require('./harness');
+
+const A = [
+  'EXTRATO CONSOLIDADO INTELIGENTE', 'fevereiro/2026', 'Movimentacao',
+  'Data Descricao Documento Movimento (R$) Saldo (R$)',
+  'SALDO EM 31/01 1.000,00',
+  '05/02 PAGAMENTO BOLETO 123 395,00- 605,00',
+  '10/02 DEPOSITO PIX 500,00 1.105,00',
+  '15/02 APLICACAO CONTAMAX 200,00- 905,00',
+  'SALDO EM 28/02 905,00', 'Saldos por Periodo',
+];
+const B = [
+  'janeiro/2026', 'Movimentacao', 'Data Descricao Documento Movimento (R$) Saldo (R$)',
+  '28/12 COMPRA DEZ 50,00- 950,00',
+  '05/01 TRANSFERENCIA PARA 300,00- 650,00', 'FULANO DE TAL',
+  '10/01 SALARIO 2.000,00 2.650,00', 'Saldos por Periodo',
+];
+
+async function run() {
+  const ctx = await abrirApp();
+  const { page } = ctx;
+  const { ok, resumo } = novoRelatorio();
+  try {
+    // ---- Parser: layout A ----
+    let r = await page.evaluate(a => _santProcessarLinhas(a, false), A);
+    ok('A: 3 lançamentos', r.rows.length === 3, JSON.stringify(r.rows.map(x => x.valor)));
+    ok('A: sinais certos (-395,+500,-200)', r.rows[0].valor === -395 && r.rows[1].valor === 500 && r.rows[2].valor === -200, JSON.stringify(r.rows.map(x => x.valor)));
+    ok('A: doc e descrição', r.rows[0].doc === '123' && r.rows[0].desc === 'PAGAMENTO BOLETO', JSON.stringify(r.rows[0]));
+    ok('A: data com ano', r.rows[0].data === '05/02/2026', r.rows[0].data);
+    ok('A: saldo confere', r.info.ok && Math.abs(r.info.saldo_ini - 1000) < 0.01 && Math.abs(r.info.saldo_fim - 905) < 0.01, JSON.stringify(r.info));
+
+    // ---- Parser: linha de SALDO NÃO vira lançamento (bug do saldo somado 2x) ----
+    // Só UM "SALDO EM" (com ANO) → cai no layout B; a linha de saldo deve ser ignorada.
+    const Bsaldo = [
+      'janeiro/2026', 'Movimentacao', 'Data Descricao Documento Movimento (R$) Saldo (R$)',
+      'SALDO EM 31/12/2025 1.000,00',
+      '05/01 COMPRA 100,00- 900,00',
+      '10/01 SALARIO 2.000,00 2.900,00', 'Saldos por Periodo',
+    ];
+    let rs = await page.evaluate(a => _santProcessarLinhas(a, false), Bsaldo);
+    ok('SALDO não é importado como lançamento', rs.rows.length === 2 && !rs.rows.some(x => Math.abs(x.valor) === 1000), JSON.stringify(rs.rows.map(x => x.valor)));
+    ok('saldo inicial derivado do 1º saldo corrente (1000)', Math.abs(rs.info.saldo_ini - 1000) < 0.01 && rs.info.ok, JSON.stringify(rs.info));
+
+    // ---- Parser: "SALDO EM" COM ANO é detectado (layout A) e não entra como linha ----
+    const Ayear = [
+      'EXTRATO CONSOLIDADO INTELIGENTE', 'fevereiro/2026', 'Movimentacao',
+      'Data Descricao Documento Movimento (R$) Saldo (R$)',
+      'SALDO EM 31/01/2026 1.000,00',
+      '05/02 PAGAMENTO 395,00- 605,00',
+      '10/02 DEPOSITO 500,00 1.105,00',
+      'SALDO EM 28/02/2026 1.105,00', 'Saldos por Periodo',
+    ];
+    let ry = await page.evaluate(a => _santProcessarLinhas(a, false), Ayear);
+    ok('SALDO EM com ano → layout A, 2 lançamentos', ry.info.layout === 'A' && ry.rows.length === 2, JSON.stringify({ l: ry.info.layout, n: ry.rows.length }));
+    ok('SALDO EM com ano: saldo confere e não vira linha', ry.info.ok && !ry.rows.some(x => Math.abs(x.valor) === 1000 || Math.abs(x.valor) === 1105), JSON.stringify(ry.info));
+
+    // ---- Parser: SALDO EM com PREFIXO DE DATA não vira lançamento (caso do bug) ----
+    const Bprefix = [
+      'janeiro/2026', 'Movimentacao', 'Data Descricao Documento Movimento (R$) Saldo (R$)',
+      '05/01 COMPRA 100,00- 900,00',
+      '10/01 SALARIO 2.000,00 2.900,00',
+      '31/01 SALDO EM 31/01/2026 2.900,00', 'Saldos por Periodo',
+    ];
+    let rp = await page.evaluate(a => _santProcessarLinhas(a, false), Bprefix);
+    ok('SALDO EM com data-prefixo não é lançamento', rp.rows.length === 2 && !rp.rows.some(x => Math.abs(x.valor) === 2900) && !rp.rows.some(x => /SALDO/i.test(x.desc)), JSON.stringify(rp.rows));
+    ok('saldo confere com prefixo (não conta em dobro)', rp.info.ok && Math.abs(rp.info.saldo_fim - 2900) < 0.01, JSON.stringify(rp.info));
+
+    // ---- Parser: layout A com SALDO EM prefixado por data (inicial + final) ----
+    const Aprefix = [
+      'EXTRATO CONSOLIDADO INTELIGENTE', 'marco/2026', 'Movimentacao',
+      'Data Descricao Documento Movimento (R$) Saldo (R$)',
+      '28/02 SALDO EM 28/02/2026 500,00',
+      '05/03 COMPRA 100,00- 400,00',
+      '31/03 SALDO EM 31/03/2026 400,00', 'Saldos por Periodo',
+    ];
+    let rap = await page.evaluate(a => _santProcessarLinhas(a, false), Aprefix);
+    ok('A prefixado: 1 lançamento, saldo fora', rap.info.layout === 'A' && rap.rows.length === 1 && !rap.rows.some(x => /SALDO/i.test(x.desc)), JSON.stringify({ l: rap.info.layout, rows: rap.rows }));
+    ok('A prefixado: saldo confere (500→400)', rap.info.ok && Math.abs(rap.info.saldo_ini - 500) < 0.01 && Math.abs(rap.info.saldo_fim - 400) < 0.01, JSON.stringify(rap.info));
+
+    // ---- Parser: sem aplicações ----
+    let r2 = await page.evaluate(a => _santProcessarLinhas(a, true), A);
+    ok('A/semAplic: oculta CONTAMAX (2 linhas, 1 suprimido)', r2.rows.length === 2 && r2.info.suprimidos === 1, JSON.stringify({ n: r2.rows.length, s: r2.info.suprimidos }));
+    ok('A/semAplic: balanço ainda usa tudo (ok)', r2.info.ok, JSON.stringify(r2.info));
+
+    // ---- Parser: discrepância ----
+    const Abad = A.map(l => l.startsWith('10/02') ? '10/02 DEPOSITO PIX 500,00 1.106,00' : l);
+    let r3 = await page.evaluate(a => _santProcessarLinhas(a, false), Abad);
+    // saldo corrente intermediário inconsistente: a cadeia acusa (ok=false), mesmo com os extremos batendo
+    ok('A: discrepância detectada (cadeia de saldos)', r3.info.ok === false, JSON.stringify({ ok: r3.info.ok, diff: r3.info.diff }));
+
+    // ---- Parser: layout B (saldo derivado, continuação, virada de ano) ----
+    let rb = await page.evaluate(a => _santProcessarLinhas(a, false), B);
+    ok('B: 3 lançamentos', rb.rows.length === 3, JSON.stringify(rb.rows.map(x => x.data + ' ' + x.valor)));
+    ok('B: virada de ano (28/12/2025)', rb.rows[0].data === '28/12/2025', rb.rows[0].data);
+    ok('B: continuação juntou descrição', /FULANO DE TAL/.test(rb.rows[1].desc), rb.rows[1].desc);
+    ok('B: saldo inicial derivado = 1000', rb.info.saldo_ini_derivado && Math.abs(rb.info.saldo_ini - 1000) < 0.01, JSON.stringify(rb.info));
+    ok('B: saldo confere', rb.info.ok, JSON.stringify(rb.info));
+
+    // ---- Parser: SALDO quebrado em 2 linhas + AVISO LEGAL anexado (caso real) ----
+    // "SALDO EM 31/01" numa linha, o valor "9.413,68" solto na seguinte, e o parágrafo
+    // "Se você não tem Limite da Conta..." logo abaixo — que virava a descrição do valor.
+    const Bdisc = [
+      'janeiro/2023', 'Movimentacao', 'Data Descricao Documento Movimento (R$) Saldo (R$)',
+      '05/01 COMPRA 100,00- 900,00',
+      '31/01 PIX RECEBIDO FULANO - 8.513,68 9.413,68',
+      'SALDO EM 31/01', '9.413,68',
+      'Se você não tem Limite da Conta e a sua conta ficou com saldo devedor, terá sido prestado o serviço de Adiantamento a Depositantes',
+      'juros moratórios mensais de 1% e multa contratual de 2% sobre o saldo devedor total',
+      'Saldos por Periodo',
+    ];
+    let rg = await page.evaluate(a => _santProcessarLinhas(a, false), Bdisc);
+    ok('só 2 lançamentos (sem saldo/aviso)', rg.rows.length === 2, JSON.stringify(rg.rows));
+    ok('aviso legal não vira lançamento', !rg.rows.some(x => /Limite da Conta|Adiantamento|saldo devedor/i.test(x.desc)), JSON.stringify(rg.rows.map(x => x.desc)));
+    ok('valor 9.413,68 do saldo fora da lista', !rg.rows.some(x => Math.abs(x.valor) === 9413.68), JSON.stringify(rg.rows.map(x => x.valor)));
+    ok('saldo confere e soma limpa (init+soma=fim)', rg.info.ok && Math.abs((rg.info.saldo_ini + rg.info.soma) - rg.info.saldo_fim) < 0.01, JSON.stringify(rg.info));
+
+    // ---- Parser: valor solto que NÃO está após SALDO é preservado (skip é targeted) ----
+    const Bkeep = [
+      'janeiro/2026', 'Movimentacao', 'Data Descricao Documento Movimento (R$) Saldo (R$)',
+      '05/01 COMPRA 100,00- 900,00', '77,00',
+      '10/01 SALARIO 2.000,00 2.977,00', 'Saldos por Periodo',
+    ];
+    let rk = await page.evaluate(a => _santProcessarLinhas(a, false), Bkeep);
+    ok('valor solto fora de SALDO é preservado', rk.rows.some(x => Math.abs(x.valor) === 77), JSON.stringify(rk.rows));
+
+    // ---- Integração: importarExtratoSantander (extração de PDF stubada) ----
+    const imp = await page.evaluate(async (linhasA) => {
+      if (!appState.contas.length) garantirContas();
+      contaSelecionadaId = appState.contas[0].id; appState.transactions = []; saveData();
+      window.ensurePDF = async () => true;              // não precisa baixar o pdf.js
+      window._santExtrairLinhas = async () => linhasA;  // devolve as linhas do "PDF"
+      const inp = document.getElementById('fileInputSantander');
+      const dt = new DataTransfer(); dt.items.add(new File(['x'], 'extrato-fev.pdf', { type: 'application/pdf' }));
+      inp.files = dt.files;
+      await importarExtratoSantander(inp);
+      const t1 = appState.transactions.length;
+      // reimporta o mesmo → dedup
+      const dt2 = new DataTransfer(); dt2.items.add(new File(['x'], 'extrato-fev.pdf', { type: 'application/pdf' }));
+      inp.files = dt2.files;
+      await importarExtratoSantander(inp);
+      return { t1, t2: appState.transactions.length, resumo: document.getElementById('santander-resultado').innerText };
+    }, A);
+    ok('Integração: importou 3 lançamentos', imp.t1 === 3, 't1=' + imp.t1);
+    ok('Integração: reimportar não duplica', imp.t2 === 3, 't2=' + imp.t2);
+    ok('Integração: resumo mostra "saldo confere"', /saldo confere/.test(imp.resumo), imp.resumo.slice(0, 80));
+
+    ok('sem erros de página', ctx.errs.length === 0, ctx.errs.slice(0, 4).join(' | '));
+  } finally {
+    await fechar(ctx);
+  }
+  return resumo();
+}
+
+module.exports = { run };
+if (require.main === module) run().then(r => { console.log(`\n${r.pass}/${r.total} passaram`); process.exit(r.pass === r.total ? 0 : 1); });

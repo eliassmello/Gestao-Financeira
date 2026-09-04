@@ -27,15 +27,18 @@ async function run() {
     const proxVenc = await page.evaluate(() => { const d = new Date(); const n = d.getFullYear() * 12 + (d.getMonth() + 1) + 1; const y = Math.floor((n - 1) / 12), m = ((n - 1) % 12) + 1; return `10/${String(m).padStart(2, '0')}/${y}`; });
     const today = await page.evaluate(brToday);
 
-    // (a) dedup — mesma compra, centavos diferentes, fatura passada + atual
-    const vencAnt = await page.evaluate(() => { const n = new Date().getFullYear() * 12 + (new Date().getMonth() + 1) - 1; const y = Math.floor((n - 1) / 12), m = ((n - 1) % 12) + 1; return `10/${String(m).padStart(2, '0')}/${y}`; });
+    // (a) dedup — mesma compra 6x, centavos diferentes, importada em faturas de meses
+    // PASSADOS (independe do dia de hoje): parcelas 1..4 estão claramente vencidas.
+    const vencN = await page.evaluate((d) => { const n = new Date().getFullYear() * 12 + (new Date().getMonth() + 1) + d; const y = Math.floor((n - 1) / 12), m = ((n - 1) % 12) + 1; return `10/${String(m).padStart(2, '0')}/${y}`; }, -2);
+    const vencN1 = await page.evaluate((d) => { const n = new Date().getFullYear() * 12 + (new Date().getMonth() + 1) + d; const y = Math.floor((n - 1) / 12), m = ((n - 1) % 12) + 1; return `10/${String(m).padStart(2, '0')}/${y}`; }, -1);
     let p = await pm(page, [
-      { id: 'a1', cartaoId: 'c1', data: vencAnt, descricao: 'GELADEIRA (Parc. 01/03)', debito: 333.34, credito: 0 },
-      { id: 'a2', cartaoId: 'c1', data: proxVenc, descricao: 'GELADEIRA (Parc. 02/03)', debito: 333.33, credito: 0 },
+      { id: 'a1', cartaoId: 'c1', data: vencN, descricao: 'GELADEIRA (Parc. 02/06)', debito: 333.34, credito: 0 },
+      { id: 'a2', cartaoId: 'c1', data: vencN1, descricao: 'GELADEIRA (Parc. 04/06)', debito: 333.33, credito: 0 },
     ]);
     const flat = Object.values(p).flat();
-    ok('(a) sem duplicar 3/3', flat.filter(x => x === '3/3').length === 1, JSON.stringify(p));
-    ok('(a) não reprojeta paga 1/3', !flat.includes('1/3'), JSON.stringify(p));
+    ok('(a) sem duplicar (cada parcela 1x)', new Set(flat).size === flat.length, JSON.stringify(p));
+    ok('(a) parcelas já vencidas (1..4) não reaparecem', !flat.some(x => ['1/6', '2/6', '3/6', '4/6'].includes(x)), JSON.stringify(flat));
+    ok('(a) parcela futura 6/6 aparece', flat.includes('6/6'), JSON.stringify(flat));
 
     // (b) fatura vence mês seguinte → parcela aparece no mês seguinte
     p = await pm(page, [{ id: 'b1', cartaoId: 'c1', data: proxVenc, descricao: 'TV (Parc. 01/10)', debito: 500, credito: 0 }]);
@@ -43,7 +46,7 @@ async function run() {
     ok('(b) mês corrente vazio (vence dia 10 do mês que vem)', !(p[H] || []).length, JSON.stringify(p[H] || []));
 
     // (c) parcela já vencida (mês passado) some
-    ok('(c) nada em meses passados', !Object.keys(await pm(page, [{ id: 'c1x', cartaoId: 'c1', data: vencAnt, descricao: 'RADIO (Parc. 05/06)', debito: 50, credito: 0 }])).map(Number).some(n => n < H), 'ok');
+    ok('(c) nada em meses passados', !Object.keys(await pm(page, [{ id: 'c1x', cartaoId: 'c1', data: vencN1, descricao: 'RADIO (Parc. 05/06)', debito: 50, credito: 0 }])).map(Number).some(n => n < H), 'ok');
 
     // (d) parcela que vence HOJE aparece no mês corrente
     p = await pm(page, [{ id: 'd1', cartaoId: 'c1', data: today, descricao: 'CAMA (Parc. 02/05)', debito: 120, credito: 0 }]);
