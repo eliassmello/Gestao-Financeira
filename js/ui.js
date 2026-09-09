@@ -1936,7 +1936,9 @@
 
 
         function assignCategory(transactionId, category, type, selEl) {
-            const lista = type === 'banco' ? appState.transactions : (type === 'cartao' ? appState.ccTransactions : null);
+            const lista = type === 'banco' ? appState.transactions
+                : (type === 'cartao' ? appState.ccTransactions
+                    : (type === 'previsao' ? appState.futureTransactions : null));
             const transaction = lista ? lista.find(t => t.id === transactionId) : null;
             if (!transaction) return;
             transaction.categoria = category;
@@ -1944,7 +1946,8 @@
             // Com o select em mãos e sem o filtro "pendentes" ativo, atualiza a linha no
             // lugar e persiste em segundo plano — evita re-renderizar a lista inteira
             // (que é lento e perde a posição de rolagem) a cada categorização
-            const filtroEl = document.getElementById(type === 'banco' ? 'filterSelectBanco' : 'filterSelectCartao');
+            const filtroId = type === 'banco' ? 'filterSelectBanco' : (type === 'cartao' ? 'filterSelectCartao' : '');
+            const filtroEl = filtroId ? document.getElementById(filtroId) : null;
             if (selEl && (!filtroEl || filtroEl.value !== 'pendentes')) {
                 selEl.dataset.cat = category;
                 selEl.classList.toggle('border-amber-400', !category);
@@ -3351,10 +3354,11 @@
                 const r = exibidos[i];
                 const cor = r.valor >= 0 ? 'text-emerald-600' : 'text-rose-600';
                 html += `
-                    <div onclick="irParaLancamentoBusca(${i})" role="button" tabindex="0" title="Abrir na tela para editar" class="py-2.5 px-2 -mx-2 rounded-lg flex justify-between items-center gap-3 cursor-pointer hover:bg-indigo-50 transition">
-                        <div class="min-w-0">
+                    <div onclick="irParaLancamentoBusca(${i})" role="button" tabindex="0" title="Clique na linha para abrir na tela; use o campo Categoria para editar aqui mesmo" class="py-2.5 px-2 -mx-2 rounded-lg flex justify-between items-center gap-3 cursor-pointer hover:bg-indigo-50 transition">
+                        <div class="min-w-0 flex-1">
                             <p class="text-sm font-medium text-slate-700 truncate">${escapeHtml(r.descricao)} <span class="text-indigo-400 text-xs">↗</span></p>
-                            <p class="text-xs text-slate-400">${r.origem} &bull; ${escapeHtml(r.data || '')} &bull; ${escapeHtml(r.categoria || 'Não Categorizado')}</p>
+                            <p class="text-xs text-slate-400">${r.origem} &bull; ${escapeHtml(r.data || '')}</p>
+                            <div class="mt-1">${buscaCategoriaSelectHtml(r, i)}</div>
                         </div>
                         <span class="font-bold text-sm whitespace-nowrap ${cor}">${r.valor >= 0 ? '+' : '-'} ${formatCurrency(Math.abs(r.valor))}</span>
                     </div>`;
@@ -3403,6 +3407,33 @@
             setTimeout(() => destacarLinhaBusca(`busca-${r.id}`), 150);
         }
         function irParaLancamentoBusca(idx) { _navegarParaLancamento(_buscaResultados[idx], fecharBuscaGlobal); }
+
+        // Combobox de categoria dentro de cada linha da busca. As interações (mousedown/
+        // click/teclado/change) chamam event.stopPropagation() para NÃO disparar o clique da
+        // linha (que navega até o lançamento) — clicar em qualquer outro ponto da linha segue
+        // navegando. A lista de categorias é preenchida sob demanda (prepararSelectCategoria)
+        // e a gravação reusa assignCategory (banco/cartão/previsão).
+        function buscaCategoriaSelectHtml(r, i) {
+            const isDeb = (Number(r.valor) || 0) < 0;
+            const catAttr = _escAttr(r.categoria || '');
+            const optAtual = r.categoria
+                ? `<option value="${catAttr}" selected>${escapeHtml(r.categoria)}</option>`
+                : `<option value="">— definir categoria —</option>`;
+            return `<select data-deb="${isDeb ? 1 : 0}" data-cat="${catAttr}"
+                onmousedown="event.stopPropagation(); prepararSelectCategoria(this)"
+                onclick="event.stopPropagation()"
+                onkeydown="event.stopPropagation()"
+                onchange="event.stopPropagation(); assignBuscaCategoria(${i}, this)"
+                title="Editar / definir a categoria sem sair da busca"
+                class="cat-select text-xs border rounded-md p-1.5 max-w-[11rem] ${r.categoria ? 'border-slate-200' : 'border-amber-400 bg-amber-50'}">${optAtual}</select>`;
+        }
+        function assignBuscaCategoria(i, sel) {
+            const r = _buscaResultados[i];
+            if (!r) return;
+            const val = sel.value;
+            assignCategory(r.id, val, r.tipo, sel);   // grava no store certo (banco/cartão/previsão)
+            r.categoria = val;                         // mantém o resultado em memória coerente
+        }
 
         function destacarLinhaBusca(elId) {
             const el = document.getElementById(elId);
