@@ -1674,9 +1674,14 @@
                        </td>`;
                 const celulasFontes = semFontes ? '' : l.saldos.map((s, fi) => {
                     const resgate = l.resgates.find(r => r.fi === fi);
-                    return `<td class="p-3 text-right whitespace-nowrap ${s > 0.004 ? 'text-slate-600' : 'text-slate-300'}">
+                    // Saldo mostrado = o que SOBROU após pagar (fim do mês). Quando houve
+                    // resgate, mostra também "(de X)" = saldo DISPONÍVEL antes de pagar
+                    // (sobra + resgate) — deixa claro que a fonte tinha o recurso e cobriu
+                    // sozinha, sem confundir com o valor resgatado ser maior que a sobra.
+                    const disp = resgate ? s + resgate.valor : 0;
+                    return `<td class="p-3 text-right whitespace-nowrap ${s > 0.004 ? 'text-slate-600' : 'text-slate-300'}" ${resgate ? `title="Disponível antes de pagar: ${formatCurrency(disp)} → resgatou ${formatCurrency(resgate.valor)} → sobrou ${formatCurrency(s)}"` : ''}>
                         ${formatCurrency(s)}
-                        ${resgate ? `<span class="block text-[10px] text-rose-500">− ${formatCurrency(resgate.valor)}</span>` : ''}
+                        ${resgate ? `<span class="block text-[10px] text-rose-500">− ${formatCurrency(resgate.valor)} <span class="text-slate-400">(de ${formatCurrency(disp)})</span></span>` : ''}
                     </td>`;
                 }).join('');
                 const rowCls = l.locked ? 'bg-emerald-50/70' : (!semFontes && l.falta > 0 ? 'bg-rose-50' : 'hover:bg-slate-50');
