@@ -1458,7 +1458,9 @@
                 const dataBR = `${String(dLemb.getDate()).padStart(2, '0')}/${String(dLemb.getMonth() + 1).padStart(2, '0')}/${dLemb.getFullYear()}`;
                 desejados.push({
                     id: `lembrete_${f.id}`, data: dataBR, tipo: 'credito', valor: 0,
-                    descricao: `🔔 Ordem de resgate: ${inv.nome} — D+${dias} (resgate em ${f.data})`,
+                    // Inclui o VALOR do resgate no aviso (o lembrete continua R$ 0 para não
+                    // mexer no saldo; o valor a resgatar vai no texto).
+                    descricao: `🔔 Ordem de resgate: ${inv.nome} — resgatar ${formatCurrency(Number(f.valor) || 0)} — D+${dias} (cai em ${f.data})`,
                     categoria: '', investimentoId: '', lembreteResgateDe: f.id, chaveSupLembrete: chaveSup
                 });
             }
