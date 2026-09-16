@@ -1075,6 +1075,73 @@
             </div>
 
             <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+                <h2 class="font-bold text-slate-700 text-lg mb-1">🛠️ Edição em massa</h2>
+                <p class="text-sm text-slate-500 mb-3">Selecione lançamentos por filtros e aplique uma alteração em lote — sempre com <b>pré-visualização</b> antes de gravar. Cobre <b>Conta Corrente</b> e <b>Cartão</b>. Dica: faça um <b>backup</b> antes.</p>
+
+                <p class="text-xs font-bold text-slate-500 uppercase mb-2">1. Selecionar</p>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    <label class="text-xs text-slate-500 flex flex-col gap-1">Onde
+                        <select id="me-escopo" class="text-sm border border-slate-200 rounded-md p-2">
+                            <option value="banco">🏦 Conta Corrente</option>
+                            <option value="cartao">💳 Cartão</option>
+                        </select></label>
+                    <label class="text-xs text-slate-500 flex flex-col gap-1">Mês (opcional)
+                        <input type="month" id="me-mes" class="text-sm border border-slate-200 rounded-md p-2"></label>
+                    <label class="text-xs text-slate-500 flex flex-col gap-1">Tipo
+                        <select id="me-tipo" class="text-sm border border-slate-200 rounded-md p-2">
+                            <option value="qualquer">Qualquer</option>
+                            <option value="credito">Entradas (crédito)</option>
+                            <option value="debito">Saídas (débito)</option>
+                        </select></label>
+                    <label class="text-xs text-slate-500 flex flex-col gap-1">Descrição contém
+                        <input type="text" id="me-desc" placeholder="ex.: uber, posto..." class="text-sm border border-slate-200 rounded-md p-2"></label>
+                    <label class="text-xs text-slate-500 flex flex-col gap-1">Categoria atual
+                        <select id="me-cat-filtro" class="text-sm border border-slate-200 rounded-md p-2"></select></label>
+                    <label class="text-xs text-slate-500 flex flex-col gap-1">Valor (magnitude) entre
+                        <span class="flex items-center gap-1">
+                            <input type="number" step="0.01" id="me-vmin" placeholder="mín" class="w-full text-sm border border-slate-200 rounded-md p-2">
+                            <span class="text-slate-400">–</span>
+                            <input type="number" step="0.01" id="me-vmax" placeholder="máx" class="w-full text-sm border border-slate-200 rounded-md p-2">
+                        </span></label>
+                </div>
+
+                <p class="text-xs font-bold text-slate-500 uppercase mt-4 mb-2">2. Ação</p>
+                <div class="flex flex-wrap items-end gap-3">
+                    <label class="text-xs text-slate-500 flex flex-col gap-1">O que fazer
+                        <select id="me-acao" onchange="edicaoMassaMudarAcao()" class="text-sm border border-slate-200 rounded-md p-2">
+                            <option value="categoria">Definir categoria</option>
+                            <option value="valor">Ajustar valor</option>
+                            <option value="descricao">Localizar e substituir na descrição</option>
+                        </select></label>
+                    <label id="me-campo-categoria" class="text-xs text-slate-500 flex flex-col gap-1">Nova categoria
+                        <select id="me-nova-cat" class="text-sm border border-slate-200 rounded-md p-2"></select></label>
+                    <span id="me-campo-valor" class="hidden items-end gap-2">
+                        <label class="text-xs text-slate-500 flex flex-col gap-1">Operação
+                            <select id="me-op" class="text-sm border border-slate-200 rounded-md p-2">
+                                <option value="mult">Multiplicar por %</option>
+                                <option value="soma">Somar (R$)</option>
+                                <option value="sub">Subtrair (R$)</option>
+                                <option value="set">Definir como (R$)</option>
+                            </select></label>
+                        <label class="text-xs text-slate-500 flex flex-col gap-1">Valor
+                            <input type="number" step="0.01" id="me-op-valor" class="w-28 text-sm border border-slate-200 rounded-md p-2"></label>
+                    </span>
+                    <span id="me-campo-descricao" class="hidden items-end gap-2">
+                        <label class="text-xs text-slate-500 flex flex-col gap-1">Localizar
+                            <input type="text" id="me-loc" class="text-sm border border-slate-200 rounded-md p-2"></label>
+                        <label class="text-xs text-slate-500 flex flex-col gap-1">Substituir por
+                            <input type="text" id="me-sub" class="text-sm border border-slate-200 rounded-md p-2"></label>
+                    </span>
+                </div>
+
+                <div class="flex flex-wrap gap-2 mt-4">
+                    <button onclick="edicaoMassaPreview()" class="text-sm font-semibold bg-slate-200 text-slate-700 px-4 py-2 rounded-md hover:bg-slate-300">👁️ Pré-visualizar</button>
+                    <button onclick="edicaoMassaAplicar()" class="text-sm font-semibold bg-emerald-600 text-white px-4 py-2 rounded-md hover:bg-emerald-700">✔️ Aplicar</button>
+                </div>
+                <div id="me-preview" class="text-xs mt-3"></div>
+            </div>
+
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
                 <h2 class="font-bold text-slate-700 text-lg mb-1">🔔 Notificações de contas a vencer</h2>
                 <p class="text-sm text-slate-500 mb-3">Avisa sobre <b>saídas previstas</b> que vencem nos próximos 3 dias. O aviso aparece sempre num banner no topo do app; se você autorizar, também vira uma <b>notificação do sistema</b> quando você abre o app.</p>
                 <p id="notif-status" class="text-sm mb-3"></p>

@@ -233,7 +233,7 @@
                 if (tabId === 'calendario') renderCalendario();
                 if (tabId === 'informacoes') renderInformacoes();
                 if (tabId === 'calculos') renderCalculos();
-                if (tabId === 'config') { renderCategoriesTab(); safeRun(renderRegrasCategoria); safeRun(atualizarInfoUltimoBackup); safeRun(renderCardSenha); safeRun(atualizarCardNotif); safeRun(renderCardAutoBkp); }
+                if (tabId === 'config') { renderCategoriesTab(); safeRun(renderRegrasCategoria); safeRun(atualizarInfoUltimoBackup); safeRun(renderCardSenha); safeRun(atualizarCardNotif); safeRun(renderCardAutoBkp); safeRun(_popularCatsEdicaoMassa); safeRun(edicaoMassaMudarAcao); }
             } catch(err) {}
         }
 
@@ -4223,6 +4223,126 @@
 
 
         function apagarLinhaBanco(id) { if(confirm("Tem certeza que deseja apagar esta transação?")) { appState.transactions = appState.transactions.filter(t => t.id !== id); saveData(); } }
+
+
+        // ===== Edição em massa (Config): selecionar por filtros + aplicar 1 ação, com preview =====
+        function _meVal(id) { const e = document.getElementById(id); return e ? e.value : ''; }
+        function _meStore(escopo) { return escopo === 'cartao' ? (appState.ccTransactions || []) : (appState.transactions || []); }
+        function _optionsTodasCategorias(current) {
+            const set = new Set([...(appState.categories.despesas || []), ...(appState.categories.receitas || [])]);
+            let o = '';
+            for (const c of [...set].filter(Boolean).sort((a, b) => a.localeCompare(b, 'pt-BR'))) o += `<option value="${_escAttr(c)}"${current === c ? ' selected' : ''}>${escapeHtml(c)}</option>`;
+            return o;
+        }
+        function _popularCatsEdicaoMassa() {
+            const f = document.getElementById('me-cat-filtro');
+            if (f) { const cur = f.value; f.innerHTML = `<option value="__qualquer__">— qualquer —</option><option value="__naocat__">Não Categorizado</option>` + _optionsTodasCategorias(); if (cur) f.value = cur; }
+            const n = document.getElementById('me-nova-cat');
+            if (n) { const cur = n.value; n.innerHTML = `<option value="">— selecionar —</option>` + _optionsTodasCategorias(); if (cur) n.value = cur; }
+        }
+        function edicaoMassaMudarAcao() {
+            const a = _meVal('me-acao') || 'categoria';
+            const set = (id, on, disp) => { const el = document.getElementById(id); if (!el) return; el.classList.toggle('hidden', !on); if (disp) el.classList.toggle(disp, on); };
+            set('me-campo-categoria', a === 'categoria');
+            set('me-campo-valor', a === 'valor', 'inline-flex');
+            set('me-campo-descricao', a === 'descricao', 'inline-flex');
+        }
+        function _meSelecionar() {
+            const escopo = _meVal('me-escopo') || 'banco';
+            const mes = _meVal('me-mes');
+            const desc = (_meVal('me-desc') || '').trim();
+            const catF = _meVal('me-cat-filtro') || '__qualquer__';
+            const tipo = _meVal('me-tipo') || 'qualquer';
+            const vmin = parseFloat(_meVal('me-vmin')), vmax = parseFloat(_meVal('me-vmax'));
+            const alvoMes = mes ? (parseInt(mes.split('-')[0], 10) * 12 + parseInt(mes.split('-')[1], 10)) : null;
+            const descN = desc ? normalizarTextoBusca(desc) : '';
+            const out = [];
+            for (const t of _meStore(escopo)) {
+                const cred = Number(t.credito) || 0, deb = Number(t.debito) || 0, mag = cred + deb;
+                if (alvoMes !== null && mesAnoNum(t.data) !== alvoMes) continue;
+                if (descN && !normalizarTextoBusca(t.descricao || '').includes(descN)) continue;
+                if (catF === '__naocat__') { if (t.categoria) continue; }
+                else if (catF && catF !== '__qualquer__') { if ((t.categoria || '') !== catF) continue; }
+                if (tipo === 'credito' && !(cred > 0)) continue;
+                if (tipo === 'debito' && !(deb > 0)) continue;
+                if (!isNaN(vmin) && mag < vmin - 0.005) continue;
+                if (!isNaN(vmax) && mag > vmax + 0.005) continue;
+                out.push({ t, mag, isDeb: deb > 0 });
+            }
+            return { escopo, itens: out };
+        }
+        // Calcula o "depois" de um item; retorna null se a ação não muda aquele item.
+        function _meCalcDepois(item) {
+            const a = _meVal('me-acao') || 'categoria';
+            const t = item.t;
+            if (a === 'categoria') {
+                const nova = _meVal('me-nova-cat') || '';
+                if ((t.categoria || '') === nova) return null;
+                return { campo: 'categoria', antes: (t.categoria || '(sem categoria)'), depois: nova, _novo: nova };
+            }
+            if (a === 'valor') {
+                const op = _meVal('me-op') || 'mult'; const n = parseFloat(_meVal('me-op-valor'));
+                if (isNaN(n)) return null;
+                let novo = item.mag;
+                if (op === 'mult') novo = item.mag * (1 + n / 100);
+                else if (op === 'soma') novo = item.mag + n;
+                else if (op === 'sub') novo = item.mag - n;
+                else if (op === 'set') novo = n;
+                novo = Math.max(0, Math.round(novo * 100) / 100);
+                if (Math.abs(novo - item.mag) < 0.005) return null;
+                return { campo: 'valor', antes: formatCurrency(item.mag), depois: formatCurrency(novo), _novo: novo };
+            }
+            if (a === 'descricao') {
+                const loc = _meVal('me-loc'); const sub = _meVal('me-sub') || '';
+                if (!loc) return null;
+                const re = new RegExp(loc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+                const nova = String(t.descricao || '').replace(re, sub);
+                if (nova === (t.descricao || '')) return null;
+                return { campo: 'descricao', antes: (t.descricao || ''), depois: nova, _novo: nova };
+            }
+            return null;
+        }
+        function _meColeta() {
+            const sel = _meSelecionar();
+            const muda = [];
+            for (const it of sel.itens) { const d = _meCalcDepois(it); if (d) muda.push({ it, d }); }
+            return { escopo: sel.escopo, itens: sel.itens, muda };
+        }
+        function edicaoMassaPreview() {
+            _popularCatsEdicaoMassa();
+            const el = document.getElementById('me-preview'); if (!el) return;
+            const { itens, muda } = _meColeta();
+            if (!itens.length) { el.innerHTML = '<p class="text-slate-500">Nenhum lançamento casou os filtros.</p>'; return; }
+            if (!muda.length) { el.innerHTML = `<p class="text-amber-600">${itens.length} selecionado(s), mas <b>nenhum</b> muda com essa ação (confira os campos da ação).</p>`; return; }
+            const amostra = muda.slice(0, 25);
+            el.innerHTML = `<div class="border border-slate-100 rounded-lg overflow-hidden">
+                <div class="bg-slate-50 px-3 py-2 font-semibold text-slate-600">${itens.length} selecionado(s) · <span class="text-emerald-700">${muda.length} vão mudar</span>${muda.length > 25 ? ' — mostrando 25' : ''}</div>
+                <div class="max-h-72 overflow-y-auto"><table class="w-full">
+                    <thead class="bg-white sticky top-0"><tr class="text-slate-400"><th class="text-left p-2">Data</th><th class="text-left p-2">Descrição</th><th class="text-left p-2">Antes</th><th class="text-left p-2">Depois</th></tr></thead>
+                    <tbody>${amostra.map(({ it, d }) => `<tr class="border-t border-slate-50"><td class="p-2 whitespace-nowrap">${escapeHtml(it.t.data || '')}</td><td class="p-2">${escapeHtml((it.t.descricao || '').slice(0, 40))}</td><td class="p-2 text-slate-500">${escapeHtml(String(d.antes))}</td><td class="p-2 text-emerald-700 font-medium">${escapeHtml(String(d.depois))}</td></tr>`).join('')}</tbody>
+                </table></div></div>`;
+        }
+        function edicaoMassaAplicar() {
+            _popularCatsEdicaoMassa();
+            const a = _meVal('me-acao');
+            if (a === 'categoria' && !_meVal('me-nova-cat')) { alert('Escolha a nova categoria.'); return; }
+            if (a === 'valor' && isNaN(parseFloat(_meVal('me-op-valor')))) { alert('Informe o valor da operação.'); return; }
+            if (a === 'descricao' && !_meVal('me-loc')) { alert('Informe o texto a localizar.'); return; }
+            const { escopo, muda } = _meColeta();
+            if (!muda.length) { alert('Nenhum lançamento seria alterado com esses filtros/ação.'); return; }
+            if (!confirm(`Aplicar a ${muda.length} lançamento(s)? Esta ação não tem "desfazer" — recomendo ter um backup antes.`)) return;
+            for (const { it, d } of muda) {
+                const t = it.t;
+                if (d.campo === 'categoria') t.categoria = d._novo;
+                else if (d.campo === 'valor') { if (it.isDeb) { t.debito = d._novo; t.credito = 0; } else { t.credito = d._novo; t.debito = 0; } }
+                else if (d.campo === 'descricao') t.descricao = d._novo;
+            }
+            cachedSaldoAtual = null;
+            saveData();
+            safeRun(() => { if (escopo === 'cartao') renderTransactionsCartao(); else renderTransactionsBanco(); });
+            const el = document.getElementById('me-preview');
+            if (el) el.innerHTML = `<p class="text-emerald-700 font-semibold">✔️ ${muda.length} lançamento(s) alterado(s) em ${escopo === 'cartao' ? 'Cartão' : 'Conta Corrente'}.</p>`;
+        }
 
 
         // ===== Importação Seletiva (recurso extra e independente) =====
