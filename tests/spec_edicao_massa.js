@@ -55,6 +55,25 @@ async function run() {
     await page.evaluate(() => edicaoMassaPreview());
     ok('sem correspondência mostra aviso', /Nenhum lançamento casou/.test(await page.evaluate(() => document.getElementById('me-preview').innerText)));
 
+    // (6) intervalo de datas (De / Até) restringe a seleção
+    await page.evaluate(() => {
+      const cid = appState.contas[0].id;
+      appState.transactions = [
+        { id: 'd1', data: '03/09/2026', descricao: 'MERCADO A', contaId: cid, debito: 10, credito: 0, categoria: '' },
+        { id: 'd2', data: '10/09/2026', descricao: 'MERCADO B', contaId: cid, debito: 10, credito: 0, categoria: '' },
+        { id: 'd3', data: '20/09/2026', descricao: 'MERCADO C', contaId: cid, debito: 10, credito: 0, categoria: '' },
+      ];
+      saveData();
+    });
+    await setv('me-escopo', 'banco'); await setv('me-desc', 'MERCADO'); await setv('me-mes', '');
+    await setv('me-dini', '2026-09-05'); await setv('me-dfim', '2026-09-15');
+    await setv('me-acao', 'categoria'); await setv('me-nova-cat', 'Outros');
+    await page.evaluate(() => edicaoMassaPreview());
+    ok('range de datas: só 1 no intervalo (10/09)', /1 selecionado\(s\) · 1 vão mudar/.test(await page.evaluate(() => document.getElementById('me-preview').innerText)), await page.evaluate(() => document.getElementById('me-preview').innerText.slice(0, 60)));
+    await page.evaluate(() => edicaoMassaAplicar());
+    let rr = await page.evaluate(() => appState.transactions.map(t => t.id + ':' + (t.categoria || '')));
+    ok('só o d2 (dentro do range) mudou', rr.includes('d1:') && rr.includes('d2:Outros') && rr.includes('d3:'), JSON.stringify(rr));
+
     ok('sem erros de página', ctx.errs.length === 0, ctx.errs.slice(0, 4).join(' | '));
   } finally {
     await fechar(ctx);

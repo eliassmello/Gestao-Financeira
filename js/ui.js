@@ -4250,6 +4250,7 @@
         function _meSelecionar() {
             const escopo = _meVal('me-escopo') || 'banco';
             const mes = _meVal('me-mes');
+            const dini = _meVal('me-dini'), dfim = _meVal('me-dfim');   // 'YYYY-MM-DD'
             const desc = (_meVal('me-desc') || '').trim();
             const catF = _meVal('me-cat-filtro') || '__qualquer__';
             const tipo = _meVal('me-tipo') || 'qualquer';
@@ -4260,6 +4261,7 @@
             for (const t of _meStore(escopo)) {
                 const cred = Number(t.credito) || 0, deb = Number(t.debito) || 0, mag = cred + deb;
                 if (alvoMes !== null && mesAnoNum(t.data) !== alvoMes) continue;
+                if (dini || dfim) { const iso = dataTransacaoISO(t.data); if (!iso) continue; if (dini && iso < dini) continue; if (dfim && iso > dfim) continue; }
                 if (descN && !normalizarTextoBusca(t.descricao || '').includes(descN)) continue;
                 if (catF === '__naocat__') { if (t.categoria) continue; }
                 else if (catF && catF !== '__qualquer__') { if ((t.categoria || '') !== catF) continue; }
