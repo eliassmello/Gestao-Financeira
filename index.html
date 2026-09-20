@@ -1074,10 +1074,18 @@
                 </div>
             </div>
 
-            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-                <h2 class="font-bold text-slate-700 text-lg mb-1">🛠️ Edição em massa</h2>
-                <p class="text-sm text-slate-500 mb-3">Selecione lançamentos por filtros e aplique uma alteração em lote — sempre com <b>pré-visualização</b> antes de gravar. Cobre <b>Conta Corrente</b> e <b>Cartão</b>. Dica: faça um <b>backup</b> antes.</p>
-
+            <details class="bg-white rounded-xl shadow-sm border border-slate-100 group">
+                <summary class="flex justify-between items-center gap-3 p-6 cursor-pointer select-none">
+                    <div class="min-w-0">
+                        <h2 class="font-bold text-slate-700 text-lg">🛠️ Edição em massa</h2>
+                        <p class="text-sm text-slate-500">Selecione lançamentos por filtros e aplique uma alteração em lote — sempre com <b>pré-visualização</b> antes de gravar. Cobre <b>Conta Corrente</b> e <b>Cartão</b>. Dica: faça um <b>backup</b> antes.</p>
+                    </div>
+                    <div class="flex items-center gap-3 shrink-0">
+                        <span class="text-slate-400 text-xs group-open:hidden">▼ abrir</span>
+                        <span class="text-slate-400 text-xs hidden group-open:inline">▲ fechar</span>
+                    </div>
+                </summary>
+                <div class="px-6 pb-6 border-t border-slate-100 pt-4">
                 <p class="text-xs font-bold text-slate-500 uppercase mb-2">1. Selecionar</p>
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                     <label class="text-xs text-slate-500 flex flex-col gap-1">Onde
@@ -1143,7 +1151,8 @@
                     <button onclick="edicaoMassaAplicar()" class="text-sm font-semibold bg-emerald-600 text-white px-4 py-2 rounded-md hover:bg-emerald-700">✔️ Aplicar</button>
                 </div>
                 <div id="me-preview" class="text-xs mt-3"></div>
-            </div>
+                </div>
+            </details>
 
             <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
                 <h2 class="font-bold text-slate-700 text-lg mb-1">🔔 Notificações de contas a vencer</h2>
