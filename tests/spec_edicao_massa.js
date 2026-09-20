@@ -22,6 +22,8 @@ async function run() {
         { id: 'c1', data: '05/09/2026', descricao: 'NETFLIX', cartaoId: 'k1', debito: 55, credito: 0, categoria: '' },
       ];
       saveData(); switchTab('config');
+      // painel de Edição em massa agora é recolhível (<details>): abre p/ o preview renderizar
+      const d = document.getElementById('me-preview').closest('details'); if (d) d.open = true;
     });
 
     // (1) categoria: UBER → Transporte
