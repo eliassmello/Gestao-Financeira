@@ -2532,6 +2532,41 @@
             saveToDB();
         }
 
+        // Mostra, na própria linha, o saldo da conta corrente "naquele ponto": parte do
+        // saldo ATUAL da conta (o mais recente) e recua da data mais recente até logo após
+        // o lançamento clicado, subtraindo os movimentos posteriores. Resultado = saldo
+        // logo depois de o lançamento clicado ter caído na conta (ele já entra na conta).
+        // Considera TODOS os lançamentos da conta (ignora o filtro de mês/tipo da lista).
+        function mostrarSaldoNoPonto(id) {
+            const alvo = appState.transactions.find(x => x.id === id);
+            if (!alvo) return;
+            const el = document.getElementById('saldo-ponto-' + id);
+            if (!el) return;
+            // toggle: se já está visível, esconde
+            if (el.dataset.shown === '1') { el.classList.add('hidden'); el.dataset.shown = '0'; return; }
+
+            const contaId = alvo.contaId;
+            // lançamentos da conta em ordem cronológica estável (data asc; desempate pela ordem original)
+            const doConta = [];
+            appState.transactions.forEach((t, i) => {
+                if (t.contaId === contaId) doConta.push({ t, i, k: dataTransacaoISO(t.data) });
+            });
+            doConta.sort((a, b) => a.k.localeCompare(b.k) || a.i - b.i);
+            const pos = doConta.findIndex(x => x.t.id === id);
+            if (pos < 0) return;
+
+            // âncora: saldo atual real da conta; subtrai os movimentos APÓS o lançamento clicado
+            let saldo = getSaldoConta(contaId);
+            for (let j = doConta.length - 1; j > pos; j--) {
+                const t = doConta[j].t;
+                saldo -= (Number(t.credito) || 0) - (Number(t.debito) || 0);
+            }
+            const cls = saldo < 0 ? 'text-rose-600' : 'text-emerald-700';
+            el.innerHTML = `saldo após este lançamento: <b class="${cls}">${formatCurrency(saldo)}</b>`;
+            el.classList.remove('hidden'); el.dataset.shown = '1';
+        }
+
+
         function linhaTransacaoHtml(t, dataHtml, corValor, tipo, fnApagar) {
             const isDeb = t.debito > 0; const val = isDeb ? t.debito : t.credito;
             return `
@@ -2539,9 +2574,11 @@
                     <div class="flex-1 grid grid-cols-3 md:grid-cols-4 gap-2 items-center">
                         ${dataHtml}
                         <span class="text-sm text-slate-700 truncate col-span-2" title="${escapeHtml(t.descricao)}">${escapeHtml(t.descricao)}</span>
-                        <div class="flex items-center justify-end gap-2">
+                        <div class="flex items-center justify-end gap-2 flex-wrap">
                             <span class="${corValor} font-semibold">${isDeb ? '-' : '+'} ${formatCurrency(val)}</span>
+                            ${tipo === 'banco' ? `<button onclick="mostrarSaldoNoPonto('${t.id}')" class="text-slate-400 hover:text-indigo-600 ml-1 text-base leading-none" title="Ver o saldo da conta neste ponto">💰</button>` : ''}
                             <button onclick="${fnApagar}('${t.id}')" class="text-rose-400 hover:text-rose-600 ml-2 text-base leading-none" title="Apagar esta linha">🗑️</button>
+                            ${tipo === 'banco' ? `<span id="saldo-ponto-${t.id}" data-shown="0" class="hidden w-full text-right text-xs text-slate-500"></span>` : ''}
                         </div>
                     </div>
                     <div class="flex flex-col sm:flex-row gap-2 md:items-center shrink-0">
