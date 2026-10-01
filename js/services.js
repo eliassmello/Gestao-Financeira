@@ -1452,6 +1452,7 @@
                 if (dias <= 0) continue;
                 const chaveSup = `${f.investimentoId}|${f.data}`;
                 if (suprimidos.has(chaveSup)) continue;              // dispensado manualmente
+                if (appState.futureTransactions.some(t => t.lembreteResgateDe === f.id && t.conciliado)) continue;  // já efetivado
                 const dResg = converterDataBRParaDate(f.data);
                 if (dResg < hoje) continue;                          // resgate já ocorreu: sem necessidade
                 const dLemb = new Date(dResg.getTime() - dias * 86400000);
